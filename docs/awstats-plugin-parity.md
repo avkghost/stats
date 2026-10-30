@@ -1,6 +1,12 @@
 # AWStats plugin parity
 
-This project treats the AWStats 8.0 source tree as the compatibility reference. The upstream plugin inventory is maintained under [`wwwroot/cgi-bin/plugins`](https://github.com/eldy/AWStats/tree/develop/wwwroot/cgi-bin/plugins).
+This project treats the AWStats 8.0 source tree as the compatibility reference. The upstream plugin inventory is maintained under [`wwwroot/cgi-bin/plugins`](https://github.com/eldy/AWStats/tree/develop/wwwroot/cgi-bin/plugins). The table below is an implementation audit, not a claim of complete parity: parity is complete only when every inventory entry has a Rust implementation or a tested compatibility adapter.
+
+The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkeys`,
+`detectrefererspam`, `example`, `export_to_csv`, `geoip`, `geoip2_city`,
+`geoip2_country`, `geoip2_region`, `geoipfree`, `geoip6`, `graphapplet`,
+`graphgooglechartapi`, `hashfiles`, `hostinfo`, `ipv6`, `rawlog`, `timehires`,
+`timezone`, `tooltips`, `urlalias`, and `userinfo`.
 
 ## Compatibility map
 
@@ -20,6 +26,10 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `timehires` | Internal diagnostic concern | Keep timing diagnostics outside report data |
 
 ## Implementation order
+
+0. Required gate: inventory every upstream plugin and record one of `implemented`,
+`compatibility adapter`, or `not started`; do not report AWStats parity while any
+entry is `not started`.
 
 1. Completed: report-decoration hooks for URL aliases affect only display labels; aggregation, checkpoints, and JSON keys remain canonical URLs.
 2. Completed: referer-spam classification is an explicit rule dimension and exclusions do not change traffic totals.
