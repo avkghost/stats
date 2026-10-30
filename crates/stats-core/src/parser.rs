@@ -298,20 +298,28 @@ fn normalize_apache_format(format: &str) -> String {
         }
 
         let remaining = &format[index..];
-        let long_token =
-            if remaining.starts_with("%{User-Agent}i") || remaining.starts_with("%{user-agent}i") {
-                Some(("%{User-Agent}i", "%uaquot"))
-            } else if remaining.starts_with("%{Referer}i") || remaining.starts_with("%{referer}i") {
-                Some(("%{Referer}i", "%refererquot"))
-            } else if remaining.starts_with("%{remote}p") {
-                Some(("%{remote}p", "%other2"))
-            } else if remaining.starts_with("%{status}o") {
-                Some(("%{status}o", "%code"))
-            } else if remaining.starts_with("%>s") {
-                Some(("%>s", "%code"))
-            } else {
-                None
-            };
+        let long_token = if remaining.starts_with("%{User-Agent}i")
+            || remaining.starts_with("%{user-agent}i")
+            || remaining.starts_with("%{User-agent}i")
+        {
+            Some(("%{User-Agent}i", "%uaquot"))
+        } else if remaining.starts_with("%{Referer}i") || remaining.starts_with("%{referer}i") {
+            Some(("%{Referer}i", "%refererquot"))
+        } else if remaining.starts_with("%{Host}i") || remaining.starts_with("%{host}i") {
+            Some(("%{Host}i", "%virtualname"))
+        } else if remaining.starts_with("%{X-Forwarded-For}i")
+            || remaining.starts_with("%{x-forwarded-for}i")
+        {
+            Some(("%{X-Forwarded-For}i", "%host"))
+        } else if remaining.starts_with("%{remote}p") {
+            Some(("%{remote}p", "%other2"))
+        } else if remaining.starts_with("%{status}o") {
+            Some(("%{status}o", "%code"))
+        } else if remaining.starts_with("%>s") {
+            Some(("%>s", "%code"))
+        } else {
+            None
+        };
         if let Some((apache, awstats)) = long_token {
             normalized.push_str(awstats);
             index += apache.len();
@@ -517,5 +525,20 @@ mod tests {
             panic!("expected event");
         };
         assert_eq!(event.url.as_deref(), Some("/foo/%2F/~"));
+    }
+
+    #[test]
+    fn parses_apache_forwarded_and_host_headers() {
+        let parser = LogParser::new(r#"%{X-Forwarded-For}i "%{Host}i" %t "%r" %>s %O"#).unwrap();
+        let outcome = parser.parse(
+            r#"198.51.100.7 "www.example.test" [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 12"#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected Apache header event");
+        };
+        assert_eq!(event.client_ip, "198.51.100.7");
+        assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
+        assert_eq!(event.status, 200);
+        assert_eq!(event.bytes, 12);
     }
 }
