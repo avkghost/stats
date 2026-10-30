@@ -122,7 +122,11 @@ fn render_cgi(
     let database = data_dir.join("stats.sqlite3");
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
-    let report = ReportService::new(&store).build(request.limit)?;
+    let mut report = ReportService::new(&store).build(request.limit)?;
+    if let Some(config) = config {
+        let config = config.clone().with_overrides(None, Some(data_dir.clone()));
+        report.apply_url_aliases(&config.url_aliases()?);
+    }
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;
     let mut registry = registry;

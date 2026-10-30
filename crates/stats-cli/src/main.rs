@@ -488,7 +488,8 @@ fn regenerate_default_report(
     let config = Config::from_path(config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?
         .with_overrides(log_override, data_override);
-    let report = build_report_for_data_dir(&config.data_dir, 50)?;
+    let mut report = build_report_for_data_dir(&config.data_dir, 50)?;
+    report.apply_url_aliases(&config.url_aliases()?);
     let output = config
         .data_dir
         .parent()
@@ -1179,7 +1180,7 @@ fn report(
     format: ReportFormat,
     period: Option<String>,
 ) -> anyhow::Result<()> {
-    let report = build_report_for_period(&data_dir, limit, period.as_deref())?;
+    let mut report = build_report_for_period(&data_dir, limit, period.as_deref())?;
     let mut renderer_registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register built-in report renderers: {error}"))?;
     let config = config_path
@@ -1187,6 +1188,12 @@ fn report(
         .map(Config::from_path)
         .transpose()
         .map_err(|error| anyhow::anyhow!("load renderer configuration: {error}"))?;
+    if matches!(format, ReportFormat::Html) {
+        if let Some(config) = config.as_ref() {
+            let config = config.clone().with_overrides(None, Some(data_dir.clone()));
+            report.apply_url_aliases(&config.url_aliases()?);
+        }
+    }
     let external_renderer_configured = config.as_ref().is_some_and(|config| {
         config.plugins.iter().any(|plugin| {
             stats_render::report_plugin_format(plugin).as_deref() == Some(format.as_str())

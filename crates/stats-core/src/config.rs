@@ -253,6 +253,45 @@ impl Config {
         }
         self
     }
+
+    pub fn url_aliases(&self) -> Result<HashMap<String, String>, ConfigError> {
+        if !self.plugins.iter().any(|plugin| plugin.name == "urlalias") {
+            return Ok(HashMap::new());
+        }
+        let site_file = (!self.site_domain.is_empty()).then(|| {
+            self.data_dir
+                .join(format!("urlalias.{}.txt", self.site_domain))
+        });
+        let fallback = self.data_dir.join("urlalias.txt");
+        let path = site_file.filter(|path| path.is_file()).unwrap_or(fallback);
+        let text = fs::read_to_string(&path).map_err(|source| ConfigError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        let mut aliases = HashMap::new();
+        for (index, line) in text.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let Some((url, alias)) = line.split_once('\t') else {
+                return Err(ConfigError::Invalid {
+                    line: index + 1,
+                    message: format!("invalid URL alias entry in {}", path.display()),
+                });
+            };
+            let url = url.trim();
+            let alias = alias.trim();
+            if url.is_empty() || alias.is_empty() {
+                return Err(ConfigError::Invalid {
+                    line: index + 1,
+                    message: format!("invalid URL alias entry in {}", path.display()),
+                });
+            }
+            aliases.insert(url.to_owned(), alias.to_owned());
+        }
+        Ok(aliases)
+    }
 }
 
 #[cfg(test)]
@@ -299,5 +338,26 @@ mod tests {
 
         let error = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=25\n");
         assert!(matches!(error, Err(ConfigError::Invalid { .. })));
+    }
+
+    #[test]
+    fn loads_url_aliases_only_when_plugin_is_enabled() {
+        let root = std::env::temp_dir().join(format!("stats-urlalias-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("urlalias.example.test.txt"),
+            "/\tHome\n# ignored\n",
+        )
+        .unwrap();
+        let mut config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nSiteDomain=example.test\nLoadPlugin=urlalias\n",
+        )
+        .unwrap()
+        .with_overrides(None, Some(root.clone()));
+        assert_eq!(config.url_aliases().unwrap().get("/"), Some(&"Home".into()));
+        config.plugins.clear();
+        assert!(config.url_aliases().unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -139,7 +139,12 @@ fn render_report(
     let database = state.data_dir.join("stats.sqlite3");
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open HTTP database {}", database.display()))?;
-    let report = ReportService::new(&store).build(limit)?;
+    let mut report = ReportService::new(&store).build(limit)?;
+    if output == "html" {
+        if let Some(config) = state.config.as_ref() {
+            report.apply_url_aliases(&config.url_aliases()?);
+        }
+    }
     let mut registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register HTTP renderers: {error}"))?;
     let external = state.config.as_ref().is_some_and(|config| {

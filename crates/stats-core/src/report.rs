@@ -1,5 +1,6 @@
 use crate::StatsStore;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Report {
@@ -176,5 +177,25 @@ impl<'a> ReportService<'a> {
                 .map(|(key, hits)| ReportRow { key, hits })
                 .collect(),
         })
+    }
+}
+
+impl Report {
+    pub fn apply_url_aliases(&mut self, aliases: &HashMap<String, String>) {
+        for row in self
+            .urls
+            .iter_mut()
+            .chain(self.entry_pages.iter_mut())
+            .chain(self.exit_pages.iter_mut())
+        {
+            if let Some(alias) = aliases.get(&row.key) {
+                row.key.clone_from(alias);
+            }
+        }
+        for row in &mut self.bandwidth_urls {
+            if let Some(alias) = aliases.get(&row.key) {
+                row.key.clone_from(alias);
+            }
+        }
     }
 }

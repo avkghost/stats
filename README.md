@@ -22,6 +22,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - Live terminal analysis that incrementally updates the log and redraws the summary.
 - Read-only `stats-cgi` adapter for AWStats-style CGI hosting; it renders an existing database and never updates logs or checkpoints.
 - Standalone Tokio/Axum HTTP frontend with HTML reports, HTML section routes, and configured JSON/CSV renderer plugins.
+- AWStats-compatible `urlalias` display plugin support using `DirData/urlalias.<SiteDomain>.txt` or `DirData/urlalias.txt`; stored and machine-readable URL keys remain canonical.
 
 ## Run against the example fixture
 
