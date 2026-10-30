@@ -424,6 +424,7 @@ fn raw_log(
     let query = Regex::new(r#"\?[^\s\"]*"#)?;
     let secret =
         Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
+    let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#)?;
     let mut writer: Box<dyn Write> = match output {
         Some(path) => {
             let mut options = fs::OpenOptions::new();
@@ -441,13 +442,13 @@ fn raw_log(
         None => Box::new(io::stdout().lock()),
     };
     for line in text.lines().skip(start).take(lines) {
-        let redacted = redact_raw_line(line, &query, &secret);
+        let redacted = redact_raw_line(line, &query, &secret, &header_secret);
         writeln!(writer, "{redacted}")?;
     }
     Ok(())
 }
 
-fn redact_raw_line(line: &str, query: &Regex, secret: &Regex) -> String {
+fn redact_raw_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex) -> String {
     let mut fields = line.splitn(2, char::is_whitespace);
     let first = fields.next().unwrap_or_default();
     let rest = fields.next().unwrap_or_default();
@@ -456,6 +457,7 @@ fn redact_raw_line(line: &str, query: &Regex, secret: &Regex) -> String {
         .map(|_| "<client>".to_owned())
         .unwrap_or_else(|_| first.to_owned());
     let body = query.replace_all(rest, "?<redacted>");
+    let body = header_secret.replace_all(&body, "$1: <redacted>");
     let body = secret.replace_all(&body, "$1=<redacted>");
     if rest.is_empty() {
         client
@@ -2291,14 +2293,17 @@ mod tests {
             r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#,
         )
         .unwrap();
+        let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#).unwrap();
         let redacted = redact_raw_line(
-            "203.0.113.10 - - \"GET /?token=abc HTTP/1.1\" 200",
+            "203.0.113.10 - - \"GET /?token=abc HTTP/1.1\" Cookie: session-secret 200",
             &query,
             &secret,
+            &header_secret,
         );
         assert!(redacted.starts_with("<client> "));
         assert!(!redacted.contains("203.0.113.10"));
         assert!(!redacted.contains("abc"));
+        assert!(!redacted.contains("session-secret"));
         assert!(redacted.contains("?<redacted>"));
     }
 
