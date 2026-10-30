@@ -7,7 +7,7 @@ use serde::Serialize;
 use stats_core::{
     accepts, hashfiles_backend, is_page, render_redacted_raw_log, Config, DatabasePeriod,
     GeoIpEnricher, InputCheckpoint, LogParser, MaxMindGeoIp, ParseOutcome, PluginRegistry,
-    RefererSpamMatcher, ReportService, StatsStore,
+    RefererSpamMatcher, ReportService, ScannerMatcher, StatsStore,
 };
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
@@ -777,6 +777,7 @@ fn update_inner(
         None
     };
     let referer_spam = configured_referer_spam(&config_path, &config)?;
+    let scanner = configured_scanner(&config_path, &config)?;
     let previous_config_hash = store.meta("config_hash")?;
     if previous_config_hash
         .as_deref()
@@ -937,6 +938,9 @@ fn update_inner(
                         }
                     }
                     if let Some(matcher) = referer_spam.as_ref() {
+                        matcher.apply(&mut event);
+                    }
+                    if let Some(matcher) = scanner.as_ref() {
                         matcher.apply(&mut event);
                     }
                     if let Err(error) = enrich_with_native_plugins(&mut event, &mut native_plugins)
@@ -1332,6 +1336,35 @@ fn configured_referer_spam(
         })
         .transpose()
         .context("load referer-spam rules")
+}
+
+fn configured_scanner(
+    config_path: &Path,
+    config: &Config,
+) -> anyhow::Result<Option<ScannerMatcher>> {
+    if !config
+        .plugins
+        .iter()
+        .any(|plugin| plugin.name == "detectscanner")
+    {
+        return Ok(None);
+    }
+    config
+        .scanner_rules
+        .as_ref()
+        .map(|path| {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                config_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join(path)
+            };
+            ScannerMatcher::from_path(path)
+        })
+        .transpose()
+        .context("load scanner rules")
 }
 
 fn report(
@@ -2320,7 +2353,8 @@ fn health(config_path: PathBuf, data_override: Option<PathBuf>, json: bool) -> a
 mod tests {
     use super::{
         backup, build_report_for_data_dir, build_report_for_period, configured_referer_spam,
-        database_paths, health, migrate, plugin_paths, resolve_log_file, retention, StoreRouter,
+        configured_scanner, database_paths, health, migrate, plugin_paths, resolve_log_file,
+        retention, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
@@ -2477,6 +2511,7 @@ mod tests {
                 client_hostname: None,
                 referer_spam: None,
                 referer_excluded: false,
+                scanner: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
@@ -2600,6 +2635,7 @@ mod tests {
             client_hostname: None,
             referer_spam: None,
             referer_excluded: false,
+            scanner: None,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
@@ -2663,6 +2699,7 @@ mod tests {
                 client_hostname: None,
                 referer_spam: None,
                 referer_excluded: false,
+                scanner: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
@@ -2809,5 +2846,32 @@ mod tests {
         )
         .unwrap();
         assert!(configured_referer_spam(Path::new("/tmp/stats.conf"), &enabled).is_err());
+    }
+
+    #[test]
+    fn scanner_rules_require_the_matching_plugin() {
+        let root = std::env::temp_dir().join(format!(
+            "stats-scanner-rules-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("scanner.rules"), "path_prefix\t/.env\tenv-probe\n").unwrap();
+        let config_path = root.join("stats.conf");
+        let config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nScannerRules=scanner.rules\n",
+        )
+        .unwrap();
+        assert!(configured_scanner(&config_path, &config).unwrap().is_none());
+
+        let enabled = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nScannerRules=scanner.rules\nLoadPlugin=detectscanner\n",
+        )
+        .unwrap();
+        assert!(configured_scanner(&config_path, &enabled).unwrap().is_some());
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -151,6 +151,7 @@ mod tests {
             virtual_host: None,
             referer_spam: None,
             referer_excluded: false,
+            scanner: None,
             geo: GeoInfo::default(),
         }
     }

@@ -8,6 +8,7 @@ mod plugin;
 mod raw_log;
 mod referer_spam;
 mod report;
+mod scanner;
 mod store;
 
 pub use config::{Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig};
@@ -25,4 +26,5 @@ pub use raw_log::{
 };
 pub use referer_spam::{RefererSpamMatcher, RefererSpamRuleError};
 pub use report::{BandwidthRow, DailyRow, Report, ReportMetadata, ReportRow, ReportService};
+pub use scanner::{ScannerMatcher, ScannerRuleError};
 pub use store::{DailyAggregate, InputCheckpoint, StatsStore, StoreError, UpdateStats};

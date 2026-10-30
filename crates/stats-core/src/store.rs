@@ -76,7 +76,7 @@ impl StatsStore {
         conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
         )?;
         let previous_schema = conn
             .query_row(
@@ -106,7 +106,9 @@ impl StatsStore {
             conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM dates; DELETE FROM daily; DELETE FROM months; DELETE FROM weekdays; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM input_checkpoints; DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%';")?;
         }
         if needs_replay {
-            conn.execute_batch("DELETE FROM hostnames; DELETE FROM referer_spam;")?;
+            conn.execute_batch(
+                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners;",
+            )?;
         }
         conn.execute(
             "INSERT INTO meta(key,value) VALUES('entry_exit_dimensions',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -168,6 +170,12 @@ impl StatsStore {
         }
         if let Some(label) = &event.referer_spam {
             tx.execute("INSERT INTO referer_spam(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![label])?;
+        }
+        if let Some(label) = &event.scanner {
+            tx.execute(
+                "INSERT INTO scanners(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+                params![label],
+            )?;
         }
         tx.execute("INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![file_type(event.url.as_deref())])?;
         let user_agent = event.user_agent.as_deref().unwrap_or("UNKNOWN");
@@ -528,6 +536,7 @@ impl StatsStore {
             "organizations",
             "hostnames",
             "referer_spam",
+            "scanners",
             "statuses",
             "status_classes",
             "errors",
@@ -885,6 +894,7 @@ mod tests {
             client_hostname: None,
             referer_spam: None,
             referer_excluded: false,
+            scanner: None,
             identity: None,
             user: Some("alice".into()),
             timestamp: DateTime::parse_from_rfc3339(timestamp).expect("timestamp"),

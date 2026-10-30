@@ -138,6 +138,7 @@ mod tests {
             "referers",
             "referrer_domains",
             "referer_spam",
+            "scanners",
             "file_types",
             "browsers",
             "oses",

@@ -72,6 +72,7 @@ fn render_csv(report: &Value) -> String {
         "user_agents",
         "referers",
         "referrer_domains",
+        "scanners",
         "file_types",
         "browsers",
         "oses",

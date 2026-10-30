@@ -63,6 +63,7 @@ mod tests {
             client_hostname: None,
             referer_spam: None,
             referer_excluded: false,
+            scanner: None,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-10-28T00:00:00+00:00").unwrap(),

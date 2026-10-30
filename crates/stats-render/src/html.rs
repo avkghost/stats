@@ -197,12 +197,13 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Robots", table(&report.robots))
         ),
         "pages" => format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}{}{}",
             section("Methods", table(&report.methods)),
             section("URLs", table(&report.urls)),
             section("File types", table(&report.file_types)),
             section("Entry pages", table(&report.entry_pages)),
-            section("Exit pages", table(&report.exit_pages))
+            section("Exit pages", table(&report.exit_pages)),
+            section("Security probes", table(&report.scanners))
         ),
         "referrers" => format!(
             "{}{}{}{}{}",
