@@ -71,30 +71,33 @@ enum TimeFormat {
     Time8,
 }
 
+const TIME_FORMAT_RULES: &[(&str, TimeFormat)] = &[
+    ("%time1", TimeFormat::Time1),
+    ("%time2", TimeFormat::Time2),
+    ("%time3", TimeFormat::Time3),
+    ("%time4", TimeFormat::Time4),
+    ("%time5", TimeFormat::Time5),
+    ("%time6", TimeFormat::Time6),
+    ("%time7", TimeFormat::Time7),
+    ("%time8", TimeFormat::Time8),
+];
+
+fn detect_time_format(format: &str) -> TimeFormat {
+    if format == "1" {
+        return TimeFormat::Time1;
+    }
+    TIME_FORMAT_RULES
+        .iter()
+        .find_map(|(token, time_format)| format.contains(token).then_some(*time_format))
+        .unwrap_or(TimeFormat::Time1)
+}
+
 impl LogParser {
     pub fn new(format: impl Into<String>) -> Result<Self, regex::Error> {
         let format = normalize_apache_format(&format.into());
         let regex = compile_format(&format)?;
         let json = format.trim().eq_ignore_ascii_case("json");
-        let time_format = if format == "1" || format.contains("%time1") {
-            TimeFormat::Time1
-        } else if format.contains("%time2") {
-            TimeFormat::Time2
-        } else if format.contains("%time3") {
-            TimeFormat::Time3
-        } else if format.contains("%time4") {
-            TimeFormat::Time4
-        } else if format.contains("%time5") {
-            TimeFormat::Time5
-        } else if format.contains("%time6") {
-            TimeFormat::Time6
-        } else if format.contains("%time7") {
-            TimeFormat::Time7
-        } else if format.contains("%time8") {
-            TimeFormat::Time8
-        } else {
-            TimeFormat::Time1
-        };
+        let time_format = detect_time_format(&format);
         Ok(Self {
             regex,
             time_format,
@@ -526,6 +529,20 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detects_time_formats_in_rule_order() {
+        assert!(matches!(detect_time_format("1"), TimeFormat::Time1));
+        assert!(matches!(
+            detect_time_format("%host %time4"),
+            TimeFormat::Time4
+        ));
+        assert!(matches!(
+            detect_time_format("%time7 %time4"),
+            TimeFormat::Time4
+        ));
+        assert!(matches!(detect_time_format("custom"), TimeFormat::Time1));
+    }
 
     #[test]
     fn parses_supplied_nginx_custom_shape() {
