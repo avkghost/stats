@@ -1,0 +1,18 @@
+# Adjust the path, owner, and group to match the web server installation.
+/var/log/nginx/access.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    create 0640 root adm
+    sharedscripts
+    prerotate
+        systemctl start --wait stats-update.service
+    endscript
+    postrotate
+        systemctl start --wait stats-update.service
+    endscript
+}

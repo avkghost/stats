@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/stats-core", "crates/stats-cli", "crates/stats-plugin-api", "crates/stats-plugin-host"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[workspace.dependencies]
+anyhow = "1"
+flate2 = "1"
+bzip2 = "0.6"
+xz2 = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+maxminddb = "0.27"
+regex = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tera = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+libloading = "0.9"
+notify = "8"
+libc = "0.2"
+ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
+

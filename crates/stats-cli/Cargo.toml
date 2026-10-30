@@ -1,0 +1,25 @@
+[package]
+name = "stats-cli"
+version = "0.1.0"
+description = "AWStats-style Rust web log analyzer CLI"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bzip2.workspace = true
+chrono.workspace = true
+flate2.workspace = true
+xz2.workspace = true
+clap.workspace = true
+serde_json = "1"
+serde.workspace = true
+tera.workspace = true
+tokio.workspace = true
+notify.workspace = true
+libc.workspace = true
+ratatui.workspace = true
+stats-core = { version = "0.1.0", path = "../stats-core" }
+stats-plugin-api = { version = "0.1.0", path = "../stats-plugin-api" }
+stats-plugin-host = { version = "0.1.0", path = "../stats-plugin-host" }
+

@@ -1,0 +1,12 @@
+[package]
+name = "stats-plugin-host"
+version = "0.1.0"
+description = "Native plugin loading and supervision for the stats web log analyzer"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+libloading.workspace = true
+stats-plugin-api = { version = "0.1.0", path = "../stats-plugin-api" }
+thiserror.workspace = true
+

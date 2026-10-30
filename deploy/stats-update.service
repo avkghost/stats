@@ -1,0 +1,17 @@
+[Unit]
+Description=Update Stats web log analytics
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=stats
+Group=stats
+ExecStart=/usr/local/bin/stats update --config=/etc/stats/awstats.example.test.conf
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/stats /var/www/stats
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Test workspace
+        run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Release build
+        run: cargo build --workspace --release
+      - name: Package workspace crates
+        run: |
+          # Package together so unpublished internal path dependencies are
+          # resolved as one workspace.
+          cargo package --workspace --allow-dirty --no-verify
+      - name: Build release bundle
+        env:
+          STATS_VERSION: 0.1.0-ci-${{ github.sha }}
+          STATS_RELEASE_DIR: target/release-artifacts
+        run: bash deploy/package-release.sh
+      - name: Upload release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: stats-linux-release-${{ github.sha }}
+          path: target/release-artifacts/*
+          if-no-files-found: error
