@@ -63,6 +63,8 @@ async fn main() -> Result<()> {
         .route("/", get(report))
         .route("/report", get(report))
         .route("/section/{section}", get(section))
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(args.bind)
         .await
@@ -71,6 +73,29 @@ async fn main() -> Result<()> {
         .await
         .context("serve HTTP requests")?;
     Ok(())
+}
+
+async fn healthz() -> Response {
+    (StatusCode::OK, "ok\n").into_response()
+}
+
+async fn readyz(State(state): State<Arc<AppState>>) -> Response {
+    let result = tokio::task::spawn_blocking(move || {
+        let database = state.data_dir.join("stats.sqlite3");
+        StatsStore::open_read_only(&database)
+            .with_context(|| format!("open readiness database {}", database.display()))
+            .map(|_| ())
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => (StatusCode::OK, "ready\n").into_response(),
+        Ok(Err(error)) => (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response(),
+        Err(error) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("readiness worker failed: {error}"),
+        )
+            .into_response(),
+    }
 }
 
 async fn report(State(state): State<Arc<AppState>>, Query(query): Query<ReportQuery>) -> Response {
