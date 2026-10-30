@@ -181,3 +181,30 @@ unsafe extern "C" fn release_report(output: *mut RenderedReport) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::render_csv;
+    use serde_json::json;
+
+    #[test]
+    fn exports_summary_rows_and_escapes_dimension_keys() {
+        let report = json!({
+            "hits": 7,
+            "bytes": 123,
+            "pages": 5,
+            "files": 2,
+            "visits": 3,
+            "unique_visits": 2,
+            "urls": [{"key": "/search?q=a,b", "hits": 4}],
+            "bandwidth_urls": [{"key": "/download", "hits": 1, "bytes": 99}]
+        });
+
+        let csv = render_csv(&report);
+        assert!(csv.starts_with("section,key,hits,bytes,pages,files,visits\n"));
+        assert!(csv.contains("summary,hits,7,,,,\n"));
+        assert!(csv.contains("summary,bytes,,123,,,\n"));
+        assert!(csv.contains("urls,\"/search?q=a,b\",4,,,,\n"));
+        assert!(csv.contains("bandwidth_urls,/download,1,99,,,\n"));
+    }
+}

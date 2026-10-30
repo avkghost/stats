@@ -94,3 +94,91 @@ unsafe extern "C" fn release_report(output: *mut RenderedReport) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::ffi::CString;
+
+    fn report_fixture() -> CString {
+        let mut report = json!({
+            "metadata": {
+                "schema_version": null,
+                "input_path": null,
+                "input_size": null,
+                "input_lines": null,
+                "config_path": null,
+                "config_hash": null,
+                "approximations": []
+            },
+            "hits": 1,
+            "bytes": 10,
+            "pages": 1,
+            "files": 0,
+            "visits": 1,
+            "unique_visits": 1
+        });
+        for key in [
+            "countries",
+            "regions",
+            "cities",
+            "asns",
+            "organizations",
+            "hostnames",
+            "statuses",
+            "status_classes",
+            "errors",
+            "methods",
+            "urls",
+            "bandwidth_urls",
+            "daily",
+            "users",
+            "user_agents",
+            "referers",
+            "referrer_domains",
+            "referer_spam",
+            "file_types",
+            "browsers",
+            "oses",
+            "robots",
+            "request_times",
+            "virtual_hosts",
+            "entry_pages",
+            "exit_pages",
+            "search_engines",
+            "keyphrases",
+            "hours",
+            "dates",
+            "months",
+            "weekdays",
+            "diagnostics",
+        ] {
+            report[key] = json!([]);
+        }
+        CString::new(report.to_string()).unwrap()
+    }
+
+    #[test]
+    fn renders_html_through_the_plugin_abi() {
+        let format = CString::new("html").unwrap();
+        let report = report_fixture();
+        let request = ReportRequest {
+            format: format.as_ptr(),
+            report_json: report.as_ptr(),
+            section: ptr::null(),
+        };
+        let mut output = RenderedReport {
+            media_type: ptr::null_mut(),
+            extension: ptr::null_mut(),
+            body: ptr::null_mut(),
+        };
+
+        let status = unsafe { render_report(&request, &mut output) };
+        assert_eq!(status, 0);
+        let body = unsafe { CStr::from_ptr(output.body) }.to_string_lossy();
+        assert!(body.contains("Stats — Overview"));
+        assert!(body.contains("<strong>1</strong>"));
+        unsafe { release_report(&mut output) };
+    }
+}

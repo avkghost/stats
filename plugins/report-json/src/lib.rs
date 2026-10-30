@@ -80,3 +80,38 @@ unsafe extern "C" fn release_report(output: *mut RenderedReport) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CString;
+
+    #[test]
+    fn renders_json_through_the_plugin_abi() {
+        let format = CString::new("json").unwrap();
+        let report = CString::new(r#"{"hits":7,"urls":[]}"#).unwrap();
+        let request = ReportRequest {
+            format: format.as_ptr(),
+            report_json: report.as_ptr(),
+            section: ptr::null(),
+        };
+        let mut output = RenderedReport {
+            media_type: ptr::null_mut(),
+            extension: ptr::null_mut(),
+            body: ptr::null_mut(),
+        };
+
+        let status = unsafe { render_report(&request, &mut output) };
+        assert_eq!(status, 0);
+        assert_eq!(
+            unsafe { CStr::from_ptr(output.body) }.to_bytes(),
+            report.as_bytes()
+        );
+        assert_eq!(
+            unsafe { CStr::from_ptr(output.extension) }.to_bytes(),
+            b"json"
+        );
+        unsafe { release_report(&mut output) };
+        assert!(output.body.is_null());
+    }
+}
