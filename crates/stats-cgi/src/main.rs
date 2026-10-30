@@ -1,6 +1,7 @@
 use anyhow::{bail, Context};
 use stats_core::{
-    render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore, MAX_RAW_LOG_LINES,
+    bearer_token_matches, render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore,
+    MAX_RAW_LOG_LINES,
 };
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_section,
@@ -217,7 +218,7 @@ fn main() -> anyhow::Result<()> {
         .ok()
         .filter(|token| !token.is_empty())
         .zip(env::var("HTTP_AUTHORIZATION").ok())
-        .is_some_and(|(token, value)| value == format!("Bearer {token}"));
+        .is_some_and(|(token, value)| bearer_token_matches(&token, &value));
     let (media_type, body) = render_cgi(data_dir, &request, config.as_ref(), authorized_raw_log)?;
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     writeln!(stdout, "Content-Type: {media_type}\r")?;

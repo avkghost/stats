@@ -5,6 +5,21 @@ use regex::Regex;
 
 pub const MAX_RAW_LOG_LINES: usize = 10_000;
 
+pub fn bearer_token_matches(expected: &str, authorization: &str) -> bool {
+    let Some(candidate) = authorization.strip_prefix("Bearer ") else {
+        return false;
+    };
+    if candidate.len() != expected.len() {
+        return false;
+    }
+    candidate
+        .as_bytes()
+        .iter()
+        .zip(expected.as_bytes())
+        .fold(0u8, |difference, (left, right)| difference | (left ^ right))
+        == 0
+}
+
 pub fn render_redacted(path: &Path, start: usize, lines: usize) -> Result<String> {
     let raw = fs::read(path).with_context(|| format!("read raw log {}", path.display()))?;
     let decoded = decode(path, &raw)?;
@@ -50,7 +65,7 @@ fn redact_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex)
 
 #[cfg(test)]
 mod tests {
-    use super::render_redacted;
+    use super::{bearer_token_matches, render_redacted};
     use std::fs;
 
     #[test]
@@ -77,5 +92,13 @@ mod tests {
         assert!(output.contains("?<redacted>"));
 
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn matches_only_the_expected_bearer_token() {
+        assert!(bearer_token_matches("secret", "Bearer secret"));
+        assert!(!bearer_token_matches("secret", "Bearer wrong"));
+        assert!(!bearer_token_matches("secret", "Basic secret"));
+        assert!(!bearer_token_matches("secret", "Bearer "));
     }
 }

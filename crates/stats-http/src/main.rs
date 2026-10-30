@@ -9,7 +9,8 @@ use axum::{
 use clap::Parser;
 use serde::Deserialize;
 use stats_core::{
-    render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore, MAX_RAW_LOG_LINES,
+    bearer_token_matches, render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore,
+    MAX_RAW_LOG_LINES,
 };
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_report,
@@ -156,8 +157,7 @@ async fn raw_log(
     let authorized = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|value| value == expected);
+        .is_some_and(|value| bearer_token_matches(expected, value));
     if !authorized {
         eprintln!("raw-log authorization failed");
         return (
