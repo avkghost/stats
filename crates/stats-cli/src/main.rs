@@ -31,6 +31,8 @@ use xz2::read::XzDecoder;
 
 mod reverse_dns;
 
+const MAX_RAW_LOG_LINES: usize = 10_000;
+
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
 struct Cli {
@@ -437,11 +439,17 @@ fn raw_log(
             let file = options
                 .open(&path)
                 .with_context(|| format!("open redacted raw-log output {}", path.display()))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(fs::Permissions::from_mode(0o600))
+                    .with_context(|| format!("restrict raw-log output {}", path.display()))?;
+            }
             Box::new(file)
         }
         None => Box::new(io::stdout().lock()),
     };
-    for line in text.lines().skip(start).take(lines) {
+    for line in text.lines().skip(start).take(lines.min(MAX_RAW_LOG_LINES)) {
         let redacted = redact_raw_line(line, &query, &secret, &header_secret);
         writeln!(writer, "{redacted}")?;
     }
