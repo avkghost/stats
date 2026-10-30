@@ -28,6 +28,8 @@ use std::{
 use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
 
+mod reverse_dns;
+
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
 struct Cli {
@@ -673,6 +675,17 @@ fn update_inner(
     registry.add(GeoIpEnricher {
         provider: Box::new(geoip),
     });
+    let mut reverse_dns = if config.dns_lookup {
+        Some(
+            reverse_dns::ReverseDnsEnricher::new(
+                config.dns_lookup_timeout_ms,
+                config.dns_lookup_cache_size,
+            )
+            .context("initialize reverse DNS enrichment")?,
+        )
+    } else {
+        None
+    };
     let previous_config_hash = store.meta("config_hash")?;
     if previous_config_hash
         .as_deref()
@@ -826,6 +839,12 @@ fn update_inner(
                         continue;
                     }
                     registry.enrich(&mut event);
+                    if let Some(enricher) = reverse_dns.as_mut() {
+                        if let Err(error) = enricher.enrich(&mut event) {
+                            store
+                                .diagnostic(&format!("reverse DNS enrichment failed: {error:#}"))?;
+                        }
+                    }
                     if let Err(error) = enrich_with_native_plugins(&mut event, &mut native_plugins)
                     {
                         store.diagnostic(&format!("native plugin enrichment disabled: {error}"))?;
@@ -2265,6 +2284,7 @@ mod tests {
         for timestamp in ["2026-01-31T23:59:00+00:00", "2026-02-01T00:01:00+00:00"] {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
+                client_hostname: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
@@ -2385,6 +2405,7 @@ mod tests {
 
         let old_event = AccessEvent {
             client_ip: "198.51.100.5".into(),
+            client_hostname: None,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
@@ -2445,6 +2466,7 @@ mod tests {
         for timestamp in ["2024-12-31T23:59:00+00:00", "2025-01-01T00:01:00+00:00"] {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
+                client_hostname: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),

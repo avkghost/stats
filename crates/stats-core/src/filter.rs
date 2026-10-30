@@ -60,6 +60,7 @@ mod tests {
     fn event(url: &str, agent: &str) -> AccessEvent {
         AccessEvent {
             client_ip: "192.0.2.1".into(),
+            client_hostname: None,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-10-28T00:00:00+00:00").unwrap(),

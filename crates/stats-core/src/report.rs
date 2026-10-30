@@ -16,6 +16,7 @@ pub struct Report {
     pub cities: Vec<ReportRow>,
     pub asns: Vec<ReportRow>,
     pub organizations: Vec<ReportRow>,
+    pub hostnames: Vec<ReportRow>,
     pub statuses: Vec<ReportRow>,
     pub status_classes: Vec<ReportRow>,
     pub errors: Vec<ReportRow>,
@@ -128,6 +129,12 @@ impl<'a> ReportService<'a> {
             cities: rows("cities")?,
             asns: rows("asns")?,
             organizations: rows("organizations")?,
+            hostnames: self
+                .store
+                .top_if_exists("hostnames", limit)?
+                .into_iter()
+                .map(|(key, hits)| ReportRow { key, hits })
+                .collect(),
             statuses: rows("statuses")?,
             status_classes: rows("status_classes")?,
             errors: rows("errors")?,

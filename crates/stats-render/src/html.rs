@@ -180,8 +180,9 @@ fn overview(report: &Report, periods: &[(String, String)]) -> String {
 fn detail_body(report: &Report, page: &str) -> String {
     match page {
         "visitors" => format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}{}{}",
             section("Users", table(&report.users)),
+            section("Hostnames", table(&report.hostnames)),
             section("User agents", table(&report.user_agents)),
             section("Browsers", table(&report.browsers)),
             section("Operating systems", table(&report.oses)),

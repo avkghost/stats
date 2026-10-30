@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use std::{path::Path, sync::Mutex, time::Duration};
 use thiserror::Error;
 
-const SCHEMA_VERSION: &str = "11";
+const SCHEMA_VERSION: &str = "12";
 const ENTRY_EXIT_VERSION: &str = "1";
 
 #[derive(Debug, Error)]
@@ -75,6 +75,9 @@ impl StatsStore {
         }
         conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
+        )?;
         let previous_schema = conn
             .query_row(
                 "SELECT value FROM meta WHERE key='schema_version'",
@@ -101,6 +104,9 @@ impl StatsStore {
                 && page_count > 0);
         if needs_replay {
             conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM dates; DELETE FROM daily; DELETE FROM months; DELETE FROM weekdays; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM input_checkpoints; DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%';")?;
+        }
+        if needs_replay {
+            conn.execute_batch("DELETE FROM hostnames;")?;
         }
         conn.execute(
             "INSERT INTO meta(key,value) VALUES('entry_exit_dimensions',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -297,6 +303,9 @@ impl StatsStore {
         if let Some(organization) = &event.geo.organization {
             tx.execute("INSERT INTO organizations(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![organization])?;
         }
+        if let Some(hostname) = &event.client_hostname {
+            tx.execute("INSERT INTO hostnames(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![hostname])?;
+        }
         tx.commit()?;
         Ok(())
     }
@@ -465,6 +474,7 @@ impl StatsStore {
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
         conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM daily;")?;
+        conn.execute_batch("DELETE FROM hostnames;")?;
         conn.execute_batch("DELETE FROM dates; DELETE FROM months; DELETE FROM weekdays;")?;
         Ok(())
     }
@@ -510,6 +520,7 @@ impl StatsStore {
             "cities",
             "asns",
             "organizations",
+            "hostnames",
             "statuses",
             "status_classes",
             "errors",
@@ -546,6 +557,26 @@ impl StatsStore {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    pub fn top_if_exists(
+        &self,
+        table: &str,
+        limit: usize,
+    ) -> Result<Vec<(String, u64)>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        let exists = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+                params![table],
+                |row| row.get::<_, bool>(0),
+            )?;
+        drop(conn);
+        if exists {
+            self.top(table, limit)
+        } else {
+            Ok(Vec::new())
+        }
     }
 
     pub fn top_bandwidth(&self, limit: usize) -> Result<Vec<(String, u64, u64)>, StoreError> {
@@ -838,6 +869,7 @@ mod tests {
         let store = StatsStore::open(&path).expect("open store");
         let event = |url: &str, timestamp: &str| AccessEvent {
             client_ip: "203.0.113.10".into(),
+            client_hostname: None,
             identity: None,
             user: Some("alice".into()),
             timestamp: DateTime::parse_from_rfc3339(timestamp).expect("timestamp"),
@@ -930,7 +962,7 @@ mod tests {
         drop(conn);
 
         let store = StatsStore::open(&path).expect("migrate store");
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("11"));
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("12"));
         assert_eq!(store.meta("input_content_hash").unwrap(), None);
         assert_eq!(store.totals().unwrap(), (0, 0));
         drop(store);
@@ -988,7 +1020,7 @@ mod tests {
             .expect("seed aggregate");
         store.clear_aggregates().expect("clear aggregates");
         assert_eq!(store.totals().unwrap(), (0, 0));
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("11"));
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("12"));
         assert_eq!(
             store.meta("input_content_hash").unwrap().as_deref(),
             Some("checkpoint")

@@ -73,6 +73,8 @@ pub struct Config {
     pub database_period: DatabasePeriod,
     pub time_zone: Option<i32>,
     pub dns_lookup: bool,
+    pub dns_lookup_timeout_ms: u64,
+    pub dns_lookup_cache_size: usize,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
     pub url_referrer_with_query: bool,
@@ -145,6 +147,8 @@ impl Config {
             "DatabasePeriod",
             "TimeZone",
             "DNSLookup",
+            "DNSLookupTimeoutMs",
+            "DNSLookupCacheSize",
             "SkipHosts",
             "OnlyHosts",
             "SkipFiles",
@@ -225,6 +229,24 @@ impl Config {
                 })
                 .transpose()?,
             dns_lookup: values.get("DNSLookup").map(|v| v != "0").unwrap_or(false),
+            dns_lookup_timeout_ms: values
+                .get("DNSLookupTimeoutMs")
+                .map(|value| value.parse())
+                .transpose()
+                .map_err(|_| ConfigError::Invalid {
+                    line: 0,
+                    message: "DNSLookupTimeoutMs must be an integer".into(),
+                })?
+                .unwrap_or(500),
+            dns_lookup_cache_size: values
+                .get("DNSLookupCacheSize")
+                .map(|value| value.parse())
+                .transpose()
+                .map_err(|_| ConfigError::Invalid {
+                    line: 0,
+                    message: "DNSLookupCacheSize must be an integer".into(),
+                })?
+                .unwrap_or(10_000),
             plugins,
             filters: FilterConfig {
                 allowed_virtual_hosts,

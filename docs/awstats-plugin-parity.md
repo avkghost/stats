@@ -14,9 +14,9 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `clusterinfo`, `hashfiles` | Not applicable to the current SQLite/checkpoint design | Revisit only if distributed ingestion is introduced |
 | `tooltips`, `decodeutfkeys` | Presentation/encoding concerns | Add only when a concrete AWStats report compatibility case requires them |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
-| `detectrefererspam` | Hook-only upstream plugin; no detection rules are supplied | Add configurable referer-spam classification/filtering with diagnostics rather than inventing a heuristic |
-| `rawlog` | Not enabled | Keep disabled by default; raw log exposure needs explicit authorization and redaction |
-| `hostinfo`, `ipv6` | Partially covered by core parsing/GeoIP | Do not add reverse-DNS lookups to normal updates |
+| `detectrefererspam` | Rule mechanics documented; implementation follows the minimal explicit rule format | Add configurable referer-spam classification/filtering with diagnostics rather than inventing a heuristic |
+| `rawlog` | Safety variants documented; output remains disabled | Keep disabled by default; raw log exposure needs explicit authorization and redaction |
+| `hostinfo`, `ipv6` | Optional bounded reverse-DNS enrichment implemented behind `DNSLookup=1` | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
 | `timehires` | Internal diagnostic concern | Keep timing diagnostics outside report data |
 
 ## Implementation order
