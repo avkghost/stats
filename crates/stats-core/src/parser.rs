@@ -23,6 +23,16 @@ pub struct AccessEvent {
     pub geo: crate::GeoInfo,
 }
 
+impl AccessEvent {
+    pub fn apply_timezone_offset(&mut self, hours: i32) -> bool {
+        let Some(offset) = FixedOffset::east_opt(hours.saturating_mul(60 * 60)) else {
+            return false;
+        };
+        self.timestamp = self.timestamp.with_timezone(&offset);
+        true
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("line exceeds maximum supported length of {MAX_LINE_LENGTH} bytes")]
@@ -648,5 +658,20 @@ mod tests {
             r#"192.0.2.23 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 128 "session=abc 123" req-42"#,
         );
         assert!(matches!(outcome, ParseOutcome::Event(_)));
+    }
+
+    #[test]
+    fn applies_configured_timezone_offset() {
+        let parser = LogParser::new("%host [%time1] %methodurl %code %bytesd").unwrap();
+        let ParseOutcome::Event(mut event) =
+            parser.parse("192.0.2.24 [27/Oct/2026:23:30:00 +0000] GET / HTTP/1.1 200 1")
+        else {
+            panic!("expected timezone event");
+        };
+        assert!(event.apply_timezone_offset(2));
+        assert_eq!(
+            event.timestamp.format("%Y-%m-%d %H:%M").to_string(),
+            "2026-10-28 01:30"
+        );
     }
 }

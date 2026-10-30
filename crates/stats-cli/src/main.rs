@@ -783,6 +783,9 @@ fn update_inner(
             processed += 1;
             match parser.parse(line) {
                 ParseOutcome::Event(mut event) => {
+                    if let Some(time_zone) = config.time_zone {
+                        event.apply_timezone_offset(time_zone);
+                    }
                     if !accepts(&event, &config.filters) {
                         filtered += 1;
                         continue;

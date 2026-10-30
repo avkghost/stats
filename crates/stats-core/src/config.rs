@@ -71,6 +71,7 @@ pub struct Config {
     pub host_aliases: Vec<String>,
     pub data_dir: PathBuf,
     pub database_period: DatabasePeriod,
+    pub time_zone: Option<i32>,
     pub dns_lookup: bool,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
@@ -139,6 +140,7 @@ impl Config {
             "HostAliases",
             "DirData",
             "DatabasePeriod",
+            "TimeZone",
             "DNSLookup",
             "SkipHosts",
             "OnlyHosts",
@@ -199,6 +201,26 @@ impl Config {
                     })
                 }
             },
+            time_zone: values
+                .get("TimeZone")
+                .map(|value| {
+                    let offset = value.parse::<i32>().map_err(|_| ConfigError::Invalid {
+                        line: 0,
+                        message: format!(
+                            "invalid TimeZone {value}; expected an integer hour offset"
+                        ),
+                    })?;
+                    if !(-24..=24).contains(&offset) {
+                        return Err(ConfigError::Invalid {
+                            line: 0,
+                            message: format!(
+                                "invalid TimeZone {value}; expected an offset from -24 to 24"
+                            ),
+                        });
+                    }
+                    Ok(offset)
+                })
+                .transpose()?,
             dns_lookup: values.get("DNSLookup").map(|v| v != "0").unwrap_or(false),
             plugins,
             filters: FilterConfig {
@@ -268,5 +290,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(yearly.database_period, DatabasePeriod::Year);
+    }
+
+    #[test]
+    fn parses_optional_timezone_offset() {
+        let config = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=2\n").unwrap();
+        assert_eq!(config.time_zone, Some(2));
+
+        let error = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=25\n");
+        assert!(matches!(error, Err(ConfigError::Invalid { .. })));
     }
 }
