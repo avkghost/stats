@@ -34,7 +34,7 @@ impl MethodAnomalyMatcher {
         };
         let normalized = method.trim().to_ascii_uppercase();
         if !normalized.is_empty() && !self.allowed.contains(&normalized) {
-            event.method_anomaly = Some(format!("unrecognized:{normalized}"));
+            event.method_anomaly = Some(normalized);
         }
     }
 }
@@ -79,9 +79,6 @@ mod tests {
 
         let mut unusual = event(Some("PROPFIND"));
         matcher.apply(&mut unusual);
-        assert_eq!(
-            unusual.method_anomaly.as_deref(),
-            Some("unrecognized:PROPFIND")
-        );
+        assert_eq!(unusual.method_anomaly.as_deref(), Some("PROPFIND"));
     }
 }

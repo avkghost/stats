@@ -4,8 +4,18 @@ use anyhow::Context;
 use stats_core::{BandwidthRow, DailyRow, Report, ReportRow};
 
 pub(crate) fn table(rows: &[ReportRow]) -> String {
+    table_with_class(rows, "report-table")
+}
+
+pub(crate) fn anomaly_table(rows: &[ReportRow]) -> String {
+    table_with_class(rows, "report-table anomaly-table")
+}
+
+fn table_with_class(rows: &[ReportRow], class: &str) -> String {
     let mut out = String::from(
-        "<table class=\"report-table\" data-filterable><thead><tr><th>Key</th><th>Hits</th></tr></thead><tbody>",
+        &format!(
+            "<table class=\"{class}\" data-filterable><thead><tr><th>Key</th><th>Hits</th></tr></thead><tbody>"
+        ),
     );
     for row in rows {
         out.push_str(&format!(
@@ -199,12 +209,15 @@ fn detail_body(report: &Report, page: &str) -> String {
         "pages" => format!(
             "{}{}{}{}{}{}{}",
             section("Methods", table(&report.methods)),
-            section("HTTP method anomalies", table(&report.method_anomalies)),
+            section(
+                "HTTP method anomalies",
+                anomaly_table(&report.method_anomalies)
+            ),
             section("URLs", table(&report.urls)),
             section("File types", table(&report.file_types)),
             section("Entry pages", table(&report.entry_pages)),
             section("Exit pages", table(&report.exit_pages)),
-            section("Security probes", table(&report.scanners))
+            section("Security probes", anomaly_table(&report.scanners))
         ),
         "referrers" => format!(
             "{}{}{}{}{}",
@@ -284,6 +297,8 @@ fn site_css() -> &'static str {
 * { box-sizing:border-box; }
 html, body { margin:0; min-width:320px; width:100%; }
 body { background:var(--canvas); color:var(--ink); font:14px/1.45 Arial, Helvetica, sans-serif; }
+.anomaly-table tbody tr,
+.anomaly-table tbody td { color:#b42318; }
 a { color:var(--blue); }
 .site { display:grid; grid-template-columns:220px minmax(0,1fr); height:100vh; min-height:100vh; overflow:hidden; }
 .sidebar { background:linear-gradient(180deg,var(--navy),#0f2b48); color:white; height:100vh; overflow:hidden; padding:24px 18px; position:sticky; top:0; }

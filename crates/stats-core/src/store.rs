@@ -982,13 +982,13 @@ mod tests {
             vec![("Example ISP".into(), 3)]
         );
         let mut anomalous = event("/method", "2026-01-01T00:33:00+00:00");
-        anomalous.method_anomaly = Some("unrecognized:PROPFIND".into());
+        anomalous.method_anomaly = Some("PROPFIND".into());
         store
             .record(&anomalous, true)
             .expect("record method anomaly");
         assert_eq!(
             store.top_if_exists("method_anomalies", 10).unwrap(),
-            vec![("unrecognized:PROPFIND".into(), 1)]
+            vec![("PROPFIND".into(), 1)]
         );
         assert_eq!(store.metric("visits").unwrap().0, 2);
         drop(store);

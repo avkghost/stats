@@ -12,9 +12,9 @@ HttpMethodAnomalyAllowedMethods=GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS,CONNECT,T
 
 If the allow-list is omitted, the standard methods shown above are used. Method
 names are compared case-insensitively and stored using uppercase. Anomalies are
-aggregated in the `method_anomalies` report dimension with labels such as
-`unrecognized:PROPFIND`, and appear on the Pages detail page and in CSV/JSON
-reports.
+aggregated in the `method_anomalies` report dimension using the original
+uppercase method name, such as `PROPFIND`. The HTML Pages detail page marks
+these rows in red; CSV and JSON reports expose the raw method name.
 
 This feature detects unusual method names only. It does not infer anomalies
 from status codes, request rates, or repeated requests.

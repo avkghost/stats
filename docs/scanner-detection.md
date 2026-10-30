@@ -21,5 +21,6 @@ path_suffix<TAB>/path<TAB>label
 
 The first matching rule wins. Classified requests are aggregated under the
 `scanners` report dimension and shown as **Security probes** on the Pages
-detail page. Rules are intentionally explicit; ordinary `404` responses and
-high request rates are not classified automatically.
+detail page with red visual emphasis. Rules are intentionally explicit;
+ordinary `404` responses and high request rates are not classified
+automatically.
