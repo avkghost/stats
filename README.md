@@ -143,4 +143,6 @@ The current plugin implementation includes an in-process Rust trait registry and
 
 The CGI adapter uses the same rule: section-specific HTML remains available from the static report templates, while full HTML, JSON, and CSV output requires `STATS_CONFIG` with the requested renderer plugin. The TUI uses its own terminal renderer and never loads report-export plugins.
 
+For CGI and HTTP deployments, the frontend applies an implicit `open_basedir`-style read boundary: the effective `DirData` directory is the only request-readable root. Requested database and `urlalias` files are canonicalized before access, so traversal and symlink escapes are rejected. External renderer libraries are trusted startup inputs from deployment configuration and are not request-controlled.
+
 Build the supplied external renderers separately with `cargo build -p stats-report-html -p stats-report-json -p stats-report-csv`. Install the resulting shared libraries in a trusted plugin directory, then reference the selected library from `LoadPlugin`; the main analyzer binaries do not contain the stream renderers.

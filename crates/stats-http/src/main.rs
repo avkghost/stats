@@ -8,7 +8,7 @@ use axum::{
 };
 use clap::Parser;
 use serde::Deserialize;
-use stats_core::{Config, ReportService, StatsStore};
+use stats_core::{Config, FileSandbox, ReportService, StatsStore};
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_report,
     render_report_section_stream, render_report_stream,
@@ -33,6 +33,7 @@ struct Args {
 struct AppState {
     data_dir: PathBuf,
     config: Option<Config>,
+    sandbox: FileSandbox,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -58,7 +59,17 @@ async fn main() -> Result<()> {
         .map(|config| config.data_dir.clone())
         .or(args.data_dir)
         .unwrap_or_else(|| PathBuf::from("stats"));
-    let state = Arc::new(AppState { data_dir, config });
+    let sandbox = FileSandbox::for_data_dir(&data_dir).with_context(|| {
+        format!(
+            "initialize HTTP filesystem sandbox for {}",
+            data_dir.display()
+        )
+    })?;
+    let state = Arc::new(AppState {
+        data_dir,
+        config,
+        sandbox,
+    });
     let app = Router::new()
         .route("/", get(report))
         .route("/report", get(report))
@@ -82,6 +93,7 @@ async fn healthz() -> Response {
 async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     let result = tokio::task::spawn_blocking(move || {
         let database = state.data_dir.join("stats.sqlite3");
+        state.sandbox.check_existing(&database)?;
         StatsStore::open_read_only(&database)
             .with_context(|| format!("open readiness database {}", database.display()))
             .map(|_| ())
@@ -137,10 +149,18 @@ fn render_report(
     section: Option<String>,
 ) -> Result<Response> {
     let database = state.data_dir.join("stats.sqlite3");
+    state.sandbox.check_existing(&database)?;
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open HTTP database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(limit)?;
     if let ("html", Some(config)) = (output, state.config.as_ref()) {
+        if config
+            .plugins
+            .iter()
+            .any(|plugin| plugin.name == "urlalias")
+        {
+            state.sandbox.check_existing(&config.url_alias_path())?;
+        }
         report.apply_url_aliases(&config.url_aliases()?);
     }
     let mut registry = builtin_renderer_registry()

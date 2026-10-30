@@ -289,12 +289,7 @@ impl Config {
         if !self.plugins.iter().any(|plugin| plugin.name == "urlalias") {
             return Ok(HashMap::new());
         }
-        let site_file = (!self.site_domain.is_empty()).then(|| {
-            self.data_dir
-                .join(format!("urlalias.{}.txt", self.site_domain))
-        });
-        let fallback = self.data_dir.join("urlalias.txt");
-        let path = site_file.filter(|path| path.is_file()).unwrap_or(fallback);
+        let path = self.url_alias_path();
         let text = fs::read_to_string(&path).map_err(|source| ConfigError::Read {
             path: path.clone(),
             source,
@@ -322,6 +317,15 @@ impl Config {
             aliases.insert(url.to_owned(), alias.to_owned());
         }
         Ok(aliases)
+    }
+
+    pub fn url_alias_path(&self) -> PathBuf {
+        let site_file = (!self.site_domain.is_empty()).then(|| {
+            self.data_dir
+                .join(format!("urlalias.{}.txt", self.site_domain))
+        });
+        let fallback = self.data_dir.join("urlalias.txt");
+        site_file.filter(|path| path.is_file()).unwrap_or(fallback)
     }
 }
 

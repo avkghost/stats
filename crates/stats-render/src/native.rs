@@ -32,6 +32,19 @@ pub fn register_configured_renderer(
     config: &Config,
     format: &str,
 ) -> anyhow::Result<()> {
+    let library = configured_renderer_library(config, format)?;
+    let renderer = NativeReportRenderer::load(library, format)?;
+    let result = match format {
+        "html" => registry.replace_renderer(renderer),
+        _ => registry.add_renderer(renderer),
+    };
+    result.map_err(|error: RendererRegistryError| {
+        anyhow::anyhow!("register external report renderer: {error}")
+    })?;
+    Ok(())
+}
+
+fn configured_renderer_library<'a>(config: &'a Config, format: &str) -> anyhow::Result<&'a Path> {
     let plugin = config
         .plugins
         .iter()
@@ -47,15 +60,7 @@ pub fn register_configured_renderer(
             plugin.name
         )
     })?;
-    let renderer = NativeReportRenderer::load(library, format)?;
-    let result = match format {
-        "html" => registry.replace_renderer(renderer),
-        _ => registry.add_renderer(renderer),
-    };
-    result.map_err(|error: RendererRegistryError| {
-        anyhow::anyhow!("register external report renderer: {error}")
-    })?;
-    Ok(())
+    Ok(Path::new(library))
 }
 
 pub fn report_plugin_format(plugin: &PluginConfig) -> Option<String> {

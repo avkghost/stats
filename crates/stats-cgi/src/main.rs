@@ -1,5 +1,5 @@
 use anyhow::{bail, Context};
-use stats_core::{Config, ReportService, StatsStore};
+use stats_core::{Config, FileSandbox, ReportService, StatsStore};
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_section,
     render_report_stream,
@@ -119,12 +119,26 @@ fn render_cgi(
     request: &CgiRequest,
     config: Option<&Config>,
 ) -> anyhow::Result<(String, String)> {
+    let sandbox = FileSandbox::for_data_dir(&data_dir).with_context(|| {
+        format!(
+            "initialize CGI filesystem sandbox for {}",
+            data_dir.display()
+        )
+    })?;
     let database = data_dir.join("stats.sqlite3");
+    sandbox.check_existing(&database)?;
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(request.limit)?;
     if let Some(config) = config {
         let config = config.clone().with_overrides(None, Some(data_dir.clone()));
+        if config
+            .plugins
+            .iter()
+            .any(|plugin| plugin.name == "urlalias")
+        {
+            sandbox.check_existing(&config.url_alias_path())?;
+        }
         report.apply_url_aliases(&config.url_aliases()?);
     }
     let registry = builtin_renderer_registry()

@@ -1,4 +1,5 @@
 mod config;
+mod filesystem;
 mod filter;
 mod geoip;
 mod parser;
@@ -8,6 +9,7 @@ mod report;
 mod store;
 
 pub use config::{Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig};
+pub use filesystem::{FileSandbox, FileSandboxError};
 pub use filter::{accepts, is_page};
 pub use geoip::{GeoInfo, GeoIp, MaxMindGeoIp};
 pub use parser::{AccessEvent, LogParser, ParseError, ParseOutcome};
