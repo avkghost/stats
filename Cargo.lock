@@ -2153,11 +2153,15 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
+ "bzip2",
  "clap",
+ "flate2",
+ "regex",
  "serde",
  "stats-core",
  "stats-render",
  "tokio",
+ "xz2",
 ]
 
 [[package]]
