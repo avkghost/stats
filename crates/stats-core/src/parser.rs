@@ -445,15 +445,17 @@ fn match_apache_long_token(remaining: &str) -> Option<(&'static str, &'static st
 }
 
 fn compile_format(format: &str) -> Result<Regex, regex::Error> {
-    if format == "1" {
-        return Regex::new(
+    let predefined = match format {
+        "1" => Some(
             r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"$"#,
-        );
-    }
-    if format == "4" {
-        return Regex::new(
+        ),
+        "4" => Some(
             r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)$"#,
-        );
+        ),
+        _ => None,
+    };
+    if let Some(pattern) = predefined {
+        return Regex::new(pattern);
     }
     if format.contains("%host %logname %user %time1 %methodurl %code %bytesd %referer %ua %extra1")
     {
