@@ -11,7 +11,8 @@ pub use filter::{accepts, is_page};
 pub use geoip::{GeoInfo, GeoIp, MaxMindGeoIp};
 pub use parser::{AccessEvent, LogParser, ParseError, ParseOutcome};
 pub use plugin::{
-    Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport, ReportRenderer,
+    Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport,
+    RendererRegistryError, ReportRenderer,
 };
 pub use report::{BandwidthRow, DailyRow, Report, ReportMetadata, ReportRow, ReportService};
 pub use store::{DailyAggregate, InputCheckpoint, StatsStore, StoreError, UpdateStats};
