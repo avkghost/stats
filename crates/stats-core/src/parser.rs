@@ -132,7 +132,17 @@ impl LogParser {
             .or(request_url);
         let duration_seconds = get("extra1")
             .and_then(|v| v.parse().ok())
-            .or_else(|| get("duration").and_then(|v| v.parse().ok()));
+            .or_else(|| get("duration").and_then(|v| v.parse().ok()))
+            .or_else(|| {
+                get("duration_ms")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .map(|v| v / 1_000.0)
+            })
+            .or_else(|| {
+                get("duration_us")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .map(|v| v / 1_000_000.0)
+            });
         ParseOutcome::Event(Box::new(AccessEvent {
             client_ip: get("host").unwrap_or_default(),
             identity: none_dash(get("logname")),
@@ -332,6 +342,10 @@ fn normalize_apache_format(format: &str) -> String {
             || remaining.starts_with("%{x-forwarded-for}i")
         {
             Some(("%{X-Forwarded-For}i", "%host"))
+        } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
+            Some(("%{ms}T", "%duration_ms"))
+        } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
+            Some(("%{us}T", "%duration_us"))
         } else if remaining.starts_with("%{remote}p") {
             Some(("%{remote}p", "%other2"))
         } else if remaining.starts_with("%{status}o") {
@@ -358,6 +372,8 @@ fn normalize_apache_format(format: &str) -> String {
             Some(b'U') => "%url",
             Some(b'q') => "%query",
             Some(b'H') => "%protocol",
+            Some(b'D') => "%duration_us",
+            Some(b'T') => "%duration",
             Some(b'O' | b'B' | b'b') => "%bytesd",
             Some(b'p') => "%other1",
             _ => "",
@@ -420,6 +436,8 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                 "url" => ("url".into(), r"\S+"),
                 "query" => ("query".into(), r"\S*"),
                 "protocol" => ("protocol".into(), r"\S+"),
+                "duration" => ("duration".into(), r"\d+(?:\.\d+)?"),
+                "duration_ms" | "duration_us" => (token.clone(), r"\d+(?:\.\d+)?"),
                 "code" => ("status".into(), r"\d{3}"),
                 "bytesd" => ("bytes".into(), r"\d+"),
                 "referer" | "refererquot" => ("referer".into(), r#".*?"#),
@@ -584,5 +602,24 @@ mod tests {
         assert_eq!(event.url.as_deref(), Some("/search?q=rust"));
         assert_eq!(event.request, "GET /search?q=rust HTTP/1.1");
         assert_eq!(event.bytes, 128);
+    }
+
+    #[test]
+    fn parses_apache_duration_tokens() {
+        let parser = LogParser::new("%a %t \"%r\" %>s %O %D").unwrap();
+        let outcome = parser
+            .parse(r#"192.0.2.22 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 128 250000"#);
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected duration event");
+        };
+        assert_eq!(event.duration_seconds, Some(0.25));
+
+        let parser = LogParser::new("%a %t \"%r\" %>s %O %{ms}T").unwrap();
+        let outcome =
+            parser.parse(r#"192.0.2.22 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 128 125"#);
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected millisecond duration event");
+        };
+        assert_eq!(event.duration_seconds, Some(0.125));
     }
 }
