@@ -2120,7 +2120,6 @@ dependencies = [
  "hickory-resolver",
  "libc",
  "notify",
- "regex",
  "serde",
  "serde_json",
  "stats-core",

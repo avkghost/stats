@@ -3,11 +3,11 @@ use bzip2::read::BzDecoder;
 use clap::{Parser, Subcommand, ValueEnum};
 use flate2::read::GzDecoder;
 use notify::{RecursiveMode, Watcher};
-use regex::Regex;
 use serde::Serialize;
 use stats_core::{
-    accepts, is_page, Config, DatabasePeriod, GeoIpEnricher, InputCheckpoint, LogParser,
-    MaxMindGeoIp, ParseOutcome, PluginRegistry, RefererSpamMatcher, ReportService, StatsStore,
+    accepts, is_page, render_redacted_raw_log, Config, DatabasePeriod, GeoIpEnricher,
+    InputCheckpoint, LogParser, MaxMindGeoIp, ParseOutcome, PluginRegistry, RefererSpamMatcher,
+    ReportService, StatsStore,
 };
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
@@ -30,8 +30,6 @@ use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
 
 mod reverse_dns;
-
-const MAX_RAW_LOG_LINES: usize = 10_000;
 
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
@@ -420,14 +418,8 @@ fn raw_log(
     let config = Config::from_path(&config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?;
     let path = log_override.unwrap_or(config.log_file);
-    let raw = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
-    let decoded = decode_log_bytes(&path, &raw)?;
-    let text = String::from_utf8_lossy(&decoded);
     validate_raw_log_output(&path, output.as_deref())?;
-    let query = Regex::new(r#"\?[^\s\"]*"#)?;
-    let secret =
-        Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
-    let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#)?;
+    let body = render_redacted_raw_log(&path, start, lines)?;
     let mut writer: Box<dyn Write> = match output {
         Some(path) => {
             let mut options = fs::OpenOptions::new();
@@ -450,10 +442,7 @@ fn raw_log(
         }
         None => Box::new(io::stdout().lock()),
     };
-    for line in text.lines().skip(start).take(lines.min(MAX_RAW_LOG_LINES)) {
-        let redacted = redact_raw_line(line, &query, &secret, &header_secret);
-        writeln!(writer, "{redacted}")?;
-    }
+    writer.write_all(body.as_bytes())?;
     Ok(())
 }
 
@@ -474,24 +463,6 @@ fn validate_raw_log_output(source: &Path, output: Option<&Path>) -> anyhow::Resu
         );
     }
     Ok(())
-}
-
-fn redact_raw_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex) -> String {
-    let mut fields = line.splitn(2, char::is_whitespace);
-    let first = fields.next().unwrap_or_default();
-    let rest = fields.next().unwrap_or_default();
-    let client = first
-        .parse::<std::net::IpAddr>()
-        .map(|_| "<client>".to_owned())
-        .unwrap_or_else(|_| first.to_owned());
-    let body = query.replace_all(rest, "?<redacted>");
-    let body = header_secret.replace_all(&body, "$1: <redacted>");
-    let body = secret.replace_all(&body, "$1=<redacted>");
-    if rest.is_empty() {
-        client
-    } else {
-        format!("{client} {body}")
-    }
 }
 
 fn update(
@@ -2307,35 +2278,11 @@ mod tests {
         backup, build_report_for_data_dir, build_report_for_period, database_paths, health,
         migrate, retention, StoreRouter,
     };
-    use super::{
-        decode_log_bytes, discover_backfill_files, redact_raw_line, validate_raw_log_output,
-    };
+    use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
-    use regex::Regex;
     use stats_core::{AccessEvent, DatabasePeriod, GeoInfo, StatsStore};
     use std::fs;
     use std::io::Write;
-
-    #[test]
-    fn redacts_raw_log_identity_queries_and_secrets() {
-        let query = Regex::new(r#"\?[^\s\"]*"#).unwrap();
-        let secret = Regex::new(
-            r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#,
-        )
-        .unwrap();
-        let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#).unwrap();
-        let redacted = redact_raw_line(
-            "203.0.113.10 - - \"GET /?token=abc HTTP/1.1\" Cookie: session-secret 200",
-            &query,
-            &secret,
-            &header_secret,
-        );
-        assert!(redacted.starts_with("<client> "));
-        assert!(!redacted.contains("203.0.113.10"));
-        assert!(!redacted.contains("abc"));
-        assert!(!redacted.contains("session-secret"));
-        assert!(redacted.contains("?<redacted>"));
-    }
 
     #[test]
     fn rejects_raw_log_output_that_is_the_source() {
