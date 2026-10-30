@@ -494,9 +494,31 @@ fn regenerate_default_report(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("output/index.html");
-    write_report_site(&config.data_dir, &output, &report, 50)?;
+    let external_html = config
+        .plugins
+        .iter()
+        .any(|plugin| stats_render::report_plugin_format(plugin).as_deref() == Some("html"));
+    if external_html {
+        let mut registry = builtin_renderer_registry()
+            .map_err(|error| anyhow::anyhow!("register report renderers: {error}"))?;
+        register_configured_renderer(&mut registry, &config, "html")
+            .with_context(|| format!("load HTML renderer from {}", config_path.display()))?;
+        let body = render_report_stream(&registry, &report, "html")?;
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("create report directory {}", parent.display()))?;
+        }
+        fs::write(&output, body)
+            .with_context(|| format!("write external HTML report {}", output.display()))?;
+    } else {
+        write_report_site(&config.data_dir, &output, &report, 50)?;
+    }
     if !quiet {
-        println!("wrote cumulative report site {}", output.display());
+        if external_html {
+            println!("wrote external HTML report {}", output.display());
+        } else {
+            println!("wrote cumulative report site {}", output.display());
+        }
     }
     Ok(())
 }
