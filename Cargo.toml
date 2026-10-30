@@ -5,6 +5,7 @@ members = [
     "crates/stats-plugin-api",
     "crates/stats-plugin-host",
     "crates/stats-render",
+    "crates/stats-tui",
     "crates/stats-cgi",
     "plugins/report-json",
     "plugins/report-csv",

@@ -1557,13 +1557,13 @@ dependencies = [
  "flate2",
  "libc",
  "notify",
- "ratatui",
  "serde",
  "serde_json",
  "stats-core",
  "stats-plugin-api",
  "stats-plugin-host",
  "stats-render",
+ "stats-tui",
  "tera",
  "tokio",
  "xz2",
@@ -1630,6 +1630,15 @@ name = "stats-report-json"
 version = "0.1.1"
 dependencies = [
  "stats-plugin-api",
+]
+
+[[package]]
+name = "stats-tui"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "ratatui",
+ "stats-core",
 ]
 
 [[package]]

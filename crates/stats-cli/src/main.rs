@@ -14,6 +14,7 @@ use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_report_stream, write_html_site,
     write_html_site_with_periods,
 };
+use stats_tui::run as run_tui;
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     ffi::CString,
@@ -23,7 +24,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command as ProcessCommand, Stdio},
     sync::mpsc,
-    time::Instant,
 };
 use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
@@ -1813,187 +1813,21 @@ fn tui(
     let config = Config::from_path(&config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?
         .with_overrides(log_override, data_override);
-    let mut report = build_report(&config.data_dir, limit)?;
     let refresh = Duration::from_secs(interval_seconds.max(1));
-    let mut terminal = ratatui::init();
-    let result = run_tui_loop(
-        &mut terminal,
-        &config_path,
-        &config.log_file,
-        &config.data_dir,
-        &mut report,
-        limit,
-        refresh,
-    );
-    ratatui::restore();
-    result
-}
-
-fn run_tui_loop(
-    terminal: &mut ratatui::DefaultTerminal,
-    config_path: &Path,
-    log_file: &Path,
-    data_dir: &Path,
-    report: &mut stats_core::Report,
-    limit: usize,
-    refresh: Duration,
-) -> anyhow::Result<()> {
-    let mut last_refresh = Instant::now();
-    let mut view = TuiView::Overview;
-    loop {
-        terminal.draw(|frame| draw_tui(frame, report, log_file, refresh, view))?;
-        if ratatui::crossterm::event::poll(Duration::from_millis(100))? {
-            if let ratatui::crossterm::event::Event::Key(key) = ratatui::crossterm::event::read()? {
-                use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
-                if key.kind == KeyEventKind::Press
-                    && (matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-                        || (key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(KeyModifiers::CONTROL)))
-                {
-                    break;
-                }
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('1') => view = TuiView::Overview,
-                        KeyCode::Char('2') => view = TuiView::Geography,
-                        KeyCode::Char('3') => view = TuiView::Clients,
-                        KeyCode::Char('4') => view = TuiView::Performance,
-                        KeyCode::Char('r') => last_refresh = Instant::now() - refresh,
-                        _ => {}
-                    }
-                }
-            }
-        }
-        if last_refresh.elapsed() >= refresh {
-            update_inner(
-                config_path.to_path_buf(),
-                Some(log_file.to_path_buf()),
-                Some(data_dir.to_path_buf()),
-                true,
-            )?;
-            *report = build_report(data_dir, limit)?;
-            last_refresh = Instant::now();
-        }
-    }
-    Ok(())
-}
-
-#[derive(Clone, Copy)]
-enum TuiView {
-    Overview,
-    Geography,
-    Clients,
-    Performance,
-}
-
-impl TuiView {
-    fn title(self) -> &'static str {
-        match self {
-            Self::Overview => "Overview",
-            Self::Geography => "Geography",
-            Self::Clients => "Clients",
-            Self::Performance => "Performance",
-        }
-    }
+    let report = build_report(&config.data_dir, limit)?;
+    run_tui(report, &config.log_file, refresh, || {
+        update_inner(
+            config_path.clone(),
+            Some(config.log_file.clone()),
+            Some(config.data_dir.clone()),
+            true,
+        )?;
+        build_report(&config.data_dir, limit)
+    })
 }
 
 fn build_report(data_dir: &Path, limit: usize) -> anyhow::Result<stats_core::Report> {
     build_report_for_data_dir(data_dir, limit.max(1))
-}
-
-fn draw_tui(
-    frame: &mut ratatui::Frame,
-    report: &stats_core::Report,
-    log_file: &Path,
-    refresh: Duration,
-    view: TuiView,
-) {
-    use ratatui::{
-        layout::{Constraint, Layout},
-        style::{Color, Style},
-        widgets::{Block, Paragraph},
-    };
-
-    let [header, body, footer] = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Fill(1),
-        Constraint::Length(1),
-    ])
-    .areas(frame.area());
-    let [upper, lower] =
-        Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(body);
-    let [top_left, top_right] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(upper);
-    let [bottom_left, bottom_right] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(lower);
-    let overview = format!(
-        "Hits {}  Pages {}  Files {}  Visits {}  Bytes {}  |  {}",
-        report.hits,
-        report.pages,
-        report.files,
-        report.visits,
-        report.bytes,
-        log_file.display()
-    );
-    frame.render_widget(
-        Paragraph::new(overview).block(Block::bordered().title("Stats")),
-        header,
-    );
-    match view {
-        TuiView::Overview => {
-            render_tui_rows(frame, top_left, "Top URLs", &report.urls);
-            render_tui_rows(frame, top_right, "HTTP Errors", &report.errors);
-            render_tui_rows(frame, bottom_left, "Referrers", &report.referers);
-            render_tui_rows(
-                frame,
-                bottom_right,
-                "Referring Sites",
-                &report.referrer_domains,
-            );
-        }
-        TuiView::Geography => {
-            render_tui_rows(frame, top_left, "Countries", &report.countries);
-            render_tui_rows(frame, top_right, "Regions", &report.regions);
-            render_tui_rows(frame, bottom_left, "Cities", &report.cities);
-            render_tui_rows(frame, bottom_right, "Organizations", &report.organizations);
-        }
-        TuiView::Clients => {
-            render_tui_rows(frame, top_left, "User agents", &report.user_agents);
-            render_tui_rows(frame, top_right, "Browsers", &report.browsers);
-            render_tui_rows(frame, bottom_left, "Operating systems", &report.oses);
-            render_tui_rows(frame, bottom_right, "Robots", &report.robots);
-        }
-        TuiView::Performance => {
-            render_tui_rows(frame, top_left, "Request times", &report.request_times);
-            render_tui_rows(frame, top_right, "Hours", &report.hours);
-            render_tui_rows(frame, bottom_left, "Status classes", &report.status_classes);
-            render_tui_rows(frame, bottom_right, "Methods", &report.methods);
-        }
-    }
-    frame.render_widget(
-        Paragraph::new(format!(
-            "1-4 views | r refresh | q/Esc/Ctrl-C quit | {} | {}s | diag {}",
-            view.title(),
-            refresh.as_secs(),
-            report.diagnostics.iter().map(|row| row.hits).sum::<u64>()
-        ))
-        .style(Style::default().fg(Color::DarkGray)),
-        footer,
-    );
-}
-
-fn render_tui_rows(
-    frame: &mut ratatui::Frame,
-    area: ratatui::layout::Rect,
-    title: &str,
-    rows: &[stats_core::ReportRow],
-) {
-    use ratatui::widgets::{Block, List, ListItem};
-    let items = rows
-        .iter()
-        .map(|row| ListItem::new(format!("{:>8}  {}", row.hits, row.key)))
-        .collect::<Vec<_>>();
-    frame.render_widget(List::new(items).block(Block::bordered().title(title)), area);
 }
 
 fn print_summary_section(title: &str, rows: &[stats_core::ReportRow]) {

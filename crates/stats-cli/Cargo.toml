@@ -18,9 +18,9 @@ tera.workspace = true
 tokio.workspace = true
 notify.workspace = true
 libc.workspace = true
-ratatui.workspace = true
 stats-core = { version = "0.1.1", path = "../stats-core" }
 stats-plugin-api = { version = "0.1.1", path = "../stats-plugin-api" }
 stats-plugin-host = { version = "0.1.1", path = "../stats-plugin-host" }
 stats-render = { version = "0.1.1", path = "../stats-render" }
+stats-tui = { version = "0.1.1", path = "../stats-tui" }
 
