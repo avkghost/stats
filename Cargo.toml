@@ -5,6 +5,7 @@ members = [
     "crates/stats-plugin-api",
     "crates/stats-plugin-host",
     "crates/stats-render",
+    "crates/stats-cgi",
 ]
 resolver = "2"
 

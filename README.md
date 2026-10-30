@@ -20,6 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - Ratatui interactive dashboard backed by the shared report query API.
 - Stable terminal summaries with one-shot and refreshable views.
 - Live terminal analysis that incrementally updates the log and redraws the summary.
+- Read-only `stats-cgi` adapter for AWStats-style CGI hosting; it renders an existing database and never updates logs or checkpoints.
 
 ## Run against the example fixture
 
@@ -47,6 +48,7 @@ The generic example configuration is at `examples/awstats.example.test.conf`. Co
     cargo run -p stats-cli -- summary --data-dir target/stats-data --watch --interval 5
     cargo run -p stats-cli -- live --config logs/awstats.example.test.conf --limit 10 --interval 5
     cargo run -p stats-cli -- tui --config logs/awstats.example.test.conf --limit 10 --interval 5
+    QUERY_STRING='output=json&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
 
 The configured GeoIP plugin paths are read from `LoadPlugin` entries. CLI path overrides are intended for local fixtures and tests.
 
