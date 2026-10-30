@@ -136,8 +136,10 @@ fn render_cgi(
     })?;
     if request.output == OutputFormat::RawLog {
         if !authorized_raw_log {
+            eprintln!("raw-log authorization failed");
             bail!("raw-log authorization required");
         }
+        eprintln!("raw-log access granted lines={}", request.limit);
         let config = config.ok_or_else(|| anyhow::anyhow!("raw-log requires STATS_CONFIG"))?;
         let config = config.clone().with_overrides(None, Some(data_dir));
         let path = sandbox.check_existing(&config.log_file)?;
@@ -219,6 +221,9 @@ fn main() -> anyhow::Result<()> {
     let (media_type, body) = render_cgi(data_dir, &request, config.as_ref(), authorized_raw_log)?;
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     writeln!(stdout, "Content-Type: {media_type}\r")?;
+    if request.output == OutputFormat::RawLog {
+        writeln!(stdout, "Cache-Control: no-store\r")?;
+    }
     writeln!(stdout)?;
     stdout.write_all(body.as_bytes())?;
     Ok(())

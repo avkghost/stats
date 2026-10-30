@@ -159,20 +159,28 @@ async fn raw_log(
         .and_then(|value| value.strip_prefix("Bearer "))
         .is_some_and(|value| value == expected);
     if !authorized {
+        eprintln!("raw-log authorization failed");
         return (
             StatusCode::UNAUTHORIZED,
-            [(header::WWW_AUTHENTICATE, "Bearer")],
+            [
+                (header::WWW_AUTHENTICATE, "Bearer"),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
             "raw-log authorization required\n",
         )
             .into_response();
     }
     let start = query.start.unwrap_or(0);
     let lines = query.lines.unwrap_or(100).clamp(1, MAX_RAW_LOG_LINES);
+    eprintln!("raw-log access granted start={start} lines={lines}");
     let result = tokio::task::spawn_blocking(move || render_raw_log(&state, start, lines)).await;
     match result {
         Ok(Ok(body)) => (
             StatusCode::OK,
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            [
+                (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
             body,
         )
             .into_response(),
