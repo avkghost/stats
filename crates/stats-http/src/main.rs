@@ -140,10 +140,8 @@ fn render_report(
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open HTTP database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(limit)?;
-    if output == "html" {
-        if let Some(config) = state.config.as_ref() {
-            report.apply_url_aliases(&config.url_aliases()?);
-        }
+    if let ("html", Some(config)) = (output, state.config.as_ref()) {
+        report.apply_url_aliases(&config.url_aliases()?);
     }
     let mut registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register HTTP renderers: {error}"))?;

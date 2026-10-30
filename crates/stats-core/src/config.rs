@@ -104,17 +104,20 @@ impl Config {
             };
             let key = key.trim();
             let value = value.trim().trim_matches('"').to_string();
-            if key == "LoadPlugin" {
-                let mut parts = value.split_whitespace();
-                let name = parts.next().unwrap_or_default().to_string();
-                if !name.is_empty() {
-                    plugins.push(PluginConfig {
-                        name,
-                        args: parts.map(str::to_owned).collect(),
-                    });
+            match key {
+                "LoadPlugin" => {
+                    let mut parts = value.split_whitespace();
+                    let name = parts.next().unwrap_or_default().to_string();
+                    if !name.is_empty() {
+                        plugins.push(PluginConfig {
+                            name,
+                            args: parts.map(str::to_owned).collect(),
+                        });
+                    }
                 }
-            } else {
-                values.insert(key.to_string(), value);
+                _ => {
+                    values.insert(key.to_string(), value);
+                }
             }
         }
         let required = |key: &str| {
