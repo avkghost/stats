@@ -1,6 +1,5 @@
-mod csv;
 mod html;
-mod json;
+mod native;
 
 use anyhow::anyhow;
 use stats_core::{PluginRegistry, RendererRegistryError, Report};
@@ -9,8 +8,6 @@ pub fn register_builtin_renderers(
     registry: &mut PluginRegistry,
 ) -> Result<(), RendererRegistryError> {
     registry.add_renderer(html::HtmlOverviewRenderer)?;
-    registry.add_renderer(json::JsonRenderer)?;
-    registry.add_renderer(csv::CsvRenderer)?;
     Ok(())
 }
 
@@ -35,6 +32,7 @@ pub fn render_report_stream(
 }
 
 pub use html::{render_html_section, write_html_site, write_html_site_with_periods};
+pub use native::{register_configured_renderer, report_plugin_format, NativeReportRenderer};
 
 #[cfg(test)]
 mod tests {
@@ -47,11 +45,7 @@ mod tests {
             .renderers()
             .map(|renderer| renderer.format_name())
             .collect();
-        assert_eq!(formats, ["html", "json", "csv"]);
-        assert_eq!(
-            registry.renderer("csv").unwrap().descriptor().name,
-            "csv-report"
-        );
+        assert_eq!(formats, ["html"]);
         assert!(registry.renderer("unknown").is_none());
     }
 }

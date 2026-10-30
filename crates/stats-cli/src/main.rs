@@ -11,7 +11,8 @@ use stats_core::{
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
 use stats_render::{
-    builtin_renderer_registry, render_report_stream, write_html_site, write_html_site_with_periods,
+    builtin_renderer_registry, register_configured_renderer, render_report_stream, write_html_site,
+    write_html_site_with_periods,
 };
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
@@ -82,6 +83,9 @@ enum Command {
         data_dir: Option<PathBuf>,
     },
     Report {
+        /// Configuration containing the requested external report renderer.
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         #[arg(short, long)]
         data_dir: PathBuf,
         #[arg(short, long)]
@@ -232,14 +236,17 @@ async fn main() -> anyhow::Result<()> {
             data_dir,
         } => tokio::task::spawn_blocking(move || backfill(config, log_dir, data_dir)).await??,
         Command::Report {
+            config,
             data_dir,
             output,
             limit,
             format,
             period,
         } => {
-            tokio::task::spawn_blocking(move || report(data_dir, output, limit, format, period))
-                .await??
+            tokio::task::spawn_blocking(move || {
+                report(config, data_dir, output, limit, format, period)
+            })
+            .await??
         }
         Command::Optimize { data_dir, vacuum } => {
             tokio::task::spawn_blocking(move || optimize(data_dir, vacuum)).await??
@@ -1140,6 +1147,7 @@ fn plugin_paths(
 }
 
 fn report(
+    config_path: Option<PathBuf>,
     data_dir: PathBuf,
     output: PathBuf,
     limit: usize,
@@ -1147,9 +1155,27 @@ fn report(
     period: Option<String>,
 ) -> anyhow::Result<()> {
     let report = build_report_for_period(&data_dir, limit, period.as_deref())?;
-    let renderer_registry = builtin_renderer_registry()
+    let mut renderer_registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register built-in report renderers: {error}"))?;
-    if matches!(format, ReportFormat::Html) && output != Path::new("-") {
+    let config = config_path
+        .as_deref()
+        .map(Config::from_path)
+        .transpose()
+        .map_err(|error| anyhow::anyhow!("load renderer configuration: {error}"))?;
+    let external_renderer_configured = config.as_ref().is_some_and(|config| {
+        config.plugins.iter().any(|plugin| {
+            stats_render::report_plugin_format(plugin).as_deref() == Some(format.as_str())
+        })
+    });
+    if let Some(config) = config.as_ref() {
+        if external_renderer_configured {
+            register_configured_renderer(&mut renderer_registry, config, format.as_str())?;
+        }
+    }
+    if matches!(format, ReportFormat::Html)
+        && output != Path::new("-")
+        && !external_renderer_configured
+    {
         if period.is_some() {
             write_html_site(&report, &output)?;
         } else {
@@ -1157,6 +1183,22 @@ fn report(
         }
         println!("wrote HTML report site {}", output.display());
         return Ok(());
+    }
+    if !matches!(format, ReportFormat::Html) {
+        let config = config.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "report format {} is an external plugin; provide --config with a matching LoadPlugin entry",
+                format.as_str()
+            )
+        })?;
+        if !external_renderer_configured {
+            bail!(
+                "no external report renderer for {} is configured (expected LoadPlugin=report_{} <library>)",
+                format.as_str(),
+                format.as_str()
+            );
+        }
+        let _ = config;
     }
     let content = render_report_stream(&renderer_registry, &report, format.as_str())?;
     if output == Path::new("-") {

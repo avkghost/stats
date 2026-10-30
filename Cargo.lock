@@ -1603,6 +1603,8 @@ dependencies = [
  "anyhow",
  "serde_json",
  "stats-core",
+ "stats-plugin-api",
+ "stats-plugin-host",
 ]
 
 [[package]]

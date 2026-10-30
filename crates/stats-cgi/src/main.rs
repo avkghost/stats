@@ -1,6 +1,9 @@
 use anyhow::{bail, Context};
-use stats_core::{ReportService, StatsStore};
-use stats_render::{builtin_renderer_registry, render_html_section, render_report_stream};
+use stats_core::{Config, ReportService, StatsStore};
+use stats_render::{
+    builtin_renderer_registry, register_configured_renderer, render_html_section,
+    render_report_stream,
+};
 use std::{
     env,
     io::{self, Write},
@@ -111,13 +114,28 @@ fn percent_decode(value: &str) -> anyhow::Result<String> {
     Ok(decoded)
 }
 
-fn render_cgi(data_dir: PathBuf, request: &CgiRequest) -> anyhow::Result<(String, String)> {
+fn render_cgi(
+    data_dir: PathBuf,
+    request: &CgiRequest,
+    config: Option<&Config>,
+) -> anyhow::Result<(String, String)> {
     let database = data_dir.join("stats.sqlite3");
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
     let report = ReportService::new(&store).build(request.limit)?;
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;
+    let mut registry = registry;
+    if request.output != OutputFormat::Html {
+        let config = config.ok_or_else(|| {
+            anyhow::anyhow!(
+                "CGI output {} is an external plugin; set STATS_CONFIG to a configuration with LoadPlugin=report_{} <library>",
+                request.output.renderer_name(),
+                request.output.renderer_name()
+            )
+        })?;
+        register_configured_renderer(&mut registry, config, request.output.renderer_name())?;
+    }
     let body = match request.section.as_deref() {
         Some(section) => render_html_section(&report, section)
             .map_err(|error| anyhow::anyhow!("render CGI HTML section: {error}"))?,
@@ -134,7 +152,10 @@ fn render_cgi(data_dir: PathBuf, request: &CgiRequest) -> anyhow::Result<(String
 fn main() -> anyhow::Result<()> {
     let request = parse_query(&env::var("QUERY_STRING").unwrap_or_default())?;
     let data_dir = PathBuf::from(env::var("STATS_DATA_DIR").unwrap_or_else(|_| "stats".into()));
-    let (media_type, body) = render_cgi(data_dir, &request)?;
+    let config = env::var_os("STATS_CONFIG")
+        .map(Config::from_path)
+        .transpose()?;
+    let (media_type, body) = render_cgi(data_dir, &request, config.as_ref())?;
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     writeln!(stdout, "Content-Type: {media_type}\r")?;
     writeln!(stdout)?;

@@ -20,7 +20,7 @@ pub struct RenderedReport {
     pub body: String,
 }
 
-pub trait ReportRenderer: Send + Sync {
+pub trait ReportRenderer {
     fn descriptor(&self) -> PluginDescriptor;
     fn format_name(&self) -> &str;
     fn render(&self, report: &Report) -> Result<RenderedReport, String>;
@@ -66,6 +66,22 @@ impl PluginRegistry {
         let format = renderer.format_name().to_owned();
         if self.renderer(&format).is_some() {
             return Err(RendererRegistryError::DuplicateFormat { format });
+        }
+        self.report_renderers.push(Box::new(renderer));
+        Ok(())
+    }
+
+    pub fn replace_renderer<R: ReportRenderer + 'static>(
+        &mut self,
+        renderer: R,
+    ) -> Result<(), RendererRegistryError> {
+        let format = renderer.format_name().to_owned();
+        if let Some(index) = self
+            .report_renderers
+            .iter()
+            .position(|existing| existing.format_name() == format)
+        {
+            self.report_renderers.remove(index);
         }
         self.report_renderers.push(Box::new(renderer));
         Ok(())
