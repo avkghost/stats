@@ -23,7 +23,8 @@ The standalone HTTP frontend exposes `/raw-log` only when the non-empty
 should inject `Authorization: Bearer <token>` after authenticating the operator.
 The endpoint supports bounded line ranges, reads only a configured log beneath
 `DirData`, and returns redacted records. It remains disabled when the token is
-absent. CGI raw-log output remains disabled.
+absent. CGI supports the equivalent `output=raw-log` request and checks
+`HTTP_AUTHORIZATION` against the same token.
 
 ## Variant D: redacted plugin output
 

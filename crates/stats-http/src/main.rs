@@ -7,17 +7,15 @@ use axum::{
     Router,
 };
 use clap::Parser;
-use regex::Regex;
 use serde::Deserialize;
-use stats_core::{Config, FileSandbox, ReportService, StatsStore};
+use stats_core::{
+    render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore, MAX_RAW_LOG_LINES,
+};
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_report,
     render_report_section_stream, render_report_stream,
 };
-use std::{fs, io::Read};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
-
-const MAX_RAW_LOG_LINES: usize = 10_000;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -189,46 +187,7 @@ fn render_raw_log(state: &AppState, start: usize, lines: usize) -> Result<String
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("raw-log requires --config"))?;
     let path = state.sandbox.check_existing(&config.log_file)?;
-    let raw = fs::read(&path).with_context(|| format!("read raw log {}", path.display()))?;
-    let decoded = decode_log_bytes(&path, &raw)?;
-    let text = String::from_utf8_lossy(&decoded);
-    let query = Regex::new(r#"\?[^\s\"]*"#)?;
-    let secret =
-        Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
-    let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#)?;
-    let output = text
-        .lines()
-        .skip(start)
-        .take(lines)
-        .map(|line| redact_raw_line(line, &query, &secret, &header_secret))
-        .collect::<Vec<_>>();
-    if output.is_empty() {
-        Ok(String::new())
-    } else {
-        Ok(output.join("\n") + "\n")
-    }
-}
-
-fn redact_raw_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex) -> String {
-    let mut fields = line.splitn(2, char::is_whitespace);
-    let _client = fields.next().unwrap_or_default();
-    let rest = fields.next().unwrap_or_default();
-    let body = query.replace_all(rest, "?<redacted>");
-    let body = header_secret.replace_all(&body, "$1: <redacted>");
-    let body = secret.replace_all(&body, "$1=<redacted>");
-    format!("<client>{body}")
-}
-
-fn decode_log_bytes(path: &std::path::Path, raw: &[u8]) -> Result<Vec<u8>> {
-    let extension = path.extension().and_then(|value| value.to_str());
-    let mut decoded = Vec::new();
-    match extension {
-        Some("gz") => flate2::read::GzDecoder::new(raw).read_to_end(&mut decoded)?,
-        Some("bz2") => bzip2::read::BzDecoder::new(raw).read_to_end(&mut decoded)?,
-        Some("xz") => xz2::read::XzDecoder::new(raw).read_to_end(&mut decoded)?,
-        _ => return Ok(raw.to_vec()),
-    };
-    Ok(decoded)
+    render_redacted_raw_log(&path, start, lines)
 }
 
 async fn render_in_blocking(

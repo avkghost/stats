@@ -1,5 +1,7 @@
 use anyhow::{bail, Context};
-use stats_core::{Config, FileSandbox, ReportService, StatsStore};
+use stats_core::{
+    render_redacted_raw_log, Config, FileSandbox, ReportService, StatsStore, MAX_RAW_LOG_LINES,
+};
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_section,
     render_report_stream,
@@ -18,6 +20,7 @@ enum OutputFormat {
     Html,
     Json,
     Csv,
+    RawLog,
 }
 
 impl OutputFormat {
@@ -26,6 +29,7 @@ impl OutputFormat {
             "html" => Ok(Self::Html),
             "json" => Ok(Self::Json),
             "csv" => Ok(Self::Csv),
+            "raw-log" => Ok(Self::RawLog),
             _ => bail!("unsupported CGI output format {value:?}"),
         }
     }
@@ -35,6 +39,7 @@ impl OutputFormat {
             Self::Html => "html",
             Self::Json => "json",
             Self::Csv => "csv",
+            Self::RawLog => "raw-log",
         }
     }
 }
@@ -77,6 +82,9 @@ fn parse_query(query: &str) -> anyhow::Result<CgiRequest> {
     if section.is_some() && output != OutputFormat::Html {
         bail!("CGI section selection is supported only for HTML output");
     }
+    if output == OutputFormat::RawLog && limit > MAX_RAW_LOG_LINES {
+        bail!("CGI raw-log line limit must be between 1 and {MAX_RAW_LOG_LINES}");
+    }
     Ok(CgiRequest {
         output,
         limit,
@@ -118,6 +126,7 @@ fn render_cgi(
     data_dir: PathBuf,
     request: &CgiRequest,
     config: Option<&Config>,
+    authorized_raw_log: bool,
 ) -> anyhow::Result<(String, String)> {
     let sandbox = FileSandbox::for_data_dir(&data_dir).with_context(|| {
         format!(
@@ -125,6 +134,18 @@ fn render_cgi(
             data_dir.display()
         )
     })?;
+    if request.output == OutputFormat::RawLog {
+        if !authorized_raw_log {
+            bail!("raw-log authorization required");
+        }
+        let config = config.ok_or_else(|| anyhow::anyhow!("raw-log requires STATS_CONFIG"))?;
+        let config = config.clone().with_overrides(None, Some(data_dir));
+        let path = sandbox.check_existing(&config.log_file)?;
+        return Ok((
+            "text/plain; charset=utf-8".into(),
+            render_redacted_raw_log(&path, 0, request.limit)?,
+        ));
+    }
     let database = sandbox.check_existing(&data_dir.join("stats.sqlite3"))?;
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
@@ -179,6 +200,7 @@ fn render_cgi(
         OutputFormat::Html => "text/html; charset=utf-8",
         OutputFormat::Json => "application/json; charset=utf-8",
         OutputFormat::Csv => "text/csv; charset=utf-8",
+        OutputFormat::RawLog => "text/plain; charset=utf-8",
     };
     Ok((media_type.to_owned(), body))
 }
@@ -189,7 +211,12 @@ fn main() -> anyhow::Result<()> {
     let config = env::var_os("STATS_CONFIG")
         .map(Config::from_path)
         .transpose()?;
-    let (media_type, body) = render_cgi(data_dir, &request, config.as_ref())?;
+    let authorized_raw_log = env::var("STATS_RAW_LOG_AUTH_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty())
+        .zip(env::var("HTTP_AUTHORIZATION").ok())
+        .is_some_and(|(token, value)| value == format!("Bearer {token}"));
+    let (media_type, body) = render_cgi(data_dir, &request, config.as_ref(), authorized_raw_log)?;
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     writeln!(stdout, "Content-Type: {media_type}\r")?;
     writeln!(stdout)?;
@@ -219,6 +246,18 @@ mod tests {
             parse_query("output=json&limit=25").unwrap(),
             CgiRequest {
                 output: OutputFormat::Json,
+                limit: 25,
+                section: None,
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_bounded_raw_log_requests() {
+        assert_eq!(
+            parse_query("output=raw-log&limit=25").unwrap(),
+            CgiRequest {
+                output: OutputFormat::RawLog,
                 limit: 25,
                 section: None,
             }

@@ -2138,13 +2138,16 @@ name = "stats-core"
 version = "0.1.1"
 dependencies = [
  "anyhow",
+ "bzip2",
  "chrono",
+ "flate2",
  "maxminddb",
  "regex",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror",
+ "xz2",
 ]
 
 [[package]]

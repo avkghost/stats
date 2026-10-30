@@ -7,6 +7,8 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+bzip2.workspace = true
+flate2.workspace = true
 chrono.workspace = true
 maxminddb.workspace = true
 regex.workspace = true
@@ -14,4 +16,5 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+xz2.workspace = true
 
