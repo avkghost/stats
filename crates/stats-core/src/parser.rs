@@ -360,6 +360,19 @@ fn normalize_apache_format(format: &str) -> String {
             index += apache.len();
             continue;
         }
+        if remaining.starts_with("%{") {
+            if let Some(close) = remaining.find('}') {
+                let token_length = close + 2;
+                let suffix = remaining.as_bytes().get(close + 1).copied();
+                if matches!(suffix, Some(b'i' | b'o' | b'e')) {
+                    let quoted = normalized.ends_with('"')
+                        && format[index + token_length..].starts_with('"');
+                    normalized.push_str(if quoted { "%otherquot" } else { "%other1" });
+                    index += token_length;
+                    continue;
+                }
+            }
+        }
 
         let replacement = match bytes.get(index + 1).copied() {
             Some(b'v') => "%virtualname",
@@ -449,6 +462,11 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                     let name = format!("ignored{ignored_field}");
                     ignored_field += 1;
                     (name, r"\S+")
+                }
+                "otherquot" => {
+                    let name = format!("ignored{ignored_field}");
+                    ignored_field += 1;
+                    (name, r#".*?"#)
                 }
                 _ => {
                     let name = format!("ignored{ignored_field}");
@@ -621,5 +639,14 @@ mod tests {
             panic!("expected millisecond duration event");
         };
         assert_eq!(event.duration_seconds, Some(0.125));
+    }
+
+    #[test]
+    fn accepts_arbitrary_apache_header_tokens() {
+        let parser = LogParser::new(r#"%a %t "%r" %>s %O "%{Cookie}i" %{Request-Id}o"#).unwrap();
+        let outcome = parser.parse(
+            r#"192.0.2.23 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 128 "session=abc 123" req-42"#,
+        );
+        assert!(matches!(outcome, ParseOutcome::Event(_)));
     }
 }
