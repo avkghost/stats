@@ -21,6 +21,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - Stable terminal summaries with one-shot and refreshable views.
 - Live terminal analysis that incrementally updates the log and redraws the summary.
 - Read-only `stats-cgi` adapter for AWStats-style CGI hosting; it renders an existing database and never updates logs or checkpoints.
+- Standalone Tokio/Axum HTTP frontend with HTML reports, HTML section routes, and configured JSON/CSV renderer plugins.
 
 ## Run against the example fixture
 
@@ -48,6 +49,10 @@ The generic example configuration is at `examples/awstats.example.test.conf`. Co
     cargo run -p stats-cli -- summary --data-dir target/stats-data --watch --interval 5
     cargo run -p stats-cli -- live --config logs/awstats.example.test.conf --limit 10 --interval 5
     cargo run -p stats-cli -- tui --config logs/awstats.example.test.conf --limit 10 --interval 5
+    cargo run -p stats-http -- --data-dir target/stats-data --bind 127.0.0.1:3000
+    curl 'http://127.0.0.1:3000/report?output=html&limit=50'
+    curl 'http://127.0.0.1:3000/section/visitors?limit=50'
+    curl 'http://127.0.0.1:3000/report?output=json&limit=50' # requires LoadPlugin=report_json
     QUERY_STRING='output=json&limit=50' STATS_CONFIG=logs/awstats.example.test.conf STATS_DATA_DIR=stats cargo run -p stats-cgi
     QUERY_STRING='section=visitors&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
 
