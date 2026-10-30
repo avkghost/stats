@@ -9,7 +9,9 @@ pub(crate) fn table(rows: &[ReportRow]) -> String {
     );
     for row in rows {
         out.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} hits\"><td>{}</td><td>{}</td></tr>",
+            html_escape(&row.key),
+            row.hits,
             html_escape(&row.key),
             row.hits
         ));
@@ -32,7 +34,10 @@ pub(crate) fn bandwidth_table(rows: &[BandwidthRow]) -> String {
     );
     for row in rows {
         out.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} hits, {} bytes\"><td>{}</td><td>{}</td><td>{}</td></tr>",
+            html_escape(&row.key),
+            row.hits,
+            row.bytes,
             html_escape(&row.key),
             row.hits,
             row.bytes
@@ -48,7 +53,10 @@ pub(crate) fn daily_table(rows: &[DailyRow]) -> String {
     );
     for row in rows {
         out.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} hits, {} bytes\"><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            html_escape(&row.date),
+            row.hits,
+            row.bytes,
             html_escape(&row.date),
             row.hits,
             row.bytes,
@@ -448,6 +456,11 @@ mod tests {
             hits: 2,
         }])
         .contains("&lt;unsafe&gt;"));
+        assert!(table(&[ReportRow {
+            key: "<unsafe>".into(),
+            hits: 2,
+        }])
+        .contains("title=\"&lt;unsafe&gt;: 2 hits\""));
         assert!(row_chart(
             &[ReportRow {
                 key: "<unsafe>".into(),
