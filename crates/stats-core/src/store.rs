@@ -76,7 +76,7 @@ impl StatsStore {
         conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS method_anomalies(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
         )?;
         let previous_schema = conn
             .query_row(
@@ -107,7 +107,7 @@ impl StatsStore {
         }
         if needs_replay {
             conn.execute_batch(
-                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners;",
+                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners; DELETE FROM method_anomalies;",
             )?;
         }
         conn.execute(
@@ -137,6 +137,12 @@ impl StatsStore {
             "INSERT INTO methods(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
             params![event.method.as_deref().unwrap_or("UNKNOWN")],
         )?;
+        if let Some(anomaly) = &event.method_anomaly {
+            tx.execute(
+                "INSERT INTO method_anomalies(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+                params![anomaly],
+            )?;
+        }
         if let Some(user) = event
             .user
             .as_deref()
@@ -489,7 +495,7 @@ impl StatsStore {
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
         conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM daily;")?;
-        conn.execute_batch("DELETE FROM hostnames;")?;
+        conn.execute_batch("DELETE FROM hostnames; DELETE FROM method_anomalies;")?;
         conn.execute_batch("DELETE FROM referer_spam;")?;
         conn.execute_batch("DELETE FROM dates; DELETE FROM months; DELETE FROM weekdays;")?;
         Ok(())
@@ -543,6 +549,7 @@ impl StatsStore {
             "status_classes",
             "errors",
             "methods",
+            "method_anomalies",
             "urls",
             "users",
             "user_agents",
@@ -908,6 +915,7 @@ mod tests {
             referer_spam: None,
             referer_excluded: false,
             scanner: None,
+            method_anomaly: None,
             identity: None,
             user: Some("alice".into()),
             timestamp: DateTime::parse_from_rfc3339(timestamp).expect("timestamp"),
@@ -972,6 +980,15 @@ mod tests {
         assert_eq!(
             store.top("organizations", 10).unwrap(),
             vec![("Example ISP".into(), 3)]
+        );
+        let mut anomalous = event("/method", "2026-01-01T00:33:00+00:00");
+        anomalous.method_anomaly = Some("unrecognized:PROPFIND".into());
+        store
+            .record(&anomalous, true)
+            .expect("record method anomaly");
+        assert_eq!(
+            store.top_if_exists("method_anomalies", 10).unwrap(),
+            vec![("unrecognized:PROPFIND".into(), 1)]
         );
         assert_eq!(store.metric("visits").unwrap().0, 2);
         drop(store);

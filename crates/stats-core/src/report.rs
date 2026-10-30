@@ -21,6 +21,7 @@ pub struct Report {
     pub status_classes: Vec<ReportRow>,
     pub errors: Vec<ReportRow>,
     pub methods: Vec<ReportRow>,
+    pub method_anomalies: Vec<ReportRow>,
     pub urls: Vec<ReportRow>,
     pub bandwidth_urls: Vec<BandwidthRow>,
     pub daily: Vec<DailyRow>,
@@ -141,6 +142,12 @@ impl<'a> ReportService<'a> {
             status_classes: rows("status_classes")?,
             errors: rows("errors")?,
             methods: rows("methods")?,
+            method_anomalies: self
+                .store
+                .top_if_exists("method_anomalies", limit)?
+                .into_iter()
+                .map(|(key, hits)| ReportRow { key, hits })
+                .collect(),
             urls: rows("urls")?,
             bandwidth_urls: self
                 .store

@@ -124,6 +124,7 @@ mod tests {
             referer_spam: None,
             referer_excluded: false,
             scanner: None,
+            method_anomaly: None,
             identity: None,
             user: None,
             timestamp: DateTime::<FixedOffset>::parse_from_rfc3339("2026-01-01T00:00:00+00:00")

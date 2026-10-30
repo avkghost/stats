@@ -152,6 +152,7 @@ mod tests {
             referer_spam: None,
             referer_excluded: false,
             scanner: None,
+            method_anomaly: None,
             geo: GeoInfo::default(),
         }
     }

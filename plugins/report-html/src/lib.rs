@@ -130,6 +130,7 @@ mod tests {
             "status_classes",
             "errors",
             "methods",
+            "method_anomalies",
             "urls",
             "bandwidth_urls",
             "daily",

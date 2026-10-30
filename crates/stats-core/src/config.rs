@@ -77,6 +77,7 @@ pub struct Config {
     pub dns_lookup_cache_size: usize,
     pub referer_spam_rules: Option<PathBuf>,
     pub scanner_rules: Option<PathBuf>,
+    pub http_method_anomaly_allowed: Vec<String>,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
     pub url_referrer_with_query: bool,
@@ -153,6 +154,7 @@ impl Config {
             "DNSLookupCacheSize",
             "RefererSpamRules",
             "ScannerRules",
+            "HttpMethodAnomalyAllowedMethods",
             "SkipHosts",
             "OnlyHosts",
             "SkipFiles",
@@ -259,6 +261,16 @@ impl Config {
                 .get("ScannerRules")
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from),
+            http_method_anomaly_allowed: values
+                .get("HttpMethodAnomalyAllowedMethods")
+                .map(|value| {
+                    value
+                        .split(|character: char| character == ',' || character.is_whitespace())
+                        .filter(|method| !method.is_empty())
+                        .map(|method| method.to_ascii_uppercase())
+                        .collect()
+                })
+                .unwrap_or_default(),
             plugins,
             filters: FilterConfig {
                 allowed_virtual_hosts,
@@ -398,6 +410,19 @@ mod tests {
         assert_eq!(config.site_domain, "example.test");
         assert_eq!(config.plugins[0].name, "geoip2_city");
         assert!(config.filters.not_page_files.iter().any(|v| v == ".css"));
+    }
+
+    #[test]
+    fn parses_http_method_anomaly_allow_list() {
+        let config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nLoadPlugin=detecthttpmethodanomaly\nHttpMethodAnomalyAllowedMethods=GET, POST PROPFIND\n",
+        )
+        .unwrap();
+        assert_eq!(
+            config.http_method_anomaly_allowed,
+            ["GET", "POST", "PROPFIND"]
+        );
+        assert_eq!(config.plugins[0].name, "detecthttpmethodanomaly");
     }
 
     #[test]

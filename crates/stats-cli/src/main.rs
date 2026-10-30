@@ -6,8 +6,8 @@ use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use stats_core::{
     accepts, hashfiles_backend, is_page, render_redacted_raw_log, Config, DatabasePeriod,
-    GeoIpEnricher, InputCheckpoint, LogParser, MaxMindGeoIp, ParseOutcome, PluginRegistry,
-    RefererSpamMatcher, ReportService, ScannerMatcher, StatsStore,
+    GeoIpEnricher, InputCheckpoint, LogParser, MaxMindGeoIp, MethodAnomalyMatcher, ParseOutcome,
+    PluginRegistry, RefererSpamMatcher, ReportService, ScannerMatcher, StatsStore,
 };
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
@@ -794,6 +794,7 @@ fn update_inner(
     };
     let referer_spam = configured_referer_spam(&config_path, &config)?;
     let scanner = configured_scanner(&config_path, &config)?;
+    let method_anomaly = configured_method_anomaly(&config);
     let previous_config_hash = store.meta("config_hash")?;
     if previous_config_hash
         .as_deref()
@@ -952,6 +953,9 @@ fn update_inner(
                         matcher.apply(&mut event);
                     }
                     if let Some(matcher) = referer_spam.as_ref() {
+                        matcher.apply(&mut event);
+                    }
+                    if let Some(matcher) = method_anomaly.as_ref() {
                         matcher.apply(&mut event);
                     }
                     if let Err(error) = enrich_with_native_plugins(&mut event, &mut native_plugins)
@@ -1389,6 +1393,14 @@ fn configured_scanner(
         })
         .transpose()
         .context("load scanner rules")
+}
+
+fn configured_method_anomaly(config: &Config) -> Option<MethodAnomalyMatcher> {
+    config
+        .plugins
+        .iter()
+        .any(|plugin| plugin.name == "detecthttpmethodanomaly")
+        .then(|| MethodAnomalyMatcher::new(config.http_method_anomaly_allowed.clone()))
 }
 
 fn report(
@@ -1836,6 +1848,7 @@ fn merge_reports(target: &mut stats_core::Report, source: stats_core::Report, li
     merge_rows(&mut target.status_classes, source.status_classes, limit);
     merge_rows(&mut target.errors, source.errors, limit);
     merge_rows(&mut target.methods, source.methods, limit);
+    merge_rows(&mut target.method_anomalies, source.method_anomalies, limit);
     merge_rows(&mut target.urls, source.urls, limit);
     merge_bandwidth(&mut target.bandwidth_urls, source.bandwidth_urls, limit);
     merge_daily(&mut target.daily, source.daily, limit);
@@ -2536,6 +2549,7 @@ mod tests {
                 referer_spam: None,
                 referer_excluded: false,
                 scanner: None,
+                method_anomaly: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
@@ -2660,6 +2674,7 @@ mod tests {
             referer_spam: None,
             referer_excluded: false,
             scanner: None,
+            method_anomaly: None,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
@@ -2724,6 +2739,7 @@ mod tests {
                 referer_spam: None,
                 referer_excluded: false,
                 scanner: None,
+                method_anomaly: None,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),

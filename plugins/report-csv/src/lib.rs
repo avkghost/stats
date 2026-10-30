@@ -67,6 +67,7 @@ fn render_csv(report: &Value) -> String {
         "status_classes",
         "errors",
         "methods",
+        "method_anomalies",
         "urls",
         "users",
         "user_agents",

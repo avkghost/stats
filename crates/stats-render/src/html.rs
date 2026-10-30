@@ -197,8 +197,9 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Robots", table(&report.robots))
         ),
         "pages" => format!(
-            "{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}",
             section("Methods", table(&report.methods)),
+            section("HTTP method anomalies", table(&report.method_anomalies)),
             section("URLs", table(&report.urls)),
             section("File types", table(&report.file_types)),
             section("Entry pages", table(&report.entry_pages)),
