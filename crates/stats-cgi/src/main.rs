@@ -126,7 +126,13 @@ fn render_cgi(
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;
     let mut registry = registry;
-    if request.output != OutputFormat::Html {
+    let external_html = config.is_some_and(|config| {
+        config
+            .plugins
+            .iter()
+            .any(|plugin| stats_render::report_plugin_format(plugin).as_deref() == Some("html"))
+    });
+    if request.output != OutputFormat::Html || external_html {
         let config = config.ok_or_else(|| {
             anyhow::anyhow!(
                 "CGI output {} is an external plugin; set STATS_CONFIG to a configuration with LoadPlugin=report_{} <library>",
@@ -135,6 +141,9 @@ fn render_cgi(
             )
         })?;
         register_configured_renderer(&mut registry, config, request.output.renderer_name())?;
+    }
+    if request.section.is_some() && external_html {
+        bail!("CGI section selection is unavailable with a replacement HTML renderer");
     }
     let body = match request.section.as_deref() {
         Some(section) => render_html_section(&report, section)

@@ -154,4 +154,13 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn replaces_renderer_for_configured_overrides() {
+        let mut registry = PluginRegistry::new();
+        registry.add_renderer(TestRenderer("html")).unwrap();
+        registry.replace_renderer(TestRenderer("html")).unwrap();
+        assert_eq!(registry.renderers().count(), 1);
+        assert_eq!(registry.renderer("html").unwrap().format_name(), "html");
+    }
 }
