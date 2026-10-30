@@ -30,6 +30,21 @@ pub fn render_report_stream(
         .map_err(|error| anyhow!("render {format} report: {error}"))
 }
 
+pub fn render_report_section_stream(
+    registry: &PluginRegistry,
+    report: &Report,
+    format: &str,
+    section: &str,
+) -> anyhow::Result<String> {
+    let renderer = registry
+        .renderer(format)
+        .ok_or_else(|| anyhow!("no report renderer registered for format {format}"))?;
+    renderer
+        .render_section(report, section)
+        .map(|rendered| rendered.body)
+        .map_err(|error| anyhow!("render {format} report section {section}: {error}"))
+}
+
 pub use html::{
     render_html_report, render_html_section, write_html_site, write_html_site_with_periods,
 };

@@ -43,7 +43,17 @@ unsafe extern "C" fn render_report(
     let Ok(report) = from_slice::<Report>(CStr::from_ptr(request.report_json).to_bytes()) else {
         return 3;
     };
-    let body = stats_render::render_html_report(&report);
+    let body = if request.section.is_null() {
+        stats_render::render_html_report(&report)
+    } else {
+        let Ok(section) = CStr::from_ptr(request.section).to_str() else {
+            return 3;
+        };
+        match stats_render::render_html_section(&report, section) {
+            Ok(body) => body,
+            Err(_) => return 4,
+        }
+    };
     set_output(output, "text/html; charset=utf-8", "html", body.as_bytes())
 }
 

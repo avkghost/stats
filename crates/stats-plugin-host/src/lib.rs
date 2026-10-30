@@ -145,6 +145,7 @@ impl LoadedPlugin {
         &self,
         format: &str,
         report_json: &str,
+        section: Option<&str>,
     ) -> Result<(String, String, String), PluginLoadError> {
         let LoadedApi::Plugin(api) = self.api;
         let api = unsafe { api.as_ref() };
@@ -165,9 +166,13 @@ impl LoadedPlugin {
             })?;
         let format = CString::new(format)?;
         let report_json = CString::new(report_json)?;
+        let section = section.map(CString::new).transpose()?;
         let request = ReportRequest {
             format: format.as_ptr(),
             report_json: report_json.as_ptr(),
+            section: section
+                .as_ref()
+                .map_or(std::ptr::null(), |value| value.as_ptr()),
         };
         let mut output = RenderedReport {
             media_type: std::ptr::null(),

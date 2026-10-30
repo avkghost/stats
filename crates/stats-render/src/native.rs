@@ -82,10 +82,24 @@ impl ReportRenderer for NativeReportRenderer {
     }
 
     fn render(&self, report: &Report) -> Result<RenderedReport, String> {
+        self.render_with_section(report, None)
+    }
+
+    fn render_section(&self, report: &Report, section: &str) -> Result<RenderedReport, String> {
+        self.render_with_section(report, Some(section))
+    }
+}
+
+impl NativeReportRenderer {
+    fn render_with_section(
+        &self,
+        report: &Report,
+        section: Option<&str>,
+    ) -> Result<RenderedReport, String> {
         let input = serde_json::to_string(report).map_err(|error| error.to_string())?;
         let (media_type, extension, body) = self
             .plugin
-            .render_report(&self.format, &input)
+            .render_report(&self.format, &input, section)
             .map_err(|error| error.to_string())?;
         Ok(RenderedReport {
             media_type,

@@ -50,6 +50,8 @@ pub type PluginInit = unsafe extern "C" fn(host: *const HostApi) -> *mut PluginA
 pub struct ReportRequest {
     pub format: *const c_char,
     pub report_json: *const c_char,
+    /// Optional report section name. A null pointer requests the full report.
+    pub section: *const c_char,
 }
 
 /// UTF-8 strings returned by a native report renderer.

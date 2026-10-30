@@ -142,15 +142,15 @@ fn render_cgi(
         })?;
         register_configured_renderer(&mut registry, config, request.output.renderer_name())?;
     }
-    if request.section.is_some() && external_html {
-        bail!("CGI section selection is unavailable with a replacement HTML renderer");
-    }
     if request.section.is_none() && !external_html && request.output == OutputFormat::Html {
         bail!(
             "CGI HTML rendering is an external plugin; set STATS_CONFIG with LoadPlugin=report_html <library>"
         );
     }
     let body = match request.section.as_deref() {
+        Some(section) if external_html => {
+            stats_render::render_report_section_stream(&registry, &report, "html", section)?
+        }
         Some(section) => render_html_section(&report, section)
             .map_err(|error| anyhow::anyhow!("render CGI HTML section: {error}"))?,
         None => render_report_stream(&registry, &report, request.output.renderer_name())?,

@@ -24,6 +24,16 @@ pub trait ReportRenderer {
     fn descriptor(&self) -> PluginDescriptor;
     fn format_name(&self) -> &str;
     fn render(&self, report: &Report) -> Result<RenderedReport, String>;
+    fn render_section(&self, report: &Report, section: &str) -> Result<RenderedReport, String> {
+        if section == "overview" {
+            self.render(report)
+        } else {
+            Err(format!(
+                "renderer {} does not support report sections",
+                self.format_name()
+            ))
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
