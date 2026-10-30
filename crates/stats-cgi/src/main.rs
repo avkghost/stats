@@ -125,8 +125,7 @@ fn render_cgi(
             data_dir.display()
         )
     })?;
-    let database = data_dir.join("stats.sqlite3");
-    sandbox.check_existing(&database)?;
+    let database = sandbox.check_existing(&data_dir.join("stats.sqlite3"))?;
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(request.limit)?;

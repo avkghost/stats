@@ -92,8 +92,9 @@ async fn healthz() -> Response {
 
 async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     let result = tokio::task::spawn_blocking(move || {
-        let database = state.data_dir.join("stats.sqlite3");
-        state.sandbox.check_existing(&database)?;
+        let database = state
+            .sandbox
+            .check_existing(&state.data_dir.join("stats.sqlite3"))?;
         StatsStore::open_read_only(&database)
             .with_context(|| format!("open readiness database {}", database.display()))
             .map(|_| ())
@@ -148,8 +149,9 @@ fn render_report(
     limit: usize,
     section: Option<String>,
 ) -> Result<Response> {
-    let database = state.data_dir.join("stats.sqlite3");
-    state.sandbox.check_existing(&database)?;
+    let database = state
+        .sandbox
+        .check_existing(&state.data_dir.join("stats.sqlite3"))?;
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open HTTP database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(limit)?;
