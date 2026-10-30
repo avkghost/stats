@@ -200,13 +200,13 @@ pub(crate) fn register_builtin_renderers(registry: &mut PluginRegistry) {
     registry.add_renderer(CsvRenderer);
 }
 
-pub(crate) fn builtin_renderer_registry() -> PluginRegistry {
+pub fn builtin_renderer_registry() -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     register_builtin_renderers(&mut registry);
     registry
 }
 
-pub(crate) fn render_report_stream(
+pub fn render_report_stream(
     registry: &PluginRegistry,
     report: &Report,
     format: &str,
@@ -574,11 +574,11 @@ pub(crate) fn render_single_file_overview(report: &Report) -> String {
     page_html(report, "overview", "#overview", true, &[])
 }
 
-pub(crate) fn write_html_site(report: &Report, output: &Path) -> anyhow::Result<()> {
+pub fn write_html_site(report: &Report, output: &Path) -> anyhow::Result<()> {
     write_html_site_with_periods(report, output, &[])
 }
 
-pub(crate) fn write_html_site_with_periods(
+pub fn write_html_site_with_periods(
     report: &Report,
     output: &Path,
     periods: &[(String, String)],

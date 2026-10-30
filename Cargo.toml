@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/stats-core", "crates/stats-cli", "crates/stats-plugin-api", "crates/stats-plugin-host"]
+members = [
+    "crates/stats-core",
+    "crates/stats-cli",
+    "crates/stats-plugin-api",
+    "crates/stats-plugin-host",
+    "crates/stats-render",
+]
 resolver = "2"
 
 [workspace.package]

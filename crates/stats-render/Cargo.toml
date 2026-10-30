@@ -1,0 +1,11 @@
+[package]
+name = "stats-render"
+version = "0.1.1"
+description = "Reusable AWStats-style report renderers"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+stats-core = { version = "0.1.1", path = "../stats-core" }

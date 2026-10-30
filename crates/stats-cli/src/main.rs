@@ -10,6 +10,9 @@ use stats_core::{
 };
 use stats_plugin_api::{EventV1, HostApiV1, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
+use stats_render::{
+    builtin_renderer_registry, render_report_stream, write_html_site, write_html_site_with_periods,
+};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     ffi::CString,
@@ -23,11 +26,6 @@ use std::{
 };
 use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
-
-mod render;
-use render::{
-    builtin_renderer_registry, render_report_stream, write_html_site, write_html_site_with_periods,
-};
 
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
