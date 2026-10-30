@@ -253,10 +253,9 @@ fn sidebar(active: &str, overview_link: &str, standalone: bool) -> String {
         };
         format!(
             "<a{class} href=\"{}\">{label}</a>",
-            if page == "overview" {
-                overview_link.to_owned()
-            } else {
-                format!("{page}.html")
+            match page {
+                "overview" => overview_link.to_owned(),
+                _ => format!("{page}.html"),
             }
         )
     };
@@ -349,14 +348,15 @@ fn page_html(
         "calendar" => "Calendar",
         _ => "Overview",
     };
-    let body = if page == "overview" {
-        overview(report, periods)
-    } else {
-        let title_lower = title.to_lowercase();
-        format!(
-            "<div class=\"eyebrow\">Detail view</div><h1>{title}</h1><p class=\"lede\">Explore the {title_lower} dimensions independently.</p>{}",
-            detail_body(report, page)
-        )
+    let body = match page {
+        "overview" => overview(report, periods),
+        _ => {
+            let title_lower = title.to_lowercase();
+            format!(
+                "<div class=\"eyebrow\">Detail view</div><h1>{title}</h1><p class=\"lede\">Explore the {title_lower} dimensions independently.</p>{}",
+                detail_body(report, page)
+            )
+        }
     };
     let assets = if standalone {
         format!("<style>{}</style>", site_css())
