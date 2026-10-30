@@ -2,6 +2,7 @@ mod config;
 mod filesystem;
 mod filter;
 mod geoip;
+mod hashfiles;
 mod parser;
 mod plugin;
 mod raw_log;
@@ -13,6 +14,7 @@ pub use config::{Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig
 pub use filesystem::{FileSandbox, FileSandboxError};
 pub use filter::{accepts, is_page};
 pub use geoip::{GeoInfo, GeoIp, MaxMindGeoIp};
+pub use hashfiles::{hashfiles_backend, HashFilesBackend};
 pub use parser::{AccessEvent, LogParser, ParseError, ParseOutcome};
 pub use plugin::{
     Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport,

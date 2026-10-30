@@ -20,7 +20,7 @@ observable behavior.
 | `geoip6` | compatibility adapter | IPv6 lookup through the core provider |
 | `graphapplet` | compatibility adapter | Offline HTML/CSS chart equivalent |
 | `graphgooglechartapi` | compatibility adapter | Offline chart equivalent without remote service calls |
-| `hashfiles` | not started | Hash-file read/write compatibility or an explicit storage adapter |
+| `hashfiles` | compatibility adapter | Explicitly selects SQLite as the authoritative replacement for Perl `Storable` hash files |
 | `hostinfo` | compatibility adapter | Opt-in bounded reverse-DNS enrichment |
 | `ipv6` | compatibility adapter | IPv6 parsing, filtering, and enrichment |
 | `rawlog` | compatibility adapter | Bounded redacted CLI, HTTP, and CGI exports |

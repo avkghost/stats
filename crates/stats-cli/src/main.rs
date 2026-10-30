@@ -5,9 +5,9 @@ use flate2::read::GzDecoder;
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use stats_core::{
-    accepts, is_page, render_redacted_raw_log, Config, DatabasePeriod, GeoIpEnricher,
-    InputCheckpoint, LogParser, MaxMindGeoIp, ParseOutcome, PluginRegistry, RefererSpamMatcher,
-    ReportService, StatsStore,
+    accepts, hashfiles_backend, is_page, render_redacted_raw_log, Config, DatabasePeriod,
+    GeoIpEnricher, InputCheckpoint, LogParser, MaxMindGeoIp, ParseOutcome, PluginRegistry,
+    RefererSpamMatcher, ReportService, StatsStore,
 };
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
@@ -753,6 +753,9 @@ fn update_inner(
     }
     let db_path = config.data_dir.join("stats.sqlite3");
     let mut store = StoreRouter::open(&config.data_dir, config.database_period)?;
+    if hashfiles_backend(&config.plugins).is_some() {
+        store.set_meta("hashfiles_backend", "sqlite")?;
+    }
     let log_files = vec![config.log_file.clone()];
     let parser = LogParser::new(&config.log_format).context("compile LogFormat")?;
     let (country, city, asn) = plugin_paths(&config.plugins);

@@ -18,7 +18,7 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 | `timezone` | Core `TimeZone` configuration | Keep deterministic and checkpoint-aware |
 | `userinfo` | Core authenticated-user aggregation | Keep in the shared report model |
 | `clusterinfo` | Display-only cluster-info adapter loads `clusterinfo[.<SiteDomain>].txt` | Keep labels out of canonical stored dimensions |
-| `hashfiles` | Not started; SQLite replaces AWStats native hash-file persistence | Add a tested storage compatibility adapter |
+| `hashfiles` | SQLite-backed compatibility adapter records the selected backend; no incompatible Perl `.hash` files are created | Keep SQLite authoritative and document the format boundary |
 | `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; native HTML chart-row tooltips implemented | Keep tooltips presentation-only and offline |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
