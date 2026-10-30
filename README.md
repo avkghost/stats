@@ -8,7 +8,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 
 - Cargo workspace with `stats-core` and `stats-cli`.
 - AWStats-style `Key=Value` configuration parsing.
-- Apache/Nginx custom format support, common LogFormat 4, JSON-line records, Unix timestamps, and AWStats time formats 1–6.
+- Apache/Nginx custom format support, common LogFormat 4, JSON-line records, Unix timestamps, and AWStats time formats 1–6. Apache aliases include request tokens (`%r`, `%m`, `%U`, `%q`, `%H`), client/vhost fields (`%a`, `%{c}a`, `%v`, `%{Host}i`), epoch timestamps (`%{sec}t`, `%{msec}t`, `%{usec}t`), duration tokens (`%D`, `%T`, `%{ms}T`), and arbitrary quoted headers.
+- Optional `TimeZone=<hour-offset>` normalizes parsed event timestamps before aggregation; leaving it unset preserves the timestamp offset from each record.
 - MaxMind Country, City, and ASN MMDB providers.
 - GeoIP lookup safeguards for private, loopback, unspecified, multicast, and scope-suffixed IPv6 addresses.
 - SQLite aggregate store with append checkpointing.
