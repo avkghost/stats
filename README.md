@@ -38,9 +38,9 @@ The generic example configuration is at `examples/awstats.example.test.conf`. Co
     cargo run -p stats-cli -- retention --data-dir stats --before 2025-01
     cargo run -p stats-cli -- retention --data-dir stats --before 2025-01 --archive-dir target/stats-archive --remove-source
     cargo run -p stats-cli -- migrate --config logs/awstats.example.test.conf --log-dir logs --data-dir stats --backup-dir target/pre-partition-backup
-    cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report.json --format json
-    cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report.csv --format csv
-    cargo run -p stats-cli -- report --data-dir target/stats-data --output - --format json | jq '.hits, .pages'
+    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output target/stats-report.json --format json
+    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output target/stats-report.csv --format csv
+    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output - --format json | jq '.hits, .pages'
     cargo run -p stats-cli -- watch --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
     cargo run -p stats-cli -- validate --config logs/awstats.example.test.conf
     cargo run -p stats-cli -- health --config logs/awstats.example.test.conf --data-dir stats
@@ -48,7 +48,7 @@ The generic example configuration is at `examples/awstats.example.test.conf`. Co
     cargo run -p stats-cli -- summary --data-dir target/stats-data --watch --interval 5
     cargo run -p stats-cli -- live --config logs/awstats.example.test.conf --limit 10 --interval 5
     cargo run -p stats-cli -- tui --config logs/awstats.example.test.conf --limit 10 --interval 5
-    QUERY_STRING='output=json&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
+    QUERY_STRING='output=json&limit=50' STATS_CONFIG=logs/awstats.example.test.conf STATS_DATA_DIR=stats cargo run -p stats-cgi
     QUERY_STRING='section=visitors&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
 
 The configured GeoIP plugin paths are read from `LoadPlugin` entries. CLI path overrides are intended for local fixtures and tests.
