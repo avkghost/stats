@@ -1,0 +1,13 @@
+[package]
+name = "stats-report-csv"
+version = "0.1.1"
+description = "External CSV report renderer for the stats analyzer"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde_json.workspace = true
+stats-plugin-api = { version = "0.1.1", path = "../../crates/stats-plugin-api" }

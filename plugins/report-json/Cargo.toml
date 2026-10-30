@@ -1,0 +1,12 @@
+[package]
+name = "stats-report-json"
+version = "0.1.1"
+description = "External JSON report renderer for the stats analyzer"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+stats-plugin-api = { version = "0.1.1", path = "../../crates/stats-plugin-api" }

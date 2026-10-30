@@ -6,6 +6,8 @@ members = [
     "crates/stats-plugin-host",
     "crates/stats-render",
     "crates/stats-cgi",
+    "plugins/report-json",
+    "plugins/report-csv",
 ]
 resolver = "2"
 
