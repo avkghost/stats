@@ -663,19 +663,15 @@ fn search_referrer(referer: Option<&str>) -> Option<(&'static str, String)> {
     let referer = referer?;
     let (_, rest) = referer.split_once("://")?;
     let authority = rest.split(['/', '?']).next()?.to_ascii_lowercase();
-    let engine = if authority.contains("google.") {
-        "Google"
-    } else if authority.contains("bing.com") {
-        "Bing"
-    } else if authority.contains("duckduckgo.com") {
-        "DuckDuckGo"
-    } else if authority.contains("yandex.") {
-        "Yandex"
-    } else if authority.contains("search.brave.com") {
-        "Brave"
-    } else {
-        return None;
-    };
+    let engine = [
+        ("google.", "Google"),
+        ("bing.com", "Bing"),
+        ("duckduckgo.com", "DuckDuckGo"),
+        ("yandex.", "Yandex"),
+        ("search.brave.com", "Brave"),
+    ]
+    .iter()
+    .find_map(|(needle, label)| authority.contains(needle).then_some(*label))?;
     let query = referer.split_once('?')?.1;
     let phrase = query
         .split('&')
@@ -718,40 +714,37 @@ fn decode_query(value: &str) -> String {
 
 fn browser(user_agent: &str) -> &'static str {
     let ua = user_agent.to_ascii_lowercase();
-    if ua.contains("edg/") {
-        "Edge"
-    } else if ua.contains("opr/") || ua.contains("opera") {
-        "Opera"
-    } else if ua.contains("firefox/") {
-        "Firefox"
-    } else if ua.contains("chrome/") || ua.contains("chromium/") {
-        "Chrome"
-    } else if ua.contains("safari/") {
-        "Safari"
-    } else if ua.contains("curl/") {
-        "curl"
-    } else if ua.contains("wget/") {
-        "Wget"
-    } else {
-        "Other"
-    }
+    [
+        ("edg/", "Edge"),
+        ("opr/", "Opera"),
+        ("opera", "Opera"),
+        ("firefox/", "Firefox"),
+        ("chrome/", "Chrome"),
+        ("chromium/", "Chrome"),
+        ("safari/", "Safari"),
+        ("curl/", "curl"),
+        ("wget/", "Wget"),
+    ]
+    .iter()
+    .find_map(|(needle, label)| ua.contains(needle).then_some(*label))
+    .unwrap_or("Other")
 }
 
 fn operating_system(user_agent: &str) -> &'static str {
     let ua = user_agent.to_ascii_lowercase();
-    if ua.contains("windows") {
-        "Windows"
-    } else if ua.contains("android") {
-        "Android"
-    } else if ua.contains("iphone") || ua.contains("ipad") || ua.contains("ios") {
-        "iOS"
-    } else if ua.contains("mac os") || ua.contains("macintosh") {
-        "macOS"
-    } else if ua.contains("linux") {
-        "Linux"
-    } else {
-        "Other"
-    }
+    [
+        ("windows", "Windows"),
+        ("android", "Android"),
+        ("iphone", "iOS"),
+        ("ipad", "iOS"),
+        ("ios", "iOS"),
+        ("mac os", "macOS"),
+        ("macintosh", "macOS"),
+        ("linux", "Linux"),
+    ]
+    .iter()
+    .find_map(|(needle, label)| ua.contains(needle).then_some(*label))
+    .unwrap_or("Other")
 }
 
 fn robot(user_agent: &str) -> Option<&'static str> {
@@ -797,7 +790,12 @@ mod tests {
         assert_eq!(file_type(Some("/assets/app.CSS?v=1")), ".css");
         assert_eq!(file_type(Some("/")), "(none)");
         assert_eq!(browser("Mozilla/5.0 Chrome/120.0 Safari/537.36"), "Chrome");
+        assert_eq!(browser("Mozilla/5.0 Edg/120.0 Chrome/120.0"), "Edge");
         assert_eq!(operating_system("Mozilla/5.0 (X11; Linux x86_64)"), "Linux");
+        assert_eq!(
+            operating_system("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)"),
+            "iOS"
+        );
         assert_eq!(
             robot("Mozilla/5.0 (compatible; GPTBot/1.0)"),
             Some("GPTBot")
@@ -809,6 +807,10 @@ mod tests {
                 "https://www.google.com/search?q=rust+analytics%20tool"
             )),
             Some(("Google", "rust analytics tool".to_owned()))
+        );
+        assert_eq!(
+            search_referrer(Some("https://www.bing.com/search?q=rust")),
+            Some(("Bing", "rust".to_owned()))
         );
         assert_eq!(
             stable_key(&["client", "2026-10-28", "agent"]),
