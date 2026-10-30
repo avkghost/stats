@@ -1,9 +1,7 @@
 use std::os::raw::{c_char, c_int};
 
 pub const ABI_VERSION: u32 = 1;
-pub const ABI_VERSION_V2: u32 = 2;
-pub const INIT_SYMBOL: &[u8] = b"stats_plugin_init_v1\0";
-pub const INIT_SYMBOL_V2: &[u8] = b"stats_plugin_init_v2\0";
+pub const INIT_SYMBOL: &[u8] = b"stats_plugin_init\0";
 pub const CAPABILITY_ENRICH: u64 = 1;
 pub const CAPABILITY_REPORT: u64 = 1 << 1;
 pub const CAPABILITY_OUTPUT: u64 = 1 << 2;
@@ -39,6 +37,8 @@ pub struct PluginEvent {
 pub struct PluginApi {
     pub descriptor: PluginDescriptor,
     pub enrich: Option<unsafe extern "C" fn(event: *mut PluginEvent) -> c_int>,
+    pub render_report: Option<RenderReport>,
+    pub release_report: Option<ReleaseReport>,
     pub shutdown: Option<unsafe extern "C" fn()>,
 }
 
@@ -66,15 +66,3 @@ pub struct RenderedReport {
 pub type RenderReport =
     unsafe extern "C" fn(request: *const ReportRequest, output: *mut RenderedReport) -> c_int;
 pub type ReleaseReport = unsafe extern "C" fn(output: *mut RenderedReport);
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct PluginApiExtended {
-    pub descriptor: PluginDescriptor,
-    pub enrich: Option<unsafe extern "C" fn(event: *mut PluginEvent) -> c_int>,
-    pub render_report: Option<RenderReport>,
-    pub release_report: Option<ReleaseReport>,
-    pub shutdown: Option<unsafe extern "C" fn()>,
-}
-
-pub type PluginInitExtended = unsafe extern "C" fn(host: *const HostApi) -> *mut PluginApiExtended;

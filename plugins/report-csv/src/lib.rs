@@ -1,6 +1,6 @@
 use serde_json::Value;
 use stats_plugin_api::{
-    HostApi, PluginApiExtended, PluginDescriptor, RenderedReport, ReportRequest, ABI_VERSION_V2,
+    HostApi, PluginApi, PluginDescriptor, RenderedReport, ReportRequest, ABI_VERSION,
     CAPABILITY_REPORT,
 };
 use std::{ffi::CStr, os::raw::c_int, ptr};
@@ -13,10 +13,10 @@ static EMPTY_VERSION: &[u8] = b"\0";
 ///
 /// The loader supplies a valid host pointer or null and keeps the returned
 /// plugin API alive for the lifetime of the loaded library.
-pub unsafe extern "C" fn stats_plugin_init_v2(_host: *const HostApi) -> *mut PluginApiExtended {
-    Box::into_raw(Box::new(PluginApiExtended {
+pub unsafe extern "C" fn stats_plugin_init(_host: *const HostApi) -> *mut PluginApi {
+    Box::into_raw(Box::new(PluginApi {
         descriptor: PluginDescriptor {
-            abi_version: ABI_VERSION_V2,
+            abi_version: ABI_VERSION,
             capabilities: CAPABILITY_REPORT,
             name: NAME.as_ptr().cast(),
             version: EMPTY_VERSION.as_ptr().cast(),

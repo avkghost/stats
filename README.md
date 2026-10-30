@@ -15,7 +15,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - SQLite aggregate store with append checkpointing.
 - Optional monthly/yearly SQLite partitioning with federated reports across all period databases.
 - Static multi-page HTML or machine-readable JSON reports with AWStats-style hits/pages/files/visits totals, daily traffic detail, calendar dimensions, top bandwidth URLs, virtual-host reports, authenticated users, HTTP errors and status classes, request-time buckets, referrer URLs and referring sites, search engines/keyphrases, incremental session entry/exit pages, and status, country, region, city, ASN, network organization, file-type, browser, OS, and robot tables.
-- Rust plugin traits for event enrichment plus a versioned C ABI and dynamic host loader.
+- Rust plugin traits for event enrichment plus a C ABI and dynamic host loader.
 - Tokio CLI runtime with blocking analysis work isolated from the runtime.
 - Ratatui interactive dashboard backed by the shared report query API.
 - Stable terminal summaries with one-shot and refreshable views.

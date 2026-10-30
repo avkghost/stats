@@ -1,8 +1,7 @@
 use libloading::Library;
 use stats_plugin_api::{
-    HostApi, PluginApi, PluginApiExtended, PluginEvent, PluginInit, PluginInitExtended,
-    RenderedReport, ReportRequest, ABI_VERSION, ABI_VERSION_V2, CAPABILITY_ENRICH,
-    CAPABILITY_REPORT, INIT_SYMBOL, INIT_SYMBOL_V2,
+    HostApi, PluginApi, PluginEvent, PluginInit, RenderedReport, ReportRequest, ABI_VERSION,
+    CAPABILITY_ENRICH, CAPABILITY_REPORT, INIT_SYMBOL,
 };
 use std::{
     ffi::{CStr, CString, NulError},
@@ -51,8 +50,7 @@ pub struct LoadedPlugin {
 }
 
 enum LoadedApi {
-    Legacy(NonNull<PluginApi>),
-    Extended(NonNull<PluginApiExtended>),
+    Plugin(NonNull<PluginApi>),
 }
 
 impl LoadedPlugin {
@@ -73,38 +71,24 @@ impl LoadedPlugin {
             path: path.clone(),
             source,
         })?;
-        let api = if let Ok(init) = library.get::<PluginInitExtended>(INIT_SYMBOL_V2) {
-            let api =
-                NonNull::new((*init)(host as *const HostApi)).ok_or(PluginLoadError::NullApi)?;
-            let descriptor = (*api.as_ptr()).descriptor;
-            if descriptor.abi_version != ABI_VERSION_V2 {
-                return Err(PluginLoadError::Abi {
-                    actual: descriptor.abi_version,
-                    expected: ABI_VERSION_V2,
-                });
-            }
-            LoadedApi::Extended(api)
-        } else {
-            let init: PluginInit =
-                *library
-                    .get(INIT_SYMBOL)
-                    .map_err(|source| PluginLoadError::Symbol {
-                        path: path.clone(),
-                        source,
-                    })?;
-            let api = NonNull::new(init(host as *const HostApi)).ok_or(PluginLoadError::NullApi)?;
-            let descriptor = (*api.as_ptr()).descriptor;
-            if descriptor.abi_version != ABI_VERSION {
-                return Err(PluginLoadError::Abi {
-                    actual: descriptor.abi_version,
-                    expected: ABI_VERSION,
-                });
-            }
-            LoadedApi::Legacy(api)
+        let init: PluginInit =
+            *library
+                .get(INIT_SYMBOL)
+                .map_err(|source| PluginLoadError::Symbol {
+                    path: path.clone(),
+                    source,
+                })?;
+        let api = NonNull::new(init(host as *const HostApi)).ok_or(PluginLoadError::NullApi)?;
+        let descriptor = (*api.as_ptr()).descriptor;
+        if descriptor.abi_version != ABI_VERSION {
+            return Err(PluginLoadError::Abi {
+                actual: descriptor.abi_version,
+                expected: ABI_VERSION,
+            });
         };
+        let api = LoadedApi::Plugin(api);
         let descriptor = match api {
-            LoadedApi::Legacy(api) => (*api.as_ptr()).descriptor,
-            LoadedApi::Extended(api) => (*api.as_ptr()).descriptor,
+            LoadedApi::Plugin(api) => (*api.as_ptr()).descriptor,
         };
         let name_ptr = NonNull::new(descriptor.name as *mut _)
             .ok_or(PluginLoadError::NullMetadata { field: "name" })?;
@@ -129,8 +113,7 @@ impl LoadedPlugin {
     pub fn capabilities(&self) -> u64 {
         unsafe {
             match self.api {
-                LoadedApi::Legacy(api) => api.as_ref().descriptor.capabilities,
-                LoadedApi::Extended(api) => api.as_ref().descriptor.capabilities,
+                LoadedApi::Plugin(api) => api.as_ref().descriptor.capabilities,
             }
         }
     }
@@ -138,10 +121,7 @@ impl LoadedPlugin {
     pub fn enrich(&self, event: &mut PluginEvent) -> Result<(), PluginLoadError> {
         unsafe {
             let (capabilities, enrich) = match self.api {
-                LoadedApi::Legacy(api) => {
-                    (api.as_ref().descriptor.capabilities, api.as_ref().enrich)
-                }
-                LoadedApi::Extended(api) => {
+                LoadedApi::Plugin(api) => {
                     (api.as_ref().descriptor.capabilities, api.as_ref().enrich)
                 }
             };
@@ -166,11 +146,7 @@ impl LoadedPlugin {
         format: &str,
         report_json: &str,
     ) -> Result<(String, String, String), PluginLoadError> {
-        let LoadedApi::Extended(api) = self.api else {
-            return Err(PluginLoadError::NoReportRenderer {
-                name: self.name.clone(),
-            });
-        };
+        let LoadedApi::Plugin(api) = self.api;
         let api = unsafe { api.as_ref() };
         if api.descriptor.capabilities & CAPABILITY_REPORT == 0 {
             return Err(PluginLoadError::NoReportRenderer {
@@ -221,8 +197,7 @@ impl Drop for LoadedPlugin {
     fn drop(&mut self) {
         unsafe {
             let shutdown = match self.api {
-                LoadedApi::Legacy(api) => api.as_ref().shutdown,
-                LoadedApi::Extended(api) => api.as_ref().shutdown,
+                LoadedApi::Plugin(api) => api.as_ref().shutdown,
             };
             if let Some(shutdown) = shutdown {
                 shutdown();
