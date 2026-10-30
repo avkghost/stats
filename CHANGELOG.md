@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+Patch release containing the corrected Linux release bundle contents. Installed bundles no longer include the source-only packaging script.
+
 ## 0.1.0
 
 Initial modular AWStats-style Rust analyzer release.

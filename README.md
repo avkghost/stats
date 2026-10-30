@@ -2,7 +2,7 @@
 
 Linux-first modular web log analyzer in Rust, with AWStats-style configuration and local MaxMind GeoIP enrichment.
 
-See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.0` release scope and verification summary.
+See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verification summary.
 
 ## Current implementation
 
@@ -87,12 +87,12 @@ Deployment templates are in `deploy/`: `stats-update.service`, `stats-update.tim
 
 After building a release, `sudo deploy/install.sh` performs the repeatable installation. It creates the system account and data directories when needed, installs the release binary and service files, reloads systemd, and enables the timer. It intentionally does not run an update until the configuration has been installed. Override paths with `STATS_BINARY_PATH`, `STATS_CONFIG_PATH`, `STATS_DATA_DIR`, and `STATS_OUTPUT_DIR` when the host layout differs.
 
-Create a self-contained Linux release bundle with `deploy/package-release.sh`. It produces `target/release-artifacts/stats-0.1.0-linux-x86_64.tar.gz` and a `.sha256` checksum containing the optimized binary, deployment templates, README, and changelog. Set `STATS_VERSION`, `STATS_PLATFORM`, or `STATS_RELEASE_DIR` to customize the artifact name or destination.
+Create a self-contained Linux release bundle with `deploy/package-release.sh`. It produces `target/release-artifacts/stats-0.1.1-linux-x86_64.tar.gz` and a `.sha256` checksum containing the optimized binary, deployment templates, README, and changelog. Set `STATS_VERSION`, `STATS_PLATFORM`, or `STATS_RELEASE_DIR` to customize the artifact name or destination.
 
 The release workflow publishes the same bundle when a `v*` tag is pushed. For the first release, verify CI is green, create the tag, push it, then verify the attached checksum before installation:
 
-    git tag v0.1.0
-    git push origin v0.1.0
+    git tag v0.1.1
+    git push origin v0.1.1
 
 Typical installation and upgrade sequence:
 
