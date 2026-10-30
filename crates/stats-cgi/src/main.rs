@@ -145,6 +145,11 @@ fn render_cgi(
     if request.section.is_some() && external_html {
         bail!("CGI section selection is unavailable with a replacement HTML renderer");
     }
+    if request.section.is_none() && !external_html && request.output == OutputFormat::Html {
+        bail!(
+            "CGI HTML rendering is an external plugin; set STATS_CONFIG with LoadPlugin=report_html <library>"
+        );
+    }
     let body = match request.section.as_deref() {
         Some(section) => render_html_section(&report, section)
             .map_err(|error| anyhow::anyhow!("render CGI HTML section: {error}"))?,

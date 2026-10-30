@@ -8,6 +8,7 @@ members = [
     "crates/stats-cgi",
     "plugins/report-json",
     "plugins/report-csv",
+    "plugins/report-html",
 ]
 resolver = "2"
 

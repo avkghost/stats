@@ -1616,6 +1616,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "stats-report-html"
+version = "0.1.1"
+dependencies = [
+ "serde_json",
+ "stats-core",
+ "stats-plugin-api",
+ "stats-render",
+]
+
+[[package]]
 name = "stats-report-json"
 version = "0.1.1"
 dependencies = [

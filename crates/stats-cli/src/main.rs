@@ -1184,6 +1184,11 @@ fn report(
         println!("wrote HTML report site {}", output.display());
         return Ok(());
     }
+    if matches!(format, ReportFormat::Html) && !external_renderer_configured {
+        bail!(
+            "HTML stream rendering is an external plugin; provide --config with LoadPlugin=report_html <library>"
+        );
+    }
     if !matches!(format, ReportFormat::Html) {
         let config = config.as_ref().ok_or_else(|| {
             anyhow::anyhow!(

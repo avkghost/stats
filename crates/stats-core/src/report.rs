@@ -1,7 +1,7 @@
 use crate::StatsStore;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Report {
     pub metadata: ReportMetadata,
     pub hits: u64,
@@ -43,7 +43,7 @@ pub struct Report {
     pub diagnostics: Vec<ReportRow>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReportMetadata {
     pub schema_version: Option<String>,
     pub input_path: Option<String>,
@@ -53,20 +53,20 @@ pub struct ReportMetadata {
     pub config_hash: Option<String>,
     pub approximations: Vec<String>,
 }
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReportRow {
     pub key: String,
     pub hits: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BandwidthRow {
     pub key: String,
     pub hits: u64,
     pub bytes: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DailyRow {
     pub date: String,
     pub hits: u64,

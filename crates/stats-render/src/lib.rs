@@ -5,9 +5,8 @@ use anyhow::anyhow;
 use stats_core::{PluginRegistry, RendererRegistryError, Report};
 
 pub fn register_builtin_renderers(
-    registry: &mut PluginRegistry,
+    _registry: &mut PluginRegistry,
 ) -> Result<(), RendererRegistryError> {
-    registry.add_renderer(html::HtmlOverviewRenderer)?;
     Ok(())
 }
 
@@ -31,7 +30,9 @@ pub fn render_report_stream(
         .map_err(|error| anyhow!("render {format} report: {error}"))
 }
 
-pub use html::{render_html_section, write_html_site, write_html_site_with_periods};
+pub use html::{
+    render_html_report, render_html_section, write_html_site, write_html_site_with_periods,
+};
 pub use native::{register_configured_renderer, report_plugin_format, NativeReportRenderer};
 
 #[cfg(test)]
@@ -45,7 +46,7 @@ mod tests {
             .renderers()
             .map(|renderer| renderer.format_name())
             .collect();
-        assert_eq!(formats, ["html"]);
+        assert!(formats.is_empty());
         assert!(registry.renderer("unknown").is_none());
     }
 }
