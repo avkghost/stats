@@ -1060,6 +1060,9 @@ impl Drop for WorkerPlugin {
 fn load_native_plugins(plugins: &[stats_core::PluginConfig], quiet: bool) -> Vec<WorkerPlugin> {
     let mut loaded = Vec::new();
     for plugin in plugins {
+        if stats_render::report_plugin_format(plugin).is_some() {
+            continue;
+        }
         let Some(path) = plugin
             .args
             .iter()
