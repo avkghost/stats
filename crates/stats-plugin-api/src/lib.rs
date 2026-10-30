@@ -10,7 +10,7 @@ pub const CAPABILITY_OUTPUT: u64 = 1 << 2;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct PluginDescriptorV1 {
+pub struct PluginDescriptor {
     pub abi_version: u32,
     pub capabilities: u64,
     pub name: *const c_char,
@@ -19,14 +19,14 @@ pub struct PluginDescriptorV1 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct HostApiV1 {
+pub struct HostApi {
     pub abi_version: u32,
     pub log: Option<unsafe extern "C" fn(level: u32, message: *const c_char)>,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct EventV1 {
+pub struct PluginEvent {
     pub client_ip: *const c_char,
     pub method: *const c_char,
     pub url: *const c_char,
@@ -36,18 +36,18 @@ pub struct EventV1 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct PluginApiV1 {
-    pub descriptor: PluginDescriptorV1,
-    pub enrich: Option<unsafe extern "C" fn(event: *mut EventV1) -> c_int>,
+pub struct PluginApi {
+    pub descriptor: PluginDescriptor,
+    pub enrich: Option<unsafe extern "C" fn(event: *mut PluginEvent) -> c_int>,
     pub shutdown: Option<unsafe extern "C" fn()>,
 }
 
-pub type PluginInitV1 = unsafe extern "C" fn(host: *const HostApiV1) -> *mut PluginApiV1;
+pub type PluginInit = unsafe extern "C" fn(host: *const HostApi) -> *mut PluginApi;
 
 /// UTF-8 JSON report input supplied to a native report renderer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ReportRequestV2 {
+pub struct ReportRequest {
     pub format: *const c_char,
     pub report_json: *const c_char,
 }
@@ -57,24 +57,24 @@ pub struct ReportRequestV2 {
 /// The plugin owns these pointers and must release them from `release_report`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct RenderedReportV2 {
+pub struct RenderedReport {
     pub media_type: *const c_char,
     pub extension: *const c_char,
     pub body: *const c_char,
 }
 
-pub type RenderReportV2 =
-    unsafe extern "C" fn(request: *const ReportRequestV2, output: *mut RenderedReportV2) -> c_int;
-pub type ReleaseReportV2 = unsafe extern "C" fn(output: *mut RenderedReportV2);
+pub type RenderReport =
+    unsafe extern "C" fn(request: *const ReportRequest, output: *mut RenderedReport) -> c_int;
+pub type ReleaseReport = unsafe extern "C" fn(output: *mut RenderedReport);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct PluginApiV2 {
-    pub descriptor: PluginDescriptorV1,
-    pub enrich: Option<unsafe extern "C" fn(event: *mut EventV1) -> c_int>,
-    pub render_report: Option<RenderReportV2>,
-    pub release_report: Option<ReleaseReportV2>,
+pub struct PluginApiExtended {
+    pub descriptor: PluginDescriptor,
+    pub enrich: Option<unsafe extern "C" fn(event: *mut PluginEvent) -> c_int>,
+    pub render_report: Option<RenderReport>,
+    pub release_report: Option<ReleaseReport>,
     pub shutdown: Option<unsafe extern "C" fn()>,
 }
 
-pub type PluginInitV2 = unsafe extern "C" fn(host: *const HostApiV1) -> *mut PluginApiV2;
+pub type PluginInitExtended = unsafe extern "C" fn(host: *const HostApi) -> *mut PluginApiExtended;

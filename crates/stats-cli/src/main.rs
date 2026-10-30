@@ -8,7 +8,7 @@ use stats_core::{
     accepts, is_page, Config, DatabasePeriod, GeoIpEnricher, InputCheckpoint, LogParser,
     MaxMindGeoIp, ParseOutcome, PluginRegistry, ReportService, StatsStore,
 };
-use stats_plugin_api::{EventV1, HostApiV1, ABI_VERSION};
+use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
 use stats_render::{
     builtin_renderer_registry, render_report_stream, write_html_site, write_html_site_with_periods,
@@ -1072,7 +1072,7 @@ fn enrich_with_native_plugins(
 }
 
 fn plugin_worker(path: PathBuf) -> anyhow::Result<()> {
-    let host_api = HostApiV1 {
+    let host_api = HostApi {
         abi_version: ABI_VERSION,
         log: None,
     };
@@ -1102,7 +1102,7 @@ fn plugin_worker(path: PathBuf) -> anyhow::Result<()> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("UNKNOWN"),
         )?;
-        let mut event = EventV1 {
+        let mut event = PluginEvent {
             client_ip: client_ip.as_ptr(),
             method: method.as_ptr(),
             url: url.as_ptr(),
