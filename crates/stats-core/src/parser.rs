@@ -354,52 +354,7 @@ fn normalize_apache_format(format: &str) -> String {
         }
 
         let remaining = &format[index..];
-        let long_token = if remaining.starts_with("%{User-Agent}i")
-            || remaining.starts_with("%{user-agent}i")
-            || remaining.starts_with("%{User-agent}i")
-        {
-            Some(("%{User-Agent}i", "%uaquot"))
-        } else if remaining.starts_with("%{Referer}i") || remaining.starts_with("%{referer}i") {
-            Some(("%{Referer}i", "%refererquot"))
-        } else if remaining.starts_with("%{Host}i") || remaining.starts_with("%{host}i") {
-            Some(("%{Host}i", "%virtualname"))
-        } else if remaining.starts_with("%{X-Forwarded-For}i")
-            || remaining.starts_with("%{x-forwarded-for}i")
-        {
-            Some(("%{X-Forwarded-For}i", "%host"))
-        } else if remaining.starts_with("%{c}a") {
-            Some(("%{c}a", "%host"))
-        } else if remaining.starts_with("%{canonical}v") {
-            Some(("%{canonical}v", "%virtualname"))
-        } else if remaining.starts_with("%{s}v") {
-            Some(("%{s}v", "%virtualname"))
-        } else if remaining.starts_with("%{local}p") {
-            Some(("%{local}p", "%other1"))
-        } else if remaining.starts_with("%{sec}t") || remaining.starts_with("%{SEC}t") {
-            Some(("%{sec}t", "%time4"))
-        } else if remaining.starts_with("%{begin:sec}t") || remaining.starts_with("%{end:sec}t") {
-            Some(("%{begin:sec}t", "%time4"))
-        } else if remaining.starts_with("%{msec}t") || remaining.starts_with("%{MSEC}t") {
-            Some(("%{msec}t", "%time7"))
-        } else if remaining.starts_with("%{begin:msec}t") || remaining.starts_with("%{end:msec}t") {
-            Some(("%{begin:msec}t", "%time7"))
-        } else if remaining.starts_with("%{usec}t") || remaining.starts_with("%{USEC}t") {
-            Some(("%{usec}t", "%time8"))
-        } else if remaining.starts_with("%{begin:usec}t") || remaining.starts_with("%{end:usec}t") {
-            Some(("%{begin:usec}t", "%time8"))
-        } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
-            Some(("%{ms}T", "%duration_ms"))
-        } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
-            Some(("%{us}T", "%duration_us"))
-        } else if remaining.starts_with("%{remote}p") {
-            Some(("%{remote}p", "%other2"))
-        } else if remaining.starts_with("%{status}o") {
-            Some(("%{status}o", "%code"))
-        } else if remaining.starts_with("%>s") {
-            Some(("%>s", "%code"))
-        } else {
-            None
-        };
+        let long_token = match_apache_long_token(remaining);
         if let Some((apache, awstats)) = long_token {
             normalized.push_str(awstats);
             index += apache.len();
@@ -448,6 +403,42 @@ fn normalize_apache_format(format: &str) -> String {
         }
     }
     normalized
+}
+
+const APACHE_LONG_TOKEN_RULES: &[(&[&str], &str)] = &[
+    (
+        &["%{User-Agent}i", "%{user-agent}i", "%{User-agent}i"],
+        "%uaquot",
+    ),
+    (&["%{Referer}i", "%{referer}i"], "%refererquot"),
+    (&["%{Host}i", "%{host}i"], "%virtualname"),
+    (&["%{X-Forwarded-For}i", "%{x-forwarded-for}i"], "%host"),
+    (&["%{c}a"], "%host"),
+    (&["%{canonical}v"], "%virtualname"),
+    (&["%{s}v"], "%virtualname"),
+    (&["%{local}p"], "%other1"),
+    (&["%{sec}t", "%{SEC}t"], "%time4"),
+    (&["%{begin:sec}t", "%{end:sec}t"], "%time4"),
+    (&["%{msec}t", "%{MSEC}t"], "%time7"),
+    (&["%{begin:msec}t", "%{end:msec}t"], "%time7"),
+    (&["%{usec}t", "%{USEC}t"], "%time8"),
+    (&["%{begin:usec}t", "%{end:usec}t"], "%time8"),
+    (&["%{ms}T", "%{MS}T"], "%duration_ms"),
+    (&["%{us}T", "%{US}T"], "%duration_us"),
+    (&["%{remote}p"], "%other2"),
+    (&["%{status}o"], "%code"),
+    (&["%>s"], "%code"),
+];
+
+fn match_apache_long_token(remaining: &str) -> Option<(&'static str, &'static str)> {
+    APACHE_LONG_TOKEN_RULES
+        .iter()
+        .find_map(|(patterns, awstats)| {
+            patterns
+                .iter()
+                .find(|pattern| remaining.starts_with(**pattern))
+                .map(|pattern| (*pattern, *awstats))
+        })
 }
 
 fn compile_format(format: &str) -> Result<Regex, regex::Error> {
