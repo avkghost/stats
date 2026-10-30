@@ -52,10 +52,9 @@ fn render_csv(report: &Value) -> String {
     let mut out = String::from("section,key,hits,bytes,pages,files,visits\n");
     for key in ["hits", "bytes", "pages", "files", "visits", "unique_visits"] {
         let value = number(report, key);
-        if key == "bytes" {
-            out.push_str(&format!("summary,{key},,{value},,,\n"));
-        } else {
-            out.push_str(&format!("summary,{key},{value},,,,\n"));
+        match key {
+            "bytes" => out.push_str(&format!("summary,{key},,{value},,,\n")),
+            _ => out.push_str(&format!("summary,{key},{value},,,,\n")),
         }
     }
     for section in [

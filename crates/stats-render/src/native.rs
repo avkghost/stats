@@ -48,10 +48,9 @@ pub fn register_configured_renderer(
         )
     })?;
     let renderer = NativeReportRenderer::load(library, format)?;
-    let result = if format == "html" {
-        registry.replace_renderer(renderer)
-    } else {
-        registry.add_renderer(renderer)
+    let result = match format {
+        "html" => registry.replace_renderer(renderer),
+        _ => registry.add_renderer(renderer),
     };
     result.map_err(|error: RendererRegistryError| {
         anyhow::anyhow!("register external report renderer: {error}")
