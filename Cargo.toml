@@ -6,6 +6,7 @@ members = [
     "crates/stats-plugin-host",
     "crates/stats-render",
     "crates/stats-tui",
+    "crates/stats-http",
     "crates/stats-cgi",
     "plugins/report-json",
     "plugins/report-csv",
@@ -19,6 +20,7 @@ license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
 anyhow = "1"
+axum = "0.8"
 flate2 = "1"
 bzip2 = "0.6"
 xz2 = "0.1"
@@ -31,7 +33,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tera = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 libloading = "0.9"
 notify = "8"
 libc = "0.2"
