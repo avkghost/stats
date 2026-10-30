@@ -410,7 +410,7 @@ fn normalize_apache_format(format: &str) -> String {
             if let Some(close) = remaining.find('}') {
                 let token_length = close + 2;
                 let suffix = remaining.as_bytes().get(close + 1).copied();
-                if matches!(suffix, Some(b'i' | b'o' | b'e')) {
+                if matches!(suffix, Some(b'i' | b'o' | b'e' | b't')) {
                     let quoted = normalized.ends_with('"')
                         && format[index + token_length..].starts_with('"');
                     normalized.push_str(if quoted { "%otherquot" } else { "%other1" });
@@ -775,5 +775,14 @@ mod tests {
             panic!("expected end timestamp event");
         };
         assert_eq!(event.timestamp.timestamp(), 1793059200);
+    }
+
+    #[test]
+    fn accepts_apache_fractional_timestamp_modifiers() {
+        let parser = LogParser::new(r#"%a %t %{msec_frac}t %{usec_frac}t "%r" %>s %O"#).unwrap();
+        let outcome = parser.parse(
+            r#"192.0.2.29 [27/Oct/2026:00:14:17 +0000] .123 123456 "GET / HTTP/1.1" 200 64"#,
+        );
+        assert!(matches!(outcome, ParseOutcome::Event(_)));
     }
 }
