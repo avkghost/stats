@@ -756,7 +756,7 @@ fn update_inner(
     if hashfiles_backend(&config.plugins).is_some() {
         store.set_meta("hashfiles_backend", "sqlite")?;
     }
-    let log_files = vec![config.log_file.clone()];
+    let log_files = vec![resolve_log_file(&config_path, config.log_file.clone())];
     let parser = LogParser::new(&config.log_format).context("compile LogFormat")?;
     let (country, city, asn) = plugin_paths(&config.plugins);
     let geoip = MaxMindGeoIp::open(country.as_deref(), city.as_deref(), asn.as_deref())
@@ -1292,6 +1292,17 @@ fn plugin_paths(
         }
     }
     (country, city, asn)
+}
+
+fn resolve_log_file(config_path: &Path, configured: PathBuf) -> PathBuf {
+    if configured.is_absolute() || configured.exists() {
+        return configured;
+    }
+    config_path
+        .parent()
+        .map(|parent| parent.join(&configured))
+        .filter(|candidate| candidate.exists())
+        .unwrap_or(configured)
 }
 
 fn configured_referer_spam(
@@ -2309,7 +2320,7 @@ fn health(config_path: PathBuf, data_override: Option<PathBuf>, json: bool) -> a
 mod tests {
     use super::{
         backup, build_report_for_data_dir, build_report_for_period, configured_referer_spam,
-        database_paths, health, migrate, plugin_paths, retention, StoreRouter,
+        database_paths, health, migrate, plugin_paths, resolve_log_file, retention, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
@@ -2754,6 +2765,32 @@ mod tests {
                 Some(PathBuf::from("asn.mmdb"))
             )
         );
+    }
+
+    #[test]
+    fn resolves_relative_log_file_from_config_directory_when_needed() {
+        let root = std::env::temp_dir().join(format!(
+            "stats-log-path-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let config_dir = root.join("logs");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("access.log"), "line\n").unwrap();
+        let config_path = config_dir.join("awstats.site.conf");
+
+        assert_eq!(
+            resolve_log_file(&config_path, PathBuf::from("access.log")),
+            config_dir.join("access.log")
+        );
+        assert_eq!(
+            resolve_log_file(&config_path, PathBuf::from("missing.log")),
+            PathBuf::from("missing.log")
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
