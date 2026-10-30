@@ -10,6 +10,8 @@ pub use config::{Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig
 pub use filter::{accepts, is_page};
 pub use geoip::{GeoInfo, GeoIp, MaxMindGeoIp};
 pub use parser::{AccessEvent, LogParser, ParseError, ParseOutcome};
-pub use plugin::{Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry};
+pub use plugin::{
+    Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport, ReportRenderer,
+};
 pub use report::{BandwidthRow, DailyRow, Report, ReportMetadata, ReportRow, ReportService};
 pub use store::{DailyAggregate, InputCheckpoint, StatsStore, StoreError, UpdateStats};

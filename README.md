@@ -13,14 +13,16 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - GeoIP lookup safeguards for private, loopback, unspecified, multicast, and scope-suffixed IPv6 addresses.
 - SQLite aggregate store with append checkpointing.
 - Optional monthly/yearly SQLite partitioning with federated reports across all period databases.
-- Static multi-page HTML or machine-readable JSON reports with AWStats-style hits/pages/files/visits totals, daily traffic detail, top bandwidth URLs, virtual-host reports, authenticated users, HTTP errors and status classes, request-time buckets, referrer URLs and referring sites, search engines/keyphrases, incremental session entry/exit pages, and status, country, region, city, ASN, network organization, file-type, browser, OS, and robot tables.
+- Static multi-page HTML or machine-readable JSON reports with AWStats-style hits/pages/files/visits totals, daily traffic detail, calendar dimensions, top bandwidth URLs, virtual-host reports, authenticated users, HTTP errors and status classes, request-time buckets, referrer URLs and referring sites, search engines/keyphrases, incremental session entry/exit pages, and status, country, region, city, ASN, network organization, file-type, browser, OS, and robot tables.
 - Rust plugin traits for event enrichment plus a versioned C ABI and dynamic host loader.
 - Tokio CLI runtime with blocking analysis work isolated from the runtime.
 - Ratatui interactive dashboard backed by the shared report query API.
 - Stable terminal summaries with one-shot and refreshable views.
 - Live terminal analysis that incrementally updates the log and redraws the summary.
 
-## Run against the supplied fixture
+## Run against the example fixture
+
+The generic example configuration is at `examples/awstats.example.test.conf`. Copy it and adjust `LogFile`, `DirData`, and any local GeoIP plugin paths for a deployment.
 
     cargo run -p stats-cli -- update --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
     cargo run -p stats-cli -- backfill --config logs/awstats.example.test.conf --data-dir target/stats-data
@@ -35,6 +37,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
     cargo run -p stats-cli -- retention --data-dir stats --before 2025-01 --archive-dir target/stats-archive --remove-source
     cargo run -p stats-cli -- migrate --config logs/awstats.example.test.conf --log-dir logs --data-dir stats --backup-dir target/pre-partition-backup
     cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report.json --format json
+    cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report.csv --format csv
     cargo run -p stats-cli -- report --data-dir target/stats-data --output - --format json | jq '.hits, .pages'
     cargo run -p stats-cli -- watch --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
     cargo run -p stats-cli -- validate --config logs/awstats.example.test.conf
@@ -110,7 +113,7 @@ Trusted native enrichment plugins can be configured with a `.so` path, for examp
 
 `update` is cumulative by default: it appends new active-log events to the existing database and regenerates the complete HTML site at the data directory's sibling `output/index.html` (for `DirData="stats"`, that is `output/index.html`). `report` can generate the site at a custom output path such as `target/stats-report/index.html`; the overview is intentionally compact so it loads quickly, while detail pages contain the complete tables and visualizations. Pass `--format json` for the complete report model, including calendar dimensions and parser diagnostics. Use `--output - --format html` for a standalone overview document with inline assets.
 
-`summary` prints a script-friendly terminal overview. Add `--watch` to refresh an existing database without rereading the log. `live` combines incremental updates with the refreshable summary and exits cleanly on Ctrl-C. `tui` provides the interactive Ratatui dashboard: press `1` for Overview, `2` for Geography, `3` for Clients, `4` for Performance, `r` to refresh immediately, and `q`, `Esc`, or `Ctrl-C` to exit. Both `live` and `tui` accept `--log-file` and `--data-dir` overrides for deployments where the config paths are not directly usable.
+`summary` prints a script-friendly terminal overview. Add `--watch` to refresh an existing database without rereading the log. `live` combines incremental updates with the refreshable summary and exits cleanly on Ctrl-C. `tui` provides the interactive Ratatui dashboard: press `1` for Overview, `2` for Geography, `3` for Clients, `4` for Performance, `r` to refresh immediately, and `q`, `Esc`, or `Ctrl-C` to exit. Both `live` and `tui` accept `--log-file` and `--data-dir` overrides for deployments where the config paths are not directly usable. `report --format csv` exports all report dimensions as one sectioned, pipeline-friendly CSV stream.
 
 `health` is a read-only deployment check. It verifies the configured active log, plugin resource paths, and every existing control/period database, then prints database totals. It never creates a missing database; a fresh deployment should use `update` first. Add `--json` for monitoring integrations; the command still exits nonzero when any check fails.
 
@@ -126,4 +129,4 @@ If the AWStats config points at production paths such as `/var/log/nginx/access.
 
 `stats-core` owns normalized events, parsing, GeoIP providers, plugin traits, storage, and report queries. `stats-cli` owns orchestration and output. HTML, terminal summaries, and the Ratatui dashboard consume the same report query API rather than accessing storage directly.
 
-The current plugin implementation includes an in-process Rust trait registry and a versioned C ABI loader used by the supervised worker process. Dynamic libraries remain trusted code from a policy perspective, but a plugin crash is isolated from the analyzer process.
+The current plugin implementation includes an in-process Rust trait registry and a versioned C ABI loader used by the supervised worker process. Plugins can contribute event enrichers or report renderers; the built-in HTML, JSON, and CSV outputs are registered under the report-render category and selected by format. Native ABI v2 report plugins receive a format and UTF-8 JSON report, then return a media type, extension, and body through an explicit release callback; ABI v1 enrichment plugins remain supported. Dynamic libraries remain trusted code from a policy perspective, but a plugin crash is isolated from the analyzer process.

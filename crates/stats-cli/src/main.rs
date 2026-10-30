@@ -25,7 +25,9 @@ use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
 
 mod render;
-use render::{render_single_file_overview, write_html_site, write_html_site_with_periods};
+use render::{
+    builtin_renderer_registry, render_report_stream, write_html_site, write_html_site_with_periods,
+};
 
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
@@ -38,6 +40,17 @@ struct Cli {
 enum ReportFormat {
     Html,
     Json,
+    Csv,
+}
+
+impl ReportFormat {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Html => "html",
+            Self::Json => "json",
+            Self::Csv => "csv",
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -1126,6 +1139,7 @@ fn report(
     period: Option<String>,
 ) -> anyhow::Result<()> {
     let report = build_report_for_period(&data_dir, limit, period.as_deref())?;
+    let renderer_registry = builtin_renderer_registry();
     if matches!(format, ReportFormat::Html) && output != Path::new("-") {
         if period.is_some() {
             write_html_site(&report, &output)?;
@@ -1135,11 +1149,7 @@ fn report(
         println!("wrote HTML report site {}", output.display());
         return Ok(());
     }
-    let json = serde_json::to_string_pretty(&report)?;
-    let content = match format {
-        ReportFormat::Json => json,
-        ReportFormat::Html => render_single_file_overview(&report),
-    };
+    let content = render_report_stream(&renderer_registry, &report, format.as_str())?;
     if output == Path::new("-") {
         print!("{}", content);
     } else {

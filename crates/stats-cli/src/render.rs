@@ -1,7 +1,8 @@
 use std::{fs, path::Path};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use stats_core::{BandwidthRow, DailyRow, Report, ReportRow};
+use stats_core::{PluginDescriptor, PluginRegistry, RenderedReport, ReportRenderer};
 
 pub(crate) fn table(rows: &[ReportRow]) -> String {
     let mut out = String::from(
@@ -24,6 +25,199 @@ pub(crate) fn html_escape(value: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn csv_field(value: &str) -> String {
+    if value
+        .chars()
+        .any(|character| matches!(character, ',' | '"' | '\n' | '\r'))
+    {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_owned()
+    }
+}
+
+pub(crate) fn render_csv_report(report: &Report) -> String {
+    let mut out = String::from("section,key,hits,bytes,pages,files,visits\n");
+    out.push_str(&format!("summary,hits,{},,,,\n", report.hits));
+    out.push_str(&format!("summary,bytes,,{},,,\n", report.bytes));
+    out.push_str(&format!("summary,pages,{},,,,\n", report.pages));
+    out.push_str(&format!("summary,files,{},,,,\n", report.files));
+    out.push_str(&format!("summary,visits,{},,,,\n", report.visits));
+    out.push_str(&format!(
+        "summary,unique_visits,{},,,,\n",
+        report.unique_visits
+    ));
+    for (section, rows) in [
+        ("countries", &report.countries),
+        ("regions", &report.regions),
+        ("cities", &report.cities),
+        ("asns", &report.asns),
+        ("organizations", &report.organizations),
+        ("statuses", &report.statuses),
+        ("status_classes", &report.status_classes),
+        ("errors", &report.errors),
+        ("methods", &report.methods),
+        ("urls", &report.urls),
+        ("users", &report.users),
+        ("user_agents", &report.user_agents),
+        ("referers", &report.referers),
+        ("referrer_domains", &report.referrer_domains),
+        ("file_types", &report.file_types),
+        ("browsers", &report.browsers),
+        ("oses", &report.oses),
+        ("robots", &report.robots),
+        ("request_times", &report.request_times),
+        ("virtual_hosts", &report.virtual_hosts),
+        ("entry_pages", &report.entry_pages),
+        ("exit_pages", &report.exit_pages),
+        ("search_engines", &report.search_engines),
+        ("keyphrases", &report.keyphrases),
+        ("hours", &report.hours),
+        ("dates", &report.dates),
+        ("months", &report.months),
+        ("weekdays", &report.weekdays),
+        ("diagnostics", &report.diagnostics),
+    ] {
+        for item in rows {
+            csv_row(&mut out, section, &item.key, item.hits);
+        }
+    }
+    for item in &report.bandwidth_urls {
+        csv_bandwidth_row(&mut out, "bandwidth_urls", &item.key, item.hits, item.bytes);
+    }
+    for item in &report.daily {
+        out.push_str(&format!(
+            "daily,{},{},{},{},{},{}\n",
+            csv_field(&item.date),
+            item.hits,
+            item.bytes,
+            item.pages,
+            item.files,
+            item.visits
+        ));
+    }
+    out
+}
+
+fn csv_row(out: &mut String, section: &str, key: &str, hits: u64) {
+    out.push_str(&format!(
+        "{},{},{},,,,\n",
+        csv_field(section),
+        csv_field(key),
+        hits
+    ));
+}
+
+fn csv_bandwidth_row(out: &mut String, section: &str, key: &str, hits: u64, bytes: u64) {
+    out.push_str(&format!(
+        "{},{},{},{},,,\n",
+        csv_field(section),
+        csv_field(key),
+        hits,
+        bytes
+    ));
+}
+
+struct HtmlOverviewRenderer;
+
+impl ReportRenderer for HtmlOverviewRenderer {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            name: "html-overview".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: vec!["report".into(), "html".into()],
+        }
+    }
+
+    fn format_name(&self) -> &str {
+        "html"
+    }
+
+    fn render(&self, report: &Report) -> Result<RenderedReport, String> {
+        Ok(RenderedReport {
+            media_type: "text/html; charset=utf-8".into(),
+            extension: "html".into(),
+            body: render_single_file_overview(report),
+        })
+    }
+}
+
+struct JsonRenderer;
+
+impl ReportRenderer for JsonRenderer {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            name: "json-report".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: vec!["report".into(), "json".into()],
+        }
+    }
+
+    fn format_name(&self) -> &str {
+        "json"
+    }
+
+    fn render(&self, report: &Report) -> Result<RenderedReport, String> {
+        serde_json::to_string_pretty(report)
+            .map(|body| RenderedReport {
+                media_type: "application/json; charset=utf-8".into(),
+                extension: "json".into(),
+                body,
+            })
+            .map_err(|error| error.to_string())
+    }
+}
+
+struct CsvRenderer;
+
+impl ReportRenderer for CsvRenderer {
+    fn descriptor(&self) -> PluginDescriptor {
+        PluginDescriptor {
+            name: "csv-report".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: vec!["report".into(), "csv".into()],
+        }
+    }
+
+    fn format_name(&self) -> &str {
+        "csv"
+    }
+
+    fn render(&self, report: &Report) -> Result<RenderedReport, String> {
+        Ok(RenderedReport {
+            media_type: "text/csv; charset=utf-8".into(),
+            extension: "csv".into(),
+            body: render_csv_report(report),
+        })
+    }
+}
+
+pub(crate) fn register_builtin_renderers(registry: &mut PluginRegistry) {
+    registry.add_renderer(HtmlOverviewRenderer);
+    registry.add_renderer(JsonRenderer);
+    registry.add_renderer(CsvRenderer);
+}
+
+pub(crate) fn builtin_renderer_registry() -> PluginRegistry {
+    let mut registry = PluginRegistry::new();
+    register_builtin_renderers(&mut registry);
+    registry
+}
+
+pub(crate) fn render_report_stream(
+    registry: &PluginRegistry,
+    report: &Report,
+    format: &str,
+) -> anyhow::Result<String> {
+    let renderer = registry
+        .renderer(format)
+        .ok_or_else(|| anyhow!("no report renderer registered for format {format}"))?;
+    renderer
+        .render(report)
+        .map(|rendered| rendered.body)
+        .map_err(|error| anyhow!("render {format} report: {error}"))
 }
 
 pub(crate) fn bandwidth_table(rows: &[BandwidthRow]) -> String {
@@ -211,6 +405,14 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("ASN", table(&report.asns)),
             section("Organizations", table(&report.organizations))
         ),
+        "calendar" => format!(
+            "{}{}{}{}{}",
+            section("Months", table(&report.months)),
+            section("Days of month", table(&report.dates)),
+            section("Days of week", table(&report.weekdays)),
+            section("Hours", table(&report.hours)),
+            section("Daily traffic", daily_table(&report.daily))
+        ),
         "performance" => format!(
             "{}{}{}{}",
             section("Request times", table(&report.request_times)),
@@ -252,7 +454,7 @@ fn sidebar(active: &str, overview_link: &str, standalone: bool) -> String {
             }
         )
     };
-    let body = format!("<a class=\"brand\" href=\"{}\">Stats</a><p class=\"side-note\">AWStats-style traffic analysis</p><nav>{}{}{}{}{}{}</nav>", overview_link, link("overview", "Overview"), link("visitors", "Visitors"), link("pages", "Pages"), link("referrers", "Referrers"), link("geography", "Geography"), link("performance", "Performance"));
+    let body = format!("<a class=\"brand\" href=\"{}\">Stats</a><p class=\"side-note\">AWStats-style traffic analysis</p><nav>{}{}{}{}{}{}{}</nav>", overview_link, link("overview", "Overview"), link("visitors", "Visitors"), link("pages", "Pages"), link("referrers", "Referrers"), link("geography", "Geography"), link("performance", "Performance"), link("calendar", "Calendar"));
     if standalone {
         format!("<nav class=\"inline-nav\">{body}</nav>")
     } else {
@@ -338,6 +540,7 @@ fn page_html(
         "referrers" => "Referrers",
         "geography" => "Geography",
         "performance" => "Performance",
+        "calendar" => "Calendar",
         _ => "Overview",
     };
     let body = if page == "overview" {
@@ -394,7 +597,14 @@ pub(crate) fn write_html_site_with_periods(
         page_html(report, "overview", overview_link, false, periods),
     )
     .with_context(|| format!("write report {}", output.display()))?;
-    for page in ["visitors", "pages", "referrers", "geography", "performance"] {
+    for page in [
+        "visitors",
+        "pages",
+        "referrers",
+        "geography",
+        "performance",
+        "calendar",
+    ] {
         let path = directory.join(format!("{page}.html"));
         fs::write(&path, page_html(report, page, overview_link, false, &[]))
             .with_context(|| format!("write report page {}", path.display()))?;
@@ -429,5 +639,26 @@ mod tests {
         assert!(site_css().contains(".report-table"));
         assert!(site_js().contains("data-filterable"));
         assert!(site_js().contains("Filter this table"));
+    }
+
+    #[test]
+    fn csv_fields_are_escaped() {
+        assert_eq!(csv_field("plain"), "plain");
+        assert_eq!(csv_field("/a,b\"c"), "\"/a,b\"\"c\"");
+    }
+
+    #[test]
+    fn built_in_report_renderers_are_registered() {
+        let registry = builtin_renderer_registry();
+        let formats: Vec<_> = registry
+            .renderers()
+            .map(|renderer| renderer.format_name())
+            .collect();
+        assert_eq!(formats, ["html", "json", "csv"]);
+        assert_eq!(
+            registry.renderer("csv").unwrap().descriptor().name,
+            "csv-report"
+        );
+        assert!(registry.renderer("unknown").is_none());
     }
 }

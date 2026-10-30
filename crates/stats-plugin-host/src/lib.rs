@@ -1,9 +1,11 @@
 use libloading::Library;
 use stats_plugin_api::{
-    EventV1, HostApiV1, PluginApiV1, PluginInitV1, ABI_VERSION, CAPABILITY_ENRICH, INIT_SYMBOL,
+    EventV1, HostApiV1, PluginApiV1, PluginApiV2, PluginInitV1, PluginInitV2, RenderedReportV2,
+    ReportRequestV2, ABI_VERSION, ABI_VERSION_V2, CAPABILITY_ENRICH, CAPABILITY_REPORT,
+    INIT_SYMBOL, INIT_SYMBOL_V2,
 };
 use std::{
-    ffi::{CStr, NulError},
+    ffi::{CStr, CString, NulError},
     path::{Path, PathBuf},
     ptr::NonNull,
 };
@@ -29,6 +31,12 @@ pub enum PluginLoadError {
     NullMetadata { field: &'static str },
     #[error("plugin {name} enrichment callback failed with status {code}")]
     Callback { name: String, code: i32 },
+    #[error("plugin {name} does not provide a report renderer")]
+    NoReportRenderer { name: String },
+    #[error("plugin {name} report renderer failed with status {code}")]
+    ReportCallback { name: String, code: i32 },
+    #[error("plugin report renderer returned a null {field}")]
+    NullReportField { field: &'static str },
     #[error("plugin name or version is invalid UTF-8")]
     MetadataUtf8(#[from] std::str::Utf8Error),
     #[error("plugin metadata contains an interior NUL")]
@@ -37,9 +45,14 @@ pub enum PluginLoadError {
 
 pub struct LoadedPlugin {
     _library: Library,
-    api: NonNull<PluginApiV1>,
+    api: LoadedApi,
     name: String,
     version: String,
+}
+
+enum LoadedApi {
+    V1(NonNull<PluginApiV1>),
+    V2(NonNull<PluginApiV2>),
 }
 
 impl LoadedPlugin {
@@ -60,21 +73,40 @@ impl LoadedPlugin {
             path: path.clone(),
             source,
         })?;
-        let init: PluginInitV1 =
-            *library
-                .get(INIT_SYMBOL)
-                .map_err(|source| PluginLoadError::Symbol {
-                    path: path.clone(),
-                    source,
-                })?;
-        let api = NonNull::new(init(host as *const HostApiV1)).ok_or(PluginLoadError::NullApi)?;
-        let descriptor = (*api.as_ptr()).descriptor;
-        if descriptor.abi_version != ABI_VERSION {
-            return Err(PluginLoadError::Abi {
-                actual: descriptor.abi_version,
-                expected: ABI_VERSION,
-            });
-        }
+        let api = if let Ok(init) = library.get::<PluginInitV2>(INIT_SYMBOL_V2) {
+            let api =
+                NonNull::new((*init)(host as *const HostApiV1)).ok_or(PluginLoadError::NullApi)?;
+            let descriptor = (*api.as_ptr()).descriptor;
+            if descriptor.abi_version != ABI_VERSION_V2 {
+                return Err(PluginLoadError::Abi {
+                    actual: descriptor.abi_version,
+                    expected: ABI_VERSION_V2,
+                });
+            }
+            LoadedApi::V2(api)
+        } else {
+            let init: PluginInitV1 =
+                *library
+                    .get(INIT_SYMBOL)
+                    .map_err(|source| PluginLoadError::Symbol {
+                        path: path.clone(),
+                        source,
+                    })?;
+            let api =
+                NonNull::new(init(host as *const HostApiV1)).ok_or(PluginLoadError::NullApi)?;
+            let descriptor = (*api.as_ptr()).descriptor;
+            if descriptor.abi_version != ABI_VERSION {
+                return Err(PluginLoadError::Abi {
+                    actual: descriptor.abi_version,
+                    expected: ABI_VERSION,
+                });
+            }
+            LoadedApi::V1(api)
+        };
+        let descriptor = match api {
+            LoadedApi::V1(api) => (*api.as_ptr()).descriptor,
+            LoadedApi::V2(api) => (*api.as_ptr()).descriptor,
+        };
         let name_ptr = NonNull::new(descriptor.name as *mut _)
             .ok_or(PluginLoadError::NullMetadata { field: "name" })?;
         let version_ptr = NonNull::new(descriptor.version as *mut _)
@@ -96,33 +128,110 @@ impl LoadedPlugin {
         &self.version
     }
     pub fn capabilities(&self) -> u64 {
-        unsafe { self.api.as_ref().descriptor.capabilities }
+        unsafe {
+            match self.api {
+                LoadedApi::V1(api) => api.as_ref().descriptor.capabilities,
+                LoadedApi::V2(api) => api.as_ref().descriptor.capabilities,
+            }
+        }
     }
 
     pub fn enrich(&self, event: &mut EventV1) -> Result<(), PluginLoadError> {
-        let api = unsafe { self.api.as_ref() };
-        if api.descriptor.capabilities & CAPABILITY_ENRICH == 0 {
-            return Ok(());
-        }
-        if let Some(enrich) = api.enrich {
-            let code = unsafe { enrich(event as *mut EventV1) };
-            if code != 0 {
-                return Err(PluginLoadError::Callback {
-                    name: self.name.clone(),
-                    code,
-                });
+        unsafe {
+            let (capabilities, enrich) = match self.api {
+                LoadedApi::V1(api) => (api.as_ref().descriptor.capabilities, api.as_ref().enrich),
+                LoadedApi::V2(api) => (api.as_ref().descriptor.capabilities, api.as_ref().enrich),
+            };
+            if capabilities & CAPABILITY_ENRICH == 0 {
+                return Ok(());
+            }
+            if let Some(enrich) = enrich {
+                let code = enrich(event as *mut EventV1);
+                if code != 0 {
+                    return Err(PluginLoadError::Callback {
+                        name: self.name.clone(),
+                        code,
+                    });
+                }
             }
         }
         Ok(())
+    }
+
+    pub fn render_report(
+        &self,
+        format: &str,
+        report_json: &str,
+    ) -> Result<(String, String, String), PluginLoadError> {
+        let LoadedApi::V2(api) = self.api else {
+            return Err(PluginLoadError::NoReportRenderer {
+                name: self.name.clone(),
+            });
+        };
+        let api = unsafe { api.as_ref() };
+        if api.descriptor.capabilities & CAPABILITY_REPORT == 0 {
+            return Err(PluginLoadError::NoReportRenderer {
+                name: self.name.clone(),
+            });
+        }
+        let render = api
+            .render_report
+            .ok_or_else(|| PluginLoadError::NoReportRenderer {
+                name: self.name.clone(),
+            })?;
+        let release = api
+            .release_report
+            .ok_or_else(|| PluginLoadError::NoReportRenderer {
+                name: self.name.clone(),
+            })?;
+        let format = CString::new(format)?;
+        let report_json = CString::new(report_json)?;
+        let request = ReportRequestV2 {
+            format: format.as_ptr(),
+            report_json: report_json.as_ptr(),
+        };
+        let mut output = RenderedReportV2 {
+            media_type: std::ptr::null(),
+            extension: std::ptr::null(),
+            body: std::ptr::null(),
+        };
+        let code = unsafe { render(&request, &mut output) };
+        if code != 0 {
+            unsafe { release(&mut output) };
+            return Err(PluginLoadError::ReportCallback {
+                name: self.name.clone(),
+                code,
+            });
+        }
+        let result = unsafe {
+            let media_type = read_report_field(output.media_type, "media_type")?;
+            let extension = read_report_field(output.extension, "extension")?;
+            let body = read_report_field(output.body, "body")?;
+            Ok((media_type, extension, body))
+        };
+        unsafe { release(&mut output) };
+        result
     }
 }
 
 impl Drop for LoadedPlugin {
     fn drop(&mut self) {
         unsafe {
-            if let Some(shutdown) = self.api.as_ref().shutdown {
+            let shutdown = match self.api {
+                LoadedApi::V1(api) => api.as_ref().shutdown,
+                LoadedApi::V2(api) => api.as_ref().shutdown,
+            };
+            if let Some(shutdown) = shutdown {
                 shutdown();
             }
         }
     }
+}
+
+unsafe fn read_report_field(
+    value: *const std::os::raw::c_char,
+    field: &'static str,
+) -> Result<String, PluginLoadError> {
+    let value = NonNull::new(value as *mut _).ok_or(PluginLoadError::NullReportField { field })?;
+    Ok(CStr::from_ptr(value.as_ptr()).to_str()?.to_owned())
 }

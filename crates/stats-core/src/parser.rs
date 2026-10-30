@@ -62,7 +62,7 @@ enum TimeFormat {
 
 impl LogParser {
     pub fn new(format: impl Into<String>) -> Result<Self, regex::Error> {
-        let format = format.into();
+        let format = normalize_apache_format(&format.into());
         let regex = compile_format(&format)?;
         let json = format.trim().eq_ignore_ascii_case("json");
         let time_format = if format == "1" || format.contains("%time1") {
@@ -216,7 +216,9 @@ fn json_timestamp(value: &serde_json::Value) -> Option<DateTime<FixedOffset>> {
 
 fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffset>> {
     match format {
-        TimeFormat::Time1 => DateTime::parse_from_str(value, "%d/%b/%Y:%H:%M:%S %z").ok(),
+        TimeFormat::Time1 => {
+            DateTime::parse_from_str(value.trim_matches(['[', ']']), "%d/%b/%Y:%H:%M:%S %z").ok()
+        }
         TimeFormat::Time2 => naive_fixed(value, "%Y-%m-%d %H:%M:%S"),
         TimeFormat::Time3 => {
             let year = Utc::now().year();
@@ -248,12 +250,97 @@ fn none_dash(value: Option<String>) -> Option<String> {
 fn split_request(request: &str) -> (Option<String>, Option<String>) {
     let mut parts = request.split_whitespace();
     let method = parts.next().map(str::to_owned);
-    let url = parts.next().map(str::to_owned);
+    let url = parts.next().map(decode_unreserved_url);
     if method.as_deref().is_some_and(|m| m.contains('\\')) {
         (Some("UNKNOWN".into()), Some(request.to_owned()))
     } else {
         (method, url)
     }
+}
+
+fn decode_unreserved_url(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut decoded = String::with_capacity(value.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let high = (bytes[index + 1] as char).to_digit(16);
+            let low = (bytes[index + 2] as char).to_digit(16);
+            if let (Some(high), Some(low)) = (high, low) {
+                let byte = (high * 16 + low) as u8;
+                if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+                    decoded.push(byte as char);
+                    index += 3;
+                    continue;
+                }
+            }
+        }
+        let character = value[index..].chars().next().unwrap_or_default();
+        decoded.push(character);
+        index += character.len_utf8();
+    }
+    decoded
+}
+
+fn normalize_apache_format(format: &str) -> String {
+    if format.eq_ignore_ascii_case("json") || !format.contains('%') {
+        return format.to_owned();
+    }
+    let bytes = format.as_bytes();
+    let mut normalized = String::with_capacity(format.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'%' {
+            let character = format[index..].chars().next().unwrap_or_default();
+            normalized.push(character);
+            index += character.len_utf8();
+            continue;
+        }
+
+        let remaining = &format[index..];
+        let long_token =
+            if remaining.starts_with("%{User-Agent}i") || remaining.starts_with("%{user-agent}i") {
+                Some(("%{User-Agent}i", "%uaquot"))
+            } else if remaining.starts_with("%{Referer}i") || remaining.starts_with("%{referer}i") {
+                Some(("%{Referer}i", "%refererquot"))
+            } else if remaining.starts_with("%{remote}p") {
+                Some(("%{remote}p", "%other2"))
+            } else if remaining.starts_with("%{status}o") {
+                Some(("%{status}o", "%code"))
+            } else if remaining.starts_with("%>s") {
+                Some(("%>s", "%code"))
+            } else {
+                None
+            };
+        if let Some((apache, awstats)) = long_token {
+            normalized.push_str(awstats);
+            index += apache.len();
+            continue;
+        }
+
+        let replacement = match bytes.get(index + 1).copied() {
+            Some(b'v') => "%virtualname",
+            Some(b'a') | Some(b'h') => "%host",
+            Some(b'l') => "%logname",
+            Some(b'u') => "%user",
+            Some(b't') => "%time1bracket",
+            Some(b'r') => "%methodurl",
+            Some(b'O' | b'B' | b'b') => "%bytesd",
+            Some(b'p') => "%other1",
+            _ => "",
+        };
+        let is_boundary = bytes
+            .get(index + 2)
+            .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_');
+        if !replacement.is_empty() && is_boundary {
+            normalized.push_str(replacement);
+            index += 2;
+        } else {
+            normalized.push('%');
+            index += 1;
+        }
+    }
+    normalized
 }
 
 fn compile_format(format: &str) -> Result<Regex, regex::Error> {
@@ -273,6 +360,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
         );
     }
     let mut pattern = String::from("^");
+    let mut ignored_field = 0usize;
     let mut chars = format.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '%' {
@@ -283,25 +371,35 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
             {
                 token.push(chars.next().unwrap());
             }
-            let (name, expression) = match token.as_str() {
-                "host" => ("host", r"\S+"),
-                "logname" => ("logname", r"\S+"),
-                "user" => ("user", r"\S+"),
-                "time1" => ("time", r"[^]]+"),
-                "time2" => ("time", r"\S+\s+\S+"),
-                "time3" => ("time", r"\S+\s+\S+\s+\S+"),
-                "time4" => ("time", r"\d+"),
-                "time5" => ("time", r"\S+"),
-                "time6" => ("time", r"\S+\s+\S+"),
-                "methodurl" | "methodurlnoprot" => ("request", r#".*?"#),
-                "code" => ("status", r"\d{3}"),
-                "bytesd" => ("bytes", r"\d+"),
-                "referer" | "refererquot" => ("referer", r#".*?"#),
-                "ua" | "uaquot" | "uabracket" => ("ua", r#".*?"#),
-                "extra1" => ("extra1", r"\S+"),
-                "rqtime" => ("duration", r"\S+"),
-                "virtualname" => ("virtual_host", r"\S+"),
-                _ => ("other", r"\S+"),
+            let (name, expression): (String, &str) = match token.as_str() {
+                "host" => ("host".into(), r"\S+"),
+                "logname" => ("logname".into(), r"\S+"),
+                "user" => ("user".into(), r"\S+"),
+                "time1" => ("time".into(), r"[^]]+"),
+                "time1bracket" => ("time".into(), r"\[[^]]+\]"),
+                "time2" => ("time".into(), r"\S+\s+\S+"),
+                "time3" => ("time".into(), r"\S+\s+\S+\s+\S+"),
+                "time4" => ("time".into(), r"\d+"),
+                "time5" => ("time".into(), r"\S+"),
+                "time6" => ("time".into(), r"\S+\s+\S+"),
+                "methodurl" | "methodurlnoprot" => ("request".into(), r#".*?"#),
+                "code" => ("status".into(), r"\d{3}"),
+                "bytesd" => ("bytes".into(), r"\d+"),
+                "referer" | "refererquot" => ("referer".into(), r#".*?"#),
+                "ua" | "uaquot" | "uabracket" => ("ua".into(), r#".*?"#),
+                "extra1" => ("extra1".into(), r"\S+"),
+                "rqtime" => ("duration".into(), r"\S+"),
+                "virtualname" => ("virtual_host".into(), r"\S+"),
+                "other1" | "other2" => {
+                    let name = format!("ignored{ignored_field}");
+                    ignored_field += 1;
+                    (name, r"\S+")
+                }
+                _ => {
+                    let name = format!("ignored{ignored_field}");
+                    ignored_field += 1;
+                    (name, r"\S+")
+                }
             };
             pattern.push_str(&format!("(?P<{name}>{expression})"));
         } else if ch.is_whitespace() {
@@ -389,5 +487,35 @@ mod tests {
         assert_eq!(event.status, 200);
         assert_eq!(event.duration_seconds, Some(0.25));
         assert_eq!(event.virtual_host.as_deref(), Some("api.example.test"));
+    }
+
+    #[test]
+    fn parses_common_apache_log_format_tokens() {
+        let parser = LogParser::new(
+            r#"%v:%p [%a]:%{remote}p %l %u %t "%r" %>s %O "%{Referer}i" "%{User-Agent}i""#,
+        )
+        .unwrap();
+        let outcome = parser.parse(
+            r#"www.example.test:443 [192.0.2.10]:53144 - alice [27/Oct/2026:00:14:17 +0000] "GET /%66oo HTTP/1.1" 200 42 "https://search.example/?q=rust" "Mozilla/5.0""#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected Apache-format event");
+        };
+        assert_eq!(event.client_ip, "192.0.2.10");
+        assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
+        assert_eq!(event.url.as_deref(), Some("/foo"));
+        assert_eq!(event.status, 200);
+        assert_eq!(event.bytes, 42);
+    }
+
+    #[test]
+    fn decodes_only_unreserved_url_escapes() {
+        let parser = LogParser::new("%host [%time1] %methodurl %code %bytesd").unwrap();
+        let outcome = parser
+            .parse(r#"192.0.2.1 [27/Oct/2026:00:14:17 +0000] GET /%66oo/%2F/%7E HTTP/1.1 200 1"#);
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected event");
+        };
+        assert_eq!(event.url.as_deref(), Some("/foo/%2F/~"));
     }
 }
