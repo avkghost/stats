@@ -2795,13 +2795,14 @@ mod tests {
 
     #[test]
     fn referer_spam_rules_require_the_matching_plugin() {
-        let config = Config::parse(
-            "LogFile=access.log\nLogFormat=1\nRefererSpamRules=missing.rules\n",
-        )
-        .unwrap();
-        assert!(configured_referer_spam(Path::new("/tmp/stats.conf"), &config)
-            .unwrap()
-            .is_none());
+        let config =
+            Config::parse("LogFile=access.log\nLogFormat=1\nRefererSpamRules=missing.rules\n")
+                .unwrap();
+        assert!(
+            configured_referer_spam(Path::new("/tmp/stats.conf"), &config)
+                .unwrap()
+                .is_none()
+        );
 
         let enabled = Config::parse(
             "LogFile=access.log\nLogFormat=1\nRefererSpamRules=missing.rules\nLoadPlugin=detectrefererspam\n",
