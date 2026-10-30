@@ -689,7 +689,7 @@ fn visitor_label(client_ip: &str, client_hostname: Option<&str>) -> String {
         .map(str::trim)
         .filter(|hostname| !hostname.is_empty() && *hostname != "-")
     {
-        Some(hostname) => format!("{hostname} ({ip})"),
+        Some(hostname) => format!("{ip} ({hostname})"),
         None => ip.to_owned(),
     }
 }
@@ -1089,7 +1089,7 @@ mod tests {
     fn formats_visitors_with_hostname_and_ip_fallback() {
         assert_eq!(
             visitor_label("203.0.113.10", Some("crawler.example")),
-            "crawler.example (203.0.113.10)"
+            "203.0.113.10 (crawler.example)"
         );
         assert_eq!(visitor_label("203.0.113.10", None), "203.0.113.10");
         assert_eq!(visitor_label("203.0.113.10", Some("-")), "203.0.113.10");
