@@ -233,6 +233,17 @@ fn render_report(
             std::collections::HashMap::new()
         };
         report.apply_url_aliases(&aliases);
+        let cluster_info = if config
+            .plugins
+            .iter()
+            .any(|plugin| plugin.name == "clusterinfo")
+        {
+            let path = state.sandbox.check_existing(&config.cluster_info_path())?;
+            config.cluster_info_from_path(&path)?
+        } else {
+            std::collections::HashMap::new()
+        };
+        report.apply_cluster_info(&cluster_info);
     }
     let mut registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register HTTP renderers: {error}"))?;

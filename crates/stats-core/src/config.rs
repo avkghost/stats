@@ -334,6 +334,51 @@ impl Config {
         let fallback = self.data_dir.join("urlalias.txt");
         site_file.filter(|path| path.is_file()).unwrap_or(fallback)
     }
+
+    pub fn cluster_info(&self) -> Result<HashMap<String, String>, ConfigError> {
+        if !self
+            .plugins
+            .iter()
+            .any(|plugin| plugin.name == "clusterinfo")
+        {
+            return Ok(HashMap::new());
+        }
+        let path = self.cluster_info_path();
+        self.cluster_info_from_path(&path)
+    }
+
+    pub fn cluster_info_from_path(
+        &self,
+        path: &Path,
+    ) -> Result<HashMap<String, String>, ConfigError> {
+        let text = fs::read_to_string(path).map_err(|source| ConfigError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let mut info = HashMap::new();
+        for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+            if line.starts_with('#') {
+                continue;
+            }
+            let Some((key, value)) = line.split_once(char::is_whitespace) else {
+                continue;
+            };
+            let value = value.trim();
+            if !key.is_empty() && !value.is_empty() {
+                info.insert(key.to_owned(), value.to_owned());
+            }
+        }
+        Ok(info)
+    }
+
+    pub fn cluster_info_path(&self) -> PathBuf {
+        let site_file = (!self.site_domain.is_empty()).then(|| {
+            self.data_dir
+                .join(format!("clusterinfo.{}.txt", self.site_domain))
+        });
+        let fallback = self.data_dir.join("clusterinfo.txt");
+        site_file.filter(|path| path.is_file()).unwrap_or(fallback)
+    }
 }
 
 #[cfg(test)]
@@ -400,6 +445,27 @@ mod tests {
         assert_eq!(config.url_aliases().unwrap().get("/"), Some(&"Home".into()));
         config.plugins.clear();
         assert!(config.url_aliases().unwrap().is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn loads_cluster_info_only_when_plugin_is_enabled() {
+        let root = std::env::temp_dir().join(format!("stats-clusterinfo-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("clusterinfo.example.test.txt"),
+            "node-a\tPrimary node\n# ignored\nnode-b Secondary node\n",
+        )
+        .unwrap();
+        let config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nSiteDomain=example.test\nLoadPlugin=clusterinfo\n",
+        )
+        .unwrap()
+        .with_overrides(None, Some(root.clone()));
+        let info = config.cluster_info().unwrap();
+        assert_eq!(info.get("node-a"), Some(&"Primary node".into()));
+        assert_eq!(info.get("node-b"), Some(&"Secondary node".into()));
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -573,6 +573,7 @@ fn regenerate_default_report(
         .with_overrides(log_override, data_override);
     let mut report = build_report_for_data_dir(&config.data_dir, 50)?;
     report.apply_url_aliases(&config.url_aliases()?);
+    report.apply_cluster_info(&config.cluster_info()?);
     let output = config
         .data_dir
         .parent()
@@ -1311,6 +1312,7 @@ fn report(
         if let Some(config) = config.as_ref() {
             let config = config.clone().with_overrides(None, Some(data_dir.clone()));
             report.apply_url_aliases(&config.url_aliases()?);
+            report.apply_cluster_info(&config.cluster_info()?);
         }
     }
     let external_renderer_configured = config.as_ref().is_some_and(|config| {

@@ -212,4 +212,12 @@ impl Report {
             }
         }
     }
+
+    pub fn apply_cluster_info(&mut self, info: &HashMap<String, String>) {
+        for row in &mut self.virtual_hosts {
+            if let Some(label) = info.get(&row.key) {
+                row.key = format!("{} ({label})", row.key);
+            }
+        }
+    }
 }

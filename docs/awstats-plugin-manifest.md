@@ -7,7 +7,7 @@ observable behavior.
 
 | Plugin | Status | Required work |
 | --- | --- | --- |
-| `clusterinfo` | not started | Load `clusterinfo[.<SiteDomain>].txt` and add cluster information to the report |
+| `clusterinfo` | compatibility adapter | Load `clusterinfo[.<SiteDomain>].txt` and decorate display virtual-host labels |
 | `decodeutfkeys` | implemented | Preserve valid UTF-8 query-key decoding and invalid-value fallback |
 | `detectrefererspam` | compatibility adapter | Configured rule engine and report dimension |
 | `example` | not started | Define a safe Rust extension example and lifecycle documentation |
