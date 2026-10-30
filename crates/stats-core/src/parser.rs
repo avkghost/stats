@@ -115,8 +115,21 @@ impl LogParser {
             Some(v) => v,
             None => return ParseOutcome::Diagnostic(ParseError::Number("bytes".into())),
         };
-        let request = get("request").unwrap_or_default();
-        let (method, url) = split_request(&request);
+        let query = none_dash(get("query"));
+        let request = get("request").unwrap_or_else(|| {
+            let method = get("method").unwrap_or_default();
+            let mut url = get("url").unwrap_or_default();
+            if let Some(query) = &query {
+                url.push_str(query);
+            }
+            let protocol = get("protocol").unwrap_or_default();
+            format_request(&method, &url, &protocol)
+        });
+        let (request_method, request_url) = split_request(&request);
+        let method = get("method").or(request_method);
+        let url = get("url")
+            .map(|value| decode_unreserved_url(&format!("{value}{}", query.unwrap_or_default())))
+            .or(request_url);
         let duration_seconds = get("extra1")
             .and_then(|v| v.parse().ok())
             .or_else(|| get("duration").and_then(|v| v.parse().ok()));
@@ -247,6 +260,14 @@ fn none_dash(value: Option<String>) -> Option<String> {
     value.filter(|v| v != "-")
 }
 
+fn format_request(method: &str, url: &str, protocol: &str) -> String {
+    match (method.is_empty(), url.is_empty(), protocol.is_empty()) {
+        (false, false, false) => format!("{method} {url} {protocol}"),
+        (false, false, true) => format!("{method} {url}"),
+        _ => String::new(),
+    }
+}
+
 fn split_request(request: &str) -> (Option<String>, Option<String>) {
     let mut parts = request.split_whitespace();
     let method = parts.next().map(str::to_owned);
@@ -333,6 +354,10 @@ fn normalize_apache_format(format: &str) -> String {
             Some(b'u') => "%user",
             Some(b't') => "%time1bracket",
             Some(b'r') => "%methodurl",
+            Some(b'm') => "%method",
+            Some(b'U') => "%url",
+            Some(b'q') => "%query",
+            Some(b'H') => "%protocol",
             Some(b'O' | b'B' | b'b') => "%bytesd",
             Some(b'p') => "%other1",
             _ => "",
@@ -391,6 +416,10 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                 "time5" => ("time".into(), r"\S+"),
                 "time6" => ("time".into(), r"\S+\s+\S+"),
                 "methodurl" | "methodurlnoprot" => ("request".into(), r#".*?"#),
+                "method" => ("method".into(), r"\S+"),
+                "url" => ("url".into(), r"\S+"),
+                "query" => ("query".into(), r"\S*"),
+                "protocol" => ("protocol".into(), r"\S+"),
                 "code" => ("status".into(), r"\d{3}"),
                 "bytesd" => ("bytes".into(), r"\d+"),
                 "referer" | "refererquot" => ("referer".into(), r#".*?"#),
@@ -540,5 +569,20 @@ mod tests {
         assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
         assert_eq!(event.status, 200);
         assert_eq!(event.bytes, 12);
+    }
+
+    #[test]
+    fn parses_apache_split_request_tokens() {
+        let parser = LogParser::new("%a %t \"%m %U%q %H\" %>s %O").unwrap();
+        let outcome = parser.parse(
+            r#"192.0.2.21 [27/Oct/2026:00:14:17 +0000] "GET /search?q=rust HTTP/1.1" 200 128"#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected split-request event");
+        };
+        assert_eq!(event.method.as_deref(), Some("GET"));
+        assert_eq!(event.url.as_deref(), Some("/search?q=rust"));
+        assert_eq!(event.request, "GET /search?q=rust HTTP/1.1");
+        assert_eq!(event.bytes, 128);
     }
 }
