@@ -11,6 +11,7 @@ members = [
     "plugins/report-json",
     "plugins/report-csv",
     "plugins/report-html",
+    "plugins/example",
 ]
 resolver = "2"
 

@@ -10,7 +10,7 @@ observable behavior.
 | `clusterinfo` | compatibility adapter | Load `clusterinfo[.<SiteDomain>].txt` and decorate display virtual-host labels |
 | `decodeutfkeys` | implemented | Preserve valid UTF-8 query-key decoding and invalid-value fallback |
 | `detectrefererspam` | compatibility adapter | Configured rule engine and report dimension |
-| `example` | not started | Define a safe Rust extension example and lifecycle documentation |
+| `example` | implemented | Loadable no-op native extension template with documented lifecycle |
 | `export_to_csv` | compatibility adapter | External CSV renderer with equivalent export coverage |
 | `geoip` | compatibility adapter | Core MaxMind provider mapping |
 | `geoip2_city` | compatibility adapter | Core MaxMind City provider mapping |
