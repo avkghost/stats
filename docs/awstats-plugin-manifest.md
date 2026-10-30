@@ -24,7 +24,7 @@ observable behavior.
 | `hostinfo` | compatibility adapter | Opt-in bounded reverse-DNS enrichment |
 | `ipv6` | compatibility adapter | IPv6 parsing, filtering, and enrichment |
 | `rawlog` | compatibility adapter | Bounded redacted CLI, HTTP, and CGI exports |
-| `timehires` | not started | Millisecond timing hook and observable diagnostic contract |
+| `timehires` | compatibility adapter | Millisecond elapsed timing in update summaries |
 | `timezone` | compatibility adapter | Deterministic `TimeZone` configuration |
 | `tooltips` | compatibility adapter | Escaped HTML chart and table tooltips |
 | `urlalias` | compatibility adapter | Display-only URL alias transformation |

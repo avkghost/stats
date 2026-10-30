@@ -737,6 +737,11 @@ fn update_inner(
     let config = Config::from_path(&config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?
         .with_overrides(log_override, data_override);
+    let timehires_enabled = config
+        .plugins
+        .iter()
+        .any(|plugin| plugin.name == "timehires");
+    let update_started = std::time::Instant::now();
     let config_hash = hash_bytes(
         &fs::read(&config_path)
             .with_context(|| format!("read configuration {}", config_path.display()))?,
@@ -1003,9 +1008,20 @@ fn update_inner(
     store.set_meta("input_lines", &active_lines.to_string())?;
     if !quiet {
         if processed == 0 && events == 0 && diagnostics == 0 && filtered == 0 {
-            println!("unchanged input; no update required");
+            if timehires_enabled {
+                println!(
+                    "unchanged input; no update required (elapsed_ms={})",
+                    update_started.elapsed().as_millis()
+                );
+            } else {
+                println!("unchanged input; no update required");
+            }
         } else {
-            println!("processed={processed} events={events} diagnostics={diagnostics} filtered={filtered} database={}", db_path.display());
+            if timehires_enabled {
+                println!("processed={processed} events={events} diagnostics={diagnostics} filtered={filtered} elapsed_ms={} database={}", update_started.elapsed().as_millis(), db_path.display());
+            } else {
+                println!("processed={processed} events={events} diagnostics={diagnostics} filtered={filtered} database={}", db_path.display());
+            }
         }
     }
     Ok(())

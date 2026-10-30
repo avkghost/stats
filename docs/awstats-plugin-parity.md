@@ -24,7 +24,7 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
 | `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep endpoints disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and reverse-proxy bearer authentication are configured |
 | `hostinfo`, `ipv6` | Optional bounded reverse-DNS enrichment implemented behind `DNSLookup=1` | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
-| `timehires` | Internal diagnostic concern | Keep timing diagnostics outside report data |
+| `timehires` | Update summaries expose millisecond elapsed timing when enabled | Keep timing diagnostics outside report data |
 
 ## Implementation order
 
