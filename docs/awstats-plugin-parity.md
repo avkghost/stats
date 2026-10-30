@@ -34,6 +34,7 @@ entry is `not started`.
 
 1. Completed: report-decoration hooks for URL aliases affect only display labels; aggregation, checkpoints, and JSON keys remain canonical URLs.
 2. Completed: referer-spam classification is an explicit rule dimension and exclusions do not change traffic totals.
+   The rules file is only loaded when `LoadPlugin=detectrefererspam` is present.
 3. Completed: referrer query keys decode valid UTF-8 and preserve the original value when decoding fails.
 4. Completed: raw-log access is available only through bounded redacted CLI, authenticated HTTP, and authenticated CGI paths.
 

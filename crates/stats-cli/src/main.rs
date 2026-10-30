@@ -776,22 +776,7 @@ fn update_inner(
     } else {
         None
     };
-    let referer_spam = config
-        .referer_spam_rules
-        .as_ref()
-        .map(|path| {
-            let path = if path.is_absolute() {
-                path.clone()
-            } else {
-                config_path
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .join(path)
-            };
-            RefererSpamMatcher::from_path(path)
-        })
-        .transpose()
-        .context("load referer-spam rules")?;
+    let referer_spam = configured_referer_spam(&config_path, &config)?;
     let previous_config_hash = store.meta("config_hash")?;
     if previous_config_hash
         .as_deref()
@@ -1307,6 +1292,35 @@ fn plugin_paths(
         }
     }
     (country, city, asn)
+}
+
+fn configured_referer_spam(
+    config_path: &Path,
+    config: &Config,
+) -> anyhow::Result<Option<RefererSpamMatcher>> {
+    if !config
+        .plugins
+        .iter()
+        .any(|plugin| plugin.name == "detectrefererspam")
+    {
+        return Ok(None);
+    }
+    config
+        .referer_spam_rules
+        .as_ref()
+        .map(|path| {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                config_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join(path)
+            };
+            RefererSpamMatcher::from_path(path)
+        })
+        .transpose()
+        .context("load referer-spam rules")
 }
 
 fn report(
@@ -2294,15 +2308,15 @@ fn health(config_path: PathBuf, data_override: Option<PathBuf>, json: bool) -> a
 #[cfg(test)]
 mod tests {
     use super::{
-        backup, build_report_for_data_dir, build_report_for_period, database_paths, health,
-        migrate, plugin_paths, retention, StoreRouter,
+        backup, build_report_for_data_dir, build_report_for_period, configured_referer_spam,
+        database_paths, health, migrate, plugin_paths, retention, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
-    use stats_core::{AccessEvent, DatabasePeriod, GeoInfo, StatsStore};
+    use stats_core::{AccessEvent, Config, DatabasePeriod, GeoInfo, StatsStore};
     use std::fs;
     use std::io::Write;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn rejects_raw_log_output_that_is_the_source() {
@@ -2740,5 +2754,22 @@ mod tests {
                 Some(PathBuf::from("asn.mmdb"))
             )
         );
+    }
+
+    #[test]
+    fn referer_spam_rules_require_the_matching_plugin() {
+        let config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nRefererSpamRules=missing.rules\n",
+        )
+        .unwrap();
+        assert!(configured_referer_spam(Path::new("/tmp/stats.conf"), &config)
+            .unwrap()
+            .is_none());
+
+        let enabled = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nRefererSpamRules=missing.rules\nLoadPlugin=detectrefererspam\n",
+        )
+        .unwrap();
+        assert!(configured_referer_spam(Path::new("/tmp/stats.conf"), &enabled).is_err());
     }
 }
