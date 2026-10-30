@@ -112,3 +112,38 @@ impl NativeReportRenderer {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::report_plugin_format;
+    use stats_core::PluginConfig;
+
+    #[test]
+    fn recognizes_external_awstats_report_formats() {
+        for (name, expected) in [
+            ("report_html", "html"),
+            ("report_json", "json"),
+            ("report_csv", "csv"),
+            ("renderer_html", "html"),
+            ("renderer_json", "json"),
+            ("renderer_csv", "csv"),
+        ] {
+            let plugin = PluginConfig {
+                name: name.into(),
+                args: vec!["libreport.so".into()],
+            };
+            assert_eq!(report_plugin_format(&plugin).as_deref(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn ignores_non_report_plugins_and_unknown_formats() {
+        for name in ["html", "report_xml", "geoip2_city", "tooltips"] {
+            let plugin = PluginConfig {
+                name: name.into(),
+                args: Vec::new(),
+            };
+            assert_eq!(report_plugin_format(&plugin), None);
+        }
+    }
+}

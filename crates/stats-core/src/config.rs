@@ -395,6 +395,50 @@ mod tests {
     }
 
     #[test]
+    fn accepts_the_complete_awstats_plugin_inventory() {
+        let names = [
+            "clusterinfo",
+            "decodeutfkeys",
+            "detectrefererspam",
+            "example",
+            "export_to_csv",
+            "geoip",
+            "geoip2_city",
+            "geoip2_country",
+            "geoip2_region",
+            "geoipfree",
+            "geoip6",
+            "graphapplet",
+            "graphgooglechartapi",
+            "hashfiles",
+            "hostinfo",
+            "ipv6",
+            "rawlog",
+            "timehires",
+            "timezone",
+            "tooltips",
+            "urlalias",
+            "userinfo",
+        ];
+        let mut text = String::from("LogFile=access.log\nLogFormat=1\n");
+        text.push_str(
+            &names
+                .iter()
+                .map(|name| format!("LoadPlugin={name}\n"))
+                .collect::<String>(),
+        );
+        let config = Config::parse(&text).unwrap();
+        assert_eq!(
+            config
+                .plugins
+                .iter()
+                .map(|plugin| plugin.name.as_str())
+                .collect::<Vec<_>>(),
+            names
+        );
+    }
+
+    #[test]
     fn accepts_awstats_presentation_directives_without_warnings() {
         let config = Config::parse(
             "LogFile=access.log\nLogFormat=\"%host %time1\"\nUseFramesWhenCGI=1\nMenuWidth=150\n",

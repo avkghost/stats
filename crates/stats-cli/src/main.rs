@@ -1298,14 +1298,12 @@ fn plugin_paths(
     let mut city = None;
     let mut asn = None;
     for plugin in plugins {
-        if plugin.name.contains("country") {
-            country = plugin.args.last().map(PathBuf::from);
-        }
-        if plugin.name.contains("city") {
-            city = plugin.args.last().map(PathBuf::from);
-        }
-        if plugin.name.contains("asn") {
-            asn = plugin.args.last().map(PathBuf::from);
+        let path = plugin.args.last().map(PathBuf::from);
+        match plugin.name.as_str() {
+            "geoip2_country" | "geoip" | "geoipfree" | "geoip6" => country = path,
+            "geoip2_city" | "geoip2_region" => city = path,
+            name if name.contains("asn") => asn = path,
+            _ => {}
         }
     }
     (country, city, asn)
@@ -2297,13 +2295,14 @@ fn health(config_path: PathBuf, data_override: Option<PathBuf>, json: bool) -> a
 mod tests {
     use super::{
         backup, build_report_for_data_dir, build_report_for_period, database_paths, health,
-        migrate, retention, StoreRouter,
+        migrate, plugin_paths, retention, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
     use stats_core::{AccessEvent, DatabasePeriod, GeoInfo, StatsStore};
     use std::fs;
     use std::io::Write;
+    use std::path::PathBuf;
 
     #[test]
     fn rejects_raw_log_output_that_is_the_source() {
@@ -2710,5 +2709,36 @@ mod tests {
         StatsStore::open(data_dir.join("stats.sqlite3")).unwrap();
         health(config_path, None, false).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn maps_awstats_geoip_plugin_aliases_to_database_roles() {
+        let plugins = [
+            stats_core::PluginConfig {
+                name: "geoip2_region".into(),
+                args: vec!["region.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip2_city".into(),
+                args: vec!["city.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip6".into(),
+                args: vec!["country.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip2_asn".into(),
+                args: vec!["asn.mmdb".into()],
+            },
+        ];
+
+        assert_eq!(
+            plugin_paths(&plugins),
+            (
+                Some(PathBuf::from("country.mmdb")),
+                Some(PathBuf::from("city.mmdb")),
+                Some(PathBuf::from("asn.mmdb"))
+            )
+        );
     }
 }
