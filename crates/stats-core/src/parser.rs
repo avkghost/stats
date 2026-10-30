@@ -410,7 +410,7 @@ fn normalize_apache_format(format: &str) -> String {
             if let Some(close) = remaining.find('}') {
                 let token_length = close + 2;
                 let suffix = remaining.as_bytes().get(close + 1).copied();
-                if matches!(suffix, Some(b'i' | b'o' | b'e' | b't')) {
+                if matches!(suffix, Some(b'i' | b'o' | b'e' | b't' | b'P' | b'C' | b'n')) {
                     let quoted = normalized.ends_with('"')
                         && format[index + token_length..].starts_with('"');
                     normalized.push_str(if quoted { "%otherquot" } else { "%other1" });
@@ -782,6 +782,15 @@ mod tests {
         let parser = LogParser::new(r#"%a %t %{msec_frac}t %{usec_frac}t "%r" %>s %O"#).unwrap();
         let outcome = parser.parse(
             r#"192.0.2.29 [27/Oct/2026:00:14:17 +0000] .123 123456 "GET / HTTP/1.1" 200 64"#,
+        );
+        assert!(matches!(outcome, ParseOutcome::Event(_)));
+    }
+
+    #[test]
+    fn accepts_apache_auxiliary_modifier_fields() {
+        let parser = LogParser::new(r#"%a %t "%r" %>s %O %{pid}P %{cookie}C %{note}n"#).unwrap();
+        let outcome = parser.parse(
+            r#"192.0.2.30 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 64 1234 "sid=abc" note-value"#,
         );
         assert!(matches!(outcome, ParseOutcome::Event(_)));
     }
