@@ -6,7 +6,7 @@ use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use stats_core::{
     accepts, is_page, Config, DatabasePeriod, GeoIpEnricher, InputCheckpoint, LogParser,
-    MaxMindGeoIp, ParseOutcome, PluginRegistry, ReportService, StatsStore,
+    MaxMindGeoIp, ParseOutcome, PluginRegistry, RefererSpamMatcher, ReportService, StatsStore,
 };
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
@@ -686,6 +686,22 @@ fn update_inner(
     } else {
         None
     };
+    let referer_spam = config
+        .referer_spam_rules
+        .as_ref()
+        .map(|path| {
+            let path = if path.is_absolute() {
+                path.clone()
+            } else {
+                config_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join(path)
+            };
+            RefererSpamMatcher::from_path(path)
+        })
+        .transpose()
+        .context("load referer-spam rules")?;
     let previous_config_hash = store.meta("config_hash")?;
     if previous_config_hash
         .as_deref()
@@ -844,6 +860,9 @@ fn update_inner(
                             store
                                 .diagnostic(&format!("reverse DNS enrichment failed: {error:#}"))?;
                         }
+                    }
+                    if let Some(matcher) = referer_spam.as_ref() {
+                        matcher.apply(&mut event);
                     }
                     if let Err(error) = enrich_with_native_plugins(&mut event, &mut native_plugins)
                     {
@@ -2285,6 +2304,8 @@ mod tests {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
                 client_hostname: None,
+                referer_spam: None,
+                referer_excluded: false,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
@@ -2406,6 +2427,8 @@ mod tests {
         let old_event = AccessEvent {
             client_ip: "198.51.100.5".into(),
             client_hostname: None,
+            referer_spam: None,
+            referer_excluded: false,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
@@ -2467,6 +2490,8 @@ mod tests {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
                 client_hostname: None,
+                referer_spam: None,
+                referer_excluded: false,
                 identity: None,
                 user: None,
                 timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),

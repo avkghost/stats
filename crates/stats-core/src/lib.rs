@@ -3,6 +3,7 @@ mod filter;
 mod geoip;
 mod parser;
 mod plugin;
+mod referer_spam;
 mod report;
 mod store;
 
@@ -14,5 +15,6 @@ pub use plugin::{
     Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport,
     RendererRegistryError, ReportRenderer,
 };
+pub use referer_spam::{RefererSpamMatcher, RefererSpamRuleError};
 pub use report::{BandwidthRow, DailyRow, Report, ReportMetadata, ReportRow, ReportService};
 pub use store::{DailyAggregate, InputCheckpoint, StatsStore, StoreError, UpdateStats};

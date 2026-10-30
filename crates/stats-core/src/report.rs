@@ -28,6 +28,7 @@ pub struct Report {
     pub user_agents: Vec<ReportRow>,
     pub referers: Vec<ReportRow>,
     pub referrer_domains: Vec<ReportRow>,
+    pub referer_spam: Vec<ReportRow>,
     pub file_types: Vec<ReportRow>,
     pub browsers: Vec<ReportRow>,
     pub oses: Vec<ReportRow>,
@@ -163,6 +164,12 @@ impl<'a> ReportService<'a> {
             user_agents: rows("user_agents")?,
             referers: rows("referers")?,
             referrer_domains: rows("referrer_domains")?,
+            referer_spam: self
+                .store
+                .top_if_exists("referer_spam", limit)?
+                .into_iter()
+                .map(|(key, hits)| ReportRow { key, hits })
+                .collect(),
             file_types: rows("file_types")?,
             browsers: rows("browsers")?,
             oses: rows("oses")?,

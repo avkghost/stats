@@ -8,6 +8,8 @@ const MAX_LINE_LENGTH: usize = 1024 * 1024;
 pub struct AccessEvent {
     pub client_ip: String,
     pub client_hostname: Option<String>,
+    pub referer_spam: Option<String>,
+    pub referer_excluded: bool,
     pub identity: Option<String>,
     pub user: Option<String>,
     pub timestamp: DateTime<FixedOffset>,
@@ -165,6 +167,8 @@ impl LogParser {
         ParseOutcome::Event(Box::new(AccessEvent {
             client_ip: get("host").unwrap_or_default(),
             client_hostname: None,
+            referer_spam: None,
+            referer_excluded: false,
             identity: none_dash(get("logname")),
             user: none_dash(get("user")),
             timestamp,
@@ -232,6 +236,8 @@ impl LogParser {
         ParseOutcome::Event(Box::new(AccessEvent {
             client_ip: string(&["host", "client_ip", "remote_addr", "ip"]).unwrap_or_default(),
             client_hostname: None,
+            referer_spam: None,
+            referer_excluded: false,
             identity: none_dash(string(&["logname", "identity"])),
             user: none_dash(string(&["user", "authenticated_user"])),
             timestamp,

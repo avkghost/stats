@@ -75,6 +75,7 @@ pub struct Config {
     pub dns_lookup: bool,
     pub dns_lookup_timeout_ms: u64,
     pub dns_lookup_cache_size: usize,
+    pub referer_spam_rules: Option<PathBuf>,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
     pub url_referrer_with_query: bool,
@@ -149,6 +150,7 @@ impl Config {
             "DNSLookup",
             "DNSLookupTimeoutMs",
             "DNSLookupCacheSize",
+            "RefererSpamRules",
             "SkipHosts",
             "OnlyHosts",
             "SkipFiles",
@@ -247,6 +249,10 @@ impl Config {
                     message: "DNSLookupCacheSize must be an integer".into(),
                 })?
                 .unwrap_or(10_000),
+            referer_spam_rules: values
+                .get("RefererSpamRules")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from),
             plugins,
             filters: FilterConfig {
                 allowed_virtual_hosts,

@@ -197,9 +197,10 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Exit pages", table(&report.exit_pages))
         ),
         "referrers" => format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             section("Referrers", table(&report.referers)),
             section("Referring sites", table(&report.referrer_domains)),
+            section("Referer spam", table(&report.referer_spam)),
             section("Search engines", table(&report.search_engines)),
             section("Keyphrases", table(&report.keyphrases))
         ),

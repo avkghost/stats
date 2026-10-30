@@ -61,6 +61,8 @@ mod tests {
         AccessEvent {
             client_ip: "192.0.2.1".into(),
             client_hostname: None,
+            referer_spam: None,
+            referer_excluded: false,
             identity: None,
             user: None,
             timestamp: DateTime::parse_from_rfc3339("2026-10-28T00:00:00+00:00").unwrap(),
