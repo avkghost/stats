@@ -12,7 +12,7 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `timezone` | Core `TimeZone` configuration | Keep deterministic and checkpoint-aware |
 | `userinfo` | Core authenticated-user aggregation | Keep in the shared report model |
 | `clusterinfo`, `hashfiles` | Not applicable to the current SQLite/checkpoint design | Revisit only if distributed ingestion is introduced |
-| `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; tooltips remain presentation-only | Add tooltips only when a concrete AWStats report compatibility case requires them |
+| `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; native HTML chart-row tooltips implemented | Keep tooltips presentation-only and offline |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
 | `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep endpoints disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and reverse-proxy bearer authentication are configured |

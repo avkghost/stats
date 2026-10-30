@@ -73,8 +73,8 @@ pub(crate) fn daily_chart(rows: &[DailyRow]) -> String {
             .checked_div(maximum)
             .unwrap_or(0);
         out.push_str(&format!(
-            "<div class=\"aw-chart-row\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
-            html_escape(&row.date), width, row.hits
+            "<div class=\"aw-chart-row\" title=\"{}: {} hits\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
+            html_escape(&row.date), row.hits, html_escape(&row.date), width, row.hits
         ));
     }
     out.push_str("</div>");
@@ -95,8 +95,8 @@ pub(crate) fn row_chart(rows: &[ReportRow], label: &str) -> String {
             .checked_div(maximum)
             .unwrap_or(0);
         out.push_str(&format!(
-            "<div class=\"aw-chart-row\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
-            html_escape(&row.key), width, row.hits
+            "<div class=\"aw-chart-row\" title=\"{}: {} hits\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
+            html_escape(&row.key), row.hits, html_escape(&row.key), width, row.hits
         ));
     }
     out.push_str("</div>");
@@ -115,8 +115,8 @@ pub(crate) fn bandwidth_chart(rows: &[BandwidthRow]) -> String {
             .checked_div(maximum)
             .unwrap_or(0);
         out.push_str(&format!(
-            "<div class=\"aw-chart-row\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
-            html_escape(&row.key), width, row.bytes
+            "<div class=\"aw-chart-row\" title=\"{}: {} bytes\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
+            html_escape(&row.key), row.bytes, html_escape(&row.key), width, row.bytes
         ));
     }
     out.push_str("</div>");
@@ -448,6 +448,14 @@ mod tests {
             hits: 2,
         }])
         .contains("&lt;unsafe&gt;"));
+        assert!(row_chart(
+            &[ReportRow {
+                key: "<unsafe>".into(),
+                hits: 2,
+            }],
+            "Requests"
+        )
+        .contains("title=\"&lt;unsafe&gt;: 2 hits\""));
     }
 
     #[test]
