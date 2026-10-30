@@ -9,12 +9,12 @@ data. The following deployment variants define the intended security boundary.
 Only aggregated reports are available. This is the default for CLI, CGI, TUI,
 and HTTP output and is suitable for public dashboards.
 
-## Variant B: local administrator export
+## Variant B: local administrator export (implemented)
 
-The CLI may export selected source lines for a local operator. The command must
-require an explicit `--raw-log` flag, read only configured log sources, and
-write to a caller-selected file with restrictive permissions. It should never
-be exposed through the HTTP server.
+`stats-cli raw-log` exports a bounded slice of the configured source for a local
+operator. It always redacts client IPs, query strings, and token-shaped values,
+and output files are created with restrictive permissions. It is not exposed
+through the HTTP server.
 
 ## Variant C: authenticated diagnostic endpoint
 

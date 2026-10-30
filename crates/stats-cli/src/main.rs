@@ -3,6 +3,7 @@ use bzip2::read::BzDecoder;
 use clap::{Parser, Subcommand, ValueEnum};
 use flate2::read::GzDecoder;
 use notify::{RecursiveMode, Watcher};
+use regex::Regex;
 use serde::Serialize;
 use stats_core::{
     accepts, is_page, Config, DatabasePeriod, GeoIpEnricher, InputCheckpoint, LogParser,
@@ -20,7 +21,7 @@ use std::{
     ffi::CString,
     fs,
     hash::{Hash, Hasher},
-    io::{BufRead, BufReader, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command as ProcessCommand, Stdio},
     sync::mpsc,
@@ -99,6 +100,19 @@ enum Command {
         /// Restrict a partitioned report to one period such as 2026-10 or 2026.
         #[arg(long)]
         period: Option<String>,
+    },
+    /// Export a bounded, redacted slice of a configured log for local administration.
+    RawLog {
+        #[arg(short, long)]
+        config: PathBuf,
+        #[arg(long)]
+        log_file: Option<PathBuf>,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        #[arg(long, default_value_t = 0)]
+        start: usize,
+        #[arg(long, default_value_t = 1000)]
+        lines: usize,
     },
     /// Update SQLite statistics for the control and all period databases.
     Optimize {
@@ -237,6 +251,16 @@ async fn main() -> anyhow::Result<()> {
             log_dir,
             data_dir,
         } => tokio::task::spawn_blocking(move || backfill(config, log_dir, data_dir)).await??,
+        Command::RawLog {
+            config,
+            log_file,
+            output,
+            start,
+            lines,
+        } => {
+            tokio::task::spawn_blocking(move || raw_log(config, log_file, output, start, lines))
+                .await??
+        }
         Command::Report {
             config,
             data_dir,
@@ -382,6 +406,62 @@ async fn watch(
         }
     }
     Ok(())
+}
+
+fn raw_log(
+    config_path: PathBuf,
+    log_override: Option<PathBuf>,
+    output: Option<PathBuf>,
+    start: usize,
+    lines: usize,
+) -> anyhow::Result<()> {
+    let config = Config::from_path(&config_path)
+        .with_context(|| format!("load configuration {}", config_path.display()))?;
+    let path = log_override.unwrap_or(config.log_file);
+    let raw = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
+    let decoded = decode_log_bytes(&path, &raw)?;
+    let text = String::from_utf8_lossy(&decoded);
+    let query = Regex::new(r#"\?[^\s\"]*"#)?;
+    let secret =
+        Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
+    let mut writer: Box<dyn Write> = match output {
+        Some(path) => {
+            let mut options = fs::OpenOptions::new();
+            options.create(true).truncate(true).write(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let file = options
+                .open(&path)
+                .with_context(|| format!("open redacted raw-log output {}", path.display()))?;
+            Box::new(file)
+        }
+        None => Box::new(io::stdout().lock()),
+    };
+    for line in text.lines().skip(start).take(lines) {
+        let redacted = redact_raw_line(line, &query, &secret);
+        writeln!(writer, "{redacted}")?;
+    }
+    Ok(())
+}
+
+fn redact_raw_line(line: &str, query: &Regex, secret: &Regex) -> String {
+    let mut fields = line.splitn(2, char::is_whitespace);
+    let first = fields.next().unwrap_or_default();
+    let rest = fields.next().unwrap_or_default();
+    let client = first
+        .parse::<std::net::IpAddr>()
+        .map(|_| "<client>".to_owned())
+        .unwrap_or_else(|_| first.to_owned());
+    let body = query.replace_all(rest, "?<redacted>");
+    let body = secret.replace_all(&body, "$1=<redacted>");
+    if rest.is_empty() {
+        client
+    } else {
+        format!("{client} {body}")
+    }
 }
 
 fn update(
@@ -2197,11 +2277,30 @@ mod tests {
         backup, build_report_for_data_dir, build_report_for_period, database_paths, health,
         migrate, retention, StoreRouter,
     };
-    use super::{decode_log_bytes, discover_backfill_files};
+    use super::{decode_log_bytes, discover_backfill_files, redact_raw_line};
     use chrono::DateTime;
+    use regex::Regex;
     use stats_core::{AccessEvent, DatabasePeriod, GeoInfo, StatsStore};
     use std::fs;
     use std::io::Write;
+
+    #[test]
+    fn redacts_raw_log_identity_queries_and_secrets() {
+        let query = Regex::new(r#"\?[^\s\"]*"#).unwrap();
+        let secret = Regex::new(
+            r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#,
+        )
+        .unwrap();
+        let redacted = redact_raw_line(
+            "203.0.113.10 - - \"GET /?token=abc HTTP/1.1\" 200",
+            &query,
+            &secret,
+        );
+        assert!(redacted.starts_with("<client> "));
+        assert!(!redacted.contains("203.0.113.10"));
+        assert!(!redacted.contains("abc"));
+        assert!(redacted.contains("?<redacted>"));
+    }
 
     fn compressed(extension: &str, input: &[u8]) -> Vec<u8> {
         let mut output = Vec::new();
