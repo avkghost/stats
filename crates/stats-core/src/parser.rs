@@ -360,6 +360,8 @@ fn normalize_apache_format(format: &str) -> String {
             Some(("%{s}v", "%virtualname"))
         } else if remaining.starts_with("%{local}p") {
             Some(("%{local}p", "%other1"))
+        } else if remaining.starts_with("%{sec}t") || remaining.starts_with("%{SEC}t") {
+            Some(("%{sec}t", "%time4"))
         } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
             Some(("%{ms}T", "%duration_ms"))
         } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
@@ -694,6 +696,17 @@ mod tests {
         };
         assert_eq!(event.client_ip, "192.0.2.25");
         assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
+        assert_eq!(event.status, 200);
+    }
+
+    #[test]
+    fn parses_apache_epoch_timestamp_token() {
+        let parser = LogParser::new(r#"%a %{sec}t "%r" %>s %O"#).unwrap();
+        let outcome = parser.parse(r#"192.0.2.26 1793059200 "GET / HTTP/1.1" 200 64"#);
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected epoch timestamp event");
+        };
+        assert_eq!(event.timestamp.timestamp(), 1793059200);
         assert_eq!(event.status, 200);
     }
 }
