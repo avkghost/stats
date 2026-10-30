@@ -15,7 +15,7 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; tooltips remain presentation-only | Add tooltips only when a concrete AWStats report compatibility case requires them |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
-| `rawlog` | Local CLI export implemented with bounded redacted output; HTTP/CGI remain disabled | Keep network raw-log exposure disabled until authentication and redaction policy are integrated |
+| `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep endpoints disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and reverse-proxy bearer authentication are configured |
 | `hostinfo`, `ipv6` | Optional bounded reverse-DNS enrichment implemented behind `DNSLookup=1` | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
 | `timehires` | Internal diagnostic concern | Keep timing diagnostics outside report data |
 
@@ -24,7 +24,7 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 1. Completed: report-decoration hooks for URL aliases affect only display labels; aggregation, checkpoints, and JSON keys remain canonical URLs.
 2. Completed: referer-spam classification is an explicit rule dimension and exclusions do not change traffic totals.
 3. Completed: referrer query keys decode valid UTF-8 and preserve the original value when decoding fails.
-4. Re-evaluate raw-log access only after CGI/HTTP authorization and redaction are defined.
+4. Completed: raw-log access is available only through bounded redacted CLI, authenticated HTTP, and authenticated CGI paths.
 
 The current external renderer ABI is intentionally format-oriented. These features should be implemented as shared report transformations or narrowly scoped plugin capabilities, not by embedding Perl-compatible plugin execution in the Rust process.
 
