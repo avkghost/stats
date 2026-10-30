@@ -1140,7 +1140,8 @@ fn report(
     period: Option<String>,
 ) -> anyhow::Result<()> {
     let report = build_report_for_period(&data_dir, limit, period.as_deref())?;
-    let renderer_registry = builtin_renderer_registry();
+    let renderer_registry = builtin_renderer_registry()
+        .map_err(|error| anyhow::anyhow!("register built-in report renderers: {error}"))?;
     if matches!(format, ReportFormat::Html) && output != Path::new("-") {
         if period.is_some() {
             write_html_site(&report, &output)?;

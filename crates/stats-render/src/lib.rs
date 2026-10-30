@@ -3,24 +3,21 @@ mod html;
 mod json;
 
 use anyhow::anyhow;
-use stats_core::{PluginRegistry, Report};
+use stats_core::{PluginRegistry, RendererRegistryError, Report};
 
-pub fn register_builtin_renderers(registry: &mut PluginRegistry) {
-    registry
-        .add_renderer(html::HtmlOverviewRenderer)
-        .expect("built-in HTML renderer format must be unique");
-    registry
-        .add_renderer(json::JsonRenderer)
-        .expect("built-in JSON renderer format must be unique");
-    registry
-        .add_renderer(csv::CsvRenderer)
-        .expect("built-in CSV renderer format must be unique");
+pub fn register_builtin_renderers(
+    registry: &mut PluginRegistry,
+) -> Result<(), RendererRegistryError> {
+    registry.add_renderer(html::HtmlOverviewRenderer)?;
+    registry.add_renderer(json::JsonRenderer)?;
+    registry.add_renderer(csv::CsvRenderer)?;
+    Ok(())
 }
 
-pub fn builtin_renderer_registry() -> PluginRegistry {
+pub fn builtin_renderer_registry() -> Result<PluginRegistry, RendererRegistryError> {
     let mut registry = PluginRegistry::new();
-    register_builtin_renderers(&mut registry);
-    registry
+    register_builtin_renderers(&mut registry)?;
+    Ok(registry)
 }
 
 pub fn render_report_stream(
@@ -45,7 +42,7 @@ mod tests {
 
     #[test]
     fn built_in_report_renderers_are_registered() {
-        let registry = builtin_renderer_registry();
+        let registry = builtin_renderer_registry().unwrap();
         let formats: Vec<_> = registry
             .renderers()
             .map(|renderer| renderer.format_name())
