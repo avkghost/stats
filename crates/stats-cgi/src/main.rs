@@ -131,14 +131,17 @@ fn render_cgi(
     let mut report = ReportService::new(&store).build(request.limit)?;
     if let Some(config) = config {
         let config = config.clone().with_overrides(None, Some(data_dir.clone()));
-        if config
+        let aliases = if config
             .plugins
             .iter()
             .any(|plugin| plugin.name == "urlalias")
         {
-            sandbox.check_existing(&config.url_alias_path())?;
-        }
-        report.apply_url_aliases(&config.url_aliases()?);
+            let path = sandbox.check_existing(&config.url_alias_path())?;
+            config.url_aliases_from_path(&path)?
+        } else {
+            std::collections::HashMap::new()
+        };
+        report.apply_url_aliases(&aliases);
     }
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;

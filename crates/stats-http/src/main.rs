@@ -156,14 +156,17 @@ fn render_report(
         .with_context(|| format!("open HTTP database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(limit)?;
     if let ("html", Some(config)) = (output, state.config.as_ref()) {
-        if config
+        let aliases = if config
             .plugins
             .iter()
             .any(|plugin| plugin.name == "urlalias")
         {
-            state.sandbox.check_existing(&config.url_alias_path())?;
-        }
-        report.apply_url_aliases(&config.url_aliases()?);
+            let path = state.sandbox.check_existing(&config.url_alias_path())?;
+            config.url_aliases_from_path(&path)?
+        } else {
+            std::collections::HashMap::new()
+        };
+        report.apply_url_aliases(&aliases);
     }
     let mut registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register HTTP renderers: {error}"))?;

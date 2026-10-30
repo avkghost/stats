@@ -290,8 +290,15 @@ impl Config {
             return Ok(HashMap::new());
         }
         let path = self.url_alias_path();
-        let text = fs::read_to_string(&path).map_err(|source| ConfigError::Read {
-            path: path.clone(),
+        self.url_aliases_from_path(&path)
+    }
+
+    pub fn url_aliases_from_path(
+        &self,
+        path: &Path,
+    ) -> Result<HashMap<String, String>, ConfigError> {
+        let text = fs::read_to_string(path).map_err(|source| ConfigError::Read {
+            path: path.to_path_buf(),
             source,
         })?;
         let mut aliases = HashMap::new();
