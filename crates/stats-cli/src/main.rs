@@ -423,6 +423,17 @@ fn raw_log(
     let raw = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
     let decoded = decode_log_bytes(&path, &raw)?;
     let text = String::from_utf8_lossy(&decoded);
+    if let Some(output_path) = output.as_ref() {
+        if fs::symlink_metadata(output_path)
+            .map(|metadata| metadata.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            bail!("refusing symlink raw-log output {}", output_path.display());
+        }
+        if output_path.exists() && fs::canonicalize(output_path)? == fs::canonicalize(&path)? {
+            bail!("raw-log output must differ from source {}", path.display());
+        }
+    }
     let query = Regex::new(r#"\?[^\s\"]*"#)?;
     let secret =
         Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
