@@ -8,8 +8,12 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+bzip2.workspace = true
 clap.workspace = true
+flate2.workspace = true
+regex.workspace = true
 serde.workspace = true
 stats-core = { version = "0.1.1", path = "../stats-core" }
 stats-render = { version = "0.1.1", path = "../stats-render" }
 tokio.workspace = true
+xz2.workspace = true

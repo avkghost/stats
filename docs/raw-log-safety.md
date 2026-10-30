@@ -16,12 +16,14 @@ operator. It always redacts client IPs, query strings, and token-shaped values,
 and output files are created with restrictive permissions. It is not exposed
 through the HTTP server.
 
-## Variant C: authenticated diagnostic endpoint
+## Variant C: authenticated diagnostic endpoint (HTTP implemented)
 
-An HTTP endpoint may be enabled only behind deployment authentication and an
-allowlist of source files. It must support bounded time/line ranges, emit an
-audit event, and return redacted records by default. The endpoint should be
-disabled when no authentication integration is configured.
+The standalone HTTP frontend exposes `/raw-log` only when the non-empty
+`STATS_RAW_LOG_AUTH_TOKEN` environment variable is configured. A reverse proxy
+should inject `Authorization: Bearer <token>` after authenticating the operator.
+The endpoint supports bounded line ranges, reads only a configured log beneath
+`DirData`, and returns redacted records. It remains disabled when the token is
+absent. CGI raw-log output remains disabled.
 
 ## Variant D: redacted plugin output
 

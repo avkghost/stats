@@ -1,19 +1,23 @@
 use anyhow::{Context, Result};
 use axum::{
     extract::{Path as RequestPath, Query, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
 use clap::Parser;
+use regex::Regex;
 use serde::Deserialize;
 use stats_core::{Config, FileSandbox, ReportService, StatsStore};
 use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_report,
     render_report_section_stream, render_report_stream,
 };
+use std::{fs, io::Read};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+
+const MAX_RAW_LOG_LINES: usize = 10_000;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -34,6 +38,7 @@ struct AppState {
     data_dir: PathBuf,
     config: Option<Config>,
     sandbox: FileSandbox,
+    raw_log_token: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -69,11 +74,15 @@ async fn main() -> Result<()> {
         data_dir,
         config,
         sandbox,
+        raw_log_token: std::env::var("STATS_RAW_LOG_AUTH_TOKEN")
+            .ok()
+            .filter(|token| !token.is_empty()),
     });
     let app = Router::new()
         .route("/", get(report))
         .route("/report", get(report))
         .route("/section/{section}", get(section))
+        .route("/raw-log", get(raw_log))
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .with_state(state);
@@ -130,6 +139,96 @@ async fn section(
         Ok(response) => response,
         Err(error) => error_response(error),
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawLogQuery {
+    start: Option<usize>,
+    lines: Option<usize>,
+}
+
+async fn raw_log(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<RawLogQuery>,
+) -> Response {
+    let Some(expected) = state.raw_log_token.as_deref() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let authorized = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .is_some_and(|value| value == expected);
+    if !authorized {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(header::WWW_AUTHENTICATE, "Bearer")],
+            "raw-log authorization required\n",
+        )
+            .into_response();
+    }
+    let start = query.start.unwrap_or(0);
+    let lines = query.lines.unwrap_or(100).clamp(1, MAX_RAW_LOG_LINES);
+    let result = tokio::task::spawn_blocking(move || render_raw_log(&state, start, lines)).await;
+    match result {
+        Ok(Ok(body)) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            body,
+        )
+            .into_response(),
+        Ok(Err(error)) => error_response(error),
+        Err(error) => error_response(anyhow::anyhow!("raw-log worker failed: {error}")),
+    }
+}
+
+fn render_raw_log(state: &AppState, start: usize, lines: usize) -> Result<String> {
+    let config = state
+        .config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("raw-log requires --config"))?;
+    let path = state.sandbox.check_existing(&config.log_file)?;
+    let raw = fs::read(&path).with_context(|| format!("read raw log {}", path.display()))?;
+    let decoded = decode_log_bytes(&path, &raw)?;
+    let text = String::from_utf8_lossy(&decoded);
+    let query = Regex::new(r#"\?[^\s\"]*"#)?;
+    let secret =
+        Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
+    let header_secret = Regex::new(r#"(?i)(authorization|cookie)\s*:\s*[^\s\"]+"#)?;
+    let output = text
+        .lines()
+        .skip(start)
+        .take(lines)
+        .map(|line| redact_raw_line(line, &query, &secret, &header_secret))
+        .collect::<Vec<_>>();
+    if output.is_empty() {
+        Ok(String::new())
+    } else {
+        Ok(output.join("\n") + "\n")
+    }
+}
+
+fn redact_raw_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex) -> String {
+    let mut fields = line.splitn(2, char::is_whitespace);
+    let _client = fields.next().unwrap_or_default();
+    let rest = fields.next().unwrap_or_default();
+    let body = query.replace_all(rest, "?<redacted>");
+    let body = header_secret.replace_all(&body, "$1: <redacted>");
+    let body = secret.replace_all(&body, "$1=<redacted>");
+    format!("<client>{body}")
+}
+
+fn decode_log_bytes(path: &std::path::Path, raw: &[u8]) -> Result<Vec<u8>> {
+    let extension = path.extension().and_then(|value| value.to_str());
+    let mut decoded = Vec::new();
+    match extension {
+        Some("gz") => flate2::read::GzDecoder::new(raw).read_to_end(&mut decoded)?,
+        Some("bz2") => bzip2::read::BzDecoder::new(raw).read_to_end(&mut decoded)?,
+        Some("xz") => xz2::read::XzDecoder::new(raw).read_to_end(&mut decoded)?,
+        _ => return Ok(raw.to_vec()),
+    };
+    Ok(decoded)
 }
 
 async fn render_in_blocking(
