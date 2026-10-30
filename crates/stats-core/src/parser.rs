@@ -378,10 +378,16 @@ fn normalize_apache_format(format: &str) -> String {
             Some(("%{local}p", "%other1"))
         } else if remaining.starts_with("%{sec}t") || remaining.starts_with("%{SEC}t") {
             Some(("%{sec}t", "%time4"))
+        } else if remaining.starts_with("%{begin:sec}t") || remaining.starts_with("%{end:sec}t") {
+            Some(("%{begin:sec}t", "%time4"))
         } else if remaining.starts_with("%{msec}t") || remaining.starts_with("%{MSEC}t") {
             Some(("%{msec}t", "%time7"))
+        } else if remaining.starts_with("%{begin:msec}t") || remaining.starts_with("%{end:msec}t") {
+            Some(("%{begin:msec}t", "%time7"))
         } else if remaining.starts_with("%{usec}t") || remaining.starts_with("%{USEC}t") {
             Some(("%{usec}t", "%time8"))
+        } else if remaining.starts_with("%{begin:usec}t") || remaining.starts_with("%{end:usec}t") {
+            Some(("%{begin:usec}t", "%time8"))
         } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
             Some(("%{ms}T", "%duration_ms"))
         } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
@@ -749,5 +755,25 @@ mod tests {
             panic!("expected microsecond epoch event");
         };
         assert_eq!(event.timestamp.timestamp_subsec_micros(), 123_456);
+    }
+
+    #[test]
+    fn parses_apache_begin_end_epoch_timestamp_aliases() {
+        let parser = LogParser::new(r#"%a %{begin:msec}t "%r" %>s %O"#).unwrap();
+        let ParseOutcome::Event(event) =
+            parser.parse(r#"192.0.2.28 1793059200456 "GET / HTTP/1.1" 200 64"#)
+        else {
+            panic!("expected begin timestamp event");
+        };
+        assert_eq!(event.timestamp.timestamp(), 1793059200);
+        assert_eq!(event.timestamp.timestamp_subsec_millis(), 456);
+
+        let parser = LogParser::new(r#"%a %{end:sec}t "%r" %>s %O"#).unwrap();
+        let ParseOutcome::Event(event) =
+            parser.parse(r#"192.0.2.28 1793059200 "GET / HTTP/1.1" 200 64"#)
+        else {
+            panic!("expected end timestamp event");
+        };
+        assert_eq!(event.timestamp.timestamp(), 1793059200);
     }
 }
