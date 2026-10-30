@@ -16,7 +16,7 @@ cargo package --workspace --allow-dirty --no-verify
 bundle_dir="${staging_dir}/${bundle_name}"
 install -d "${bundle_dir}/deploy"
 install -m 0755 target/release/stats-cli "${bundle_dir}/stats"
-install -m 0755 deploy/install.sh deploy/package-release.sh "${bundle_dir}/deploy/"
+install -m 0755 deploy/install.sh "${bundle_dir}/deploy/"
 install -m 0644 deploy/stats-update.service deploy/stats-update.timer deploy/stats-logrotate "${bundle_dir}/deploy/"
 install -m 0644 README.md CHANGELOG.md "${bundle_dir}/"
 
