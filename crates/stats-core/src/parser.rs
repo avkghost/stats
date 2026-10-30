@@ -352,6 +352,14 @@ fn normalize_apache_format(format: &str) -> String {
             || remaining.starts_with("%{x-forwarded-for}i")
         {
             Some(("%{X-Forwarded-For}i", "%host"))
+        } else if remaining.starts_with("%{c}a") {
+            Some(("%{c}a", "%host"))
+        } else if remaining.starts_with("%{canonical}v") {
+            Some(("%{canonical}v", "%virtualname"))
+        } else if remaining.starts_with("%{s}v") {
+            Some(("%{s}v", "%virtualname"))
+        } else if remaining.starts_with("%{local}p") {
+            Some(("%{local}p", "%other1"))
         } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
             Some(("%{ms}T", "%duration_ms"))
         } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
@@ -673,5 +681,19 @@ mod tests {
             event.timestamp.format("%Y-%m-%d %H:%M").to_string(),
             "2026-10-28 01:30"
         );
+    }
+
+    #[test]
+    fn parses_apache_connection_and_vhost_aliases() {
+        let parser = LogParser::new(r#"%{c}a %t "%{canonical}v" "%r" %>s %O %{local}p"#).unwrap();
+        let outcome = parser.parse(
+            r#"192.0.2.25 [27/Oct/2026:00:14:17 +0000] "www.example.test" "GET / HTTP/1.1" 200 64 443"#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected alias event");
+        };
+        assert_eq!(event.client_ip, "192.0.2.25");
+        assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
+        assert_eq!(event.status, 200);
     }
 }
