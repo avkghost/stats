@@ -423,17 +423,7 @@ fn raw_log(
     let raw = fs::read(&path).with_context(|| format!("read {}", path.display()))?;
     let decoded = decode_log_bytes(&path, &raw)?;
     let text = String::from_utf8_lossy(&decoded);
-    if let Some(output_path) = output.as_ref() {
-        if fs::symlink_metadata(output_path)
-            .map(|metadata| metadata.file_type().is_symlink())
-            .unwrap_or(false)
-        {
-            bail!("refusing symlink raw-log output {}", output_path.display());
-        }
-        if output_path.exists() && fs::canonicalize(output_path)? == fs::canonicalize(&path)? {
-            bail!("raw-log output must differ from source {}", path.display());
-        }
-    }
+    validate_raw_log_output(&path, output.as_deref())?;
     let query = Regex::new(r#"\?[^\s\"]*"#)?;
     let secret =
         Regex::new(r#"(?i)(authorization|cookie|token|secret|password|api[_-]?key)=([^&\s\"]+)"#)?;
@@ -463,6 +453,25 @@ fn raw_log(
     for line in text.lines().skip(start).take(lines.min(MAX_RAW_LOG_LINES)) {
         let redacted = redact_raw_line(line, &query, &secret, &header_secret);
         writeln!(writer, "{redacted}")?;
+    }
+    Ok(())
+}
+
+fn validate_raw_log_output(source: &Path, output: Option<&Path>) -> anyhow::Result<()> {
+    let Some(output) = output else {
+        return Ok(());
+    };
+    if fs::symlink_metadata(output)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        bail!("refusing symlink raw-log output {}", output.display());
+    }
+    if output.exists() && fs::canonicalize(output)? == fs::canonicalize(source)? {
+        bail!(
+            "raw-log output must differ from source {}",
+            source.display()
+        );
     }
     Ok(())
 }
@@ -2298,7 +2307,9 @@ mod tests {
         backup, build_report_for_data_dir, build_report_for_period, database_paths, health,
         migrate, retention, StoreRouter,
     };
-    use super::{decode_log_bytes, discover_backfill_files, redact_raw_line};
+    use super::{
+        decode_log_bytes, discover_backfill_files, redact_raw_line, validate_raw_log_output,
+    };
     use chrono::DateTime;
     use regex::Regex;
     use stats_core::{AccessEvent, DatabasePeriod, GeoInfo, StatsStore};
@@ -2324,6 +2335,51 @@ mod tests {
         assert!(!redacted.contains("abc"));
         assert!(!redacted.contains("session-secret"));
         assert!(redacted.contains("?<redacted>"));
+    }
+
+    #[test]
+    fn rejects_raw_log_output_that_is_the_source() {
+        let directory = std::env::temp_dir().join(format!(
+            "stats-raw-log-safety-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("access.log");
+        fs::write(&source, b"log").unwrap();
+
+        let error = validate_raw_log_output(&source, Some(&source)).unwrap_err();
+        assert!(error.to_string().contains("must differ from source"));
+
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_raw_log_output_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let directory = std::env::temp_dir().join(format!(
+            "stats-raw-log-symlink-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("access.log");
+        let output = directory.join("export.log");
+        fs::write(&source, b"log").unwrap();
+        symlink(&source, &output).unwrap();
+
+        let error = validate_raw_log_output(&source, Some(&output)).unwrap_err();
+        assert!(error.to_string().contains("refusing symlink"));
+
+        fs::remove_dir_all(directory).unwrap();
     }
 
     fn compressed(extension: &str, input: &[u8]) -> Vec<u8> {
