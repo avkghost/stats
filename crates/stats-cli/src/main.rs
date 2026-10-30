@@ -534,7 +534,9 @@ impl StoreRouter {
                 .with_context(|| format!("open period database {}", db_path.display()))?;
             self.partitions.insert(key.to_owned(), store);
         }
-        Ok(self.partitions.get_mut(key).expect("period store inserted"))
+        self.partitions
+            .get_mut(key)
+            .ok_or_else(|| anyhow::anyhow!("period store {} was not inserted", key))
     }
 
     fn record(&mut self, event: &stats_core::AccessEvent, page: bool) -> anyhow::Result<()> {
@@ -718,19 +720,24 @@ fn update_inner(
             && legacy_path
                 .as_deref()
                 .is_none_or(|previous| previous == path_string)
-            && legacy_hash.is_some()
-            && legacy_size.is_some_and(|size| raw.len() as u64 >= size)
-            && legacy_lines.is_some_and(|count| lines.len() as u64 >= count)
-            && hash_bytes(&raw[..legacy_size.unwrap() as usize]) == legacy_hash.as_deref().unwrap()
         {
-            checkpoint = Some(InputCheckpoint {
-                identity: identity.clone(),
-                path: path.display().to_string(),
-                config_hash: config_hash.clone(),
-                content_hash: legacy_hash.clone().unwrap(),
-                size: legacy_size.unwrap(),
-                lines: legacy_lines.unwrap(),
-            });
+            if let (Some(size), Some(content_hash), Some(line_count)) =
+                (legacy_size, legacy_hash.as_deref(), legacy_lines)
+            {
+                let prefix_matches = raw.len() as u64 >= size
+                    && lines.len() as u64 >= line_count
+                    && hash_bytes(&raw[..size as usize]) == content_hash;
+                if prefix_matches {
+                    checkpoint = Some(InputCheckpoint {
+                        identity: identity.clone(),
+                        path: path.display().to_string(),
+                        config_hash: config_hash.clone(),
+                        content_hash: content_hash.to_owned(),
+                        size,
+                        lines: line_count,
+                    });
+                }
+            }
         }
         let skip_lines = checkpoint
             .as_ref()

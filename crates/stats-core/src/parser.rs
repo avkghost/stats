@@ -1,6 +1,5 @@
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
-use std::sync::OnceLock;
 use thiserror::Error;
 
 const MAX_LINE_LENGTH: usize = 1024 * 1024;
@@ -452,9 +451,10 @@ fn normalize_apache_format(format: &str) -> String {
 }
 
 fn compile_format(format: &str) -> Result<Regex, regex::Error> {
-    static STANDARD: OnceLock<Regex> = OnceLock::new();
     if format == "1" {
-        return Ok(STANDARD.get_or_init(|| Regex::new(r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"$"#).unwrap()).clone());
+        return Regex::new(
+            r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"$"#,
+        );
     }
     if format == "4" {
         return Regex::new(
