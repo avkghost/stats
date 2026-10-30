@@ -728,6 +728,22 @@ impl StoreRouter {
     }
 }
 
+fn record_event_batch(
+    events: &mut Vec<stats_core::AccessEvent>,
+    reverse_dns: Option<&mut reverse_dns::ReverseDnsEnricher>,
+    store: &mut StoreRouter,
+    filters: &stats_core::FilterConfig,
+) -> anyhow::Result<u64> {
+    if let Some(enricher) = reverse_dns {
+        let _ = enricher.enrich_batch(events);
+    }
+    let count = events.len() as u64;
+    for event in events.drain(..) {
+        store.record(&event, is_page(&event, filters))?;
+    }
+    Ok(count)
+}
+
 fn update_inner(
     config_path: PathBuf,
     log_override: Option<PathBuf>,
@@ -919,6 +935,7 @@ fn update_inner(
             ))?;
             diagnostics += 1;
         }
+        let mut event_batch = Vec::with_capacity(256);
         for line in lines.iter().skip(skip_lines) {
             processed += 1;
             match parser.parse(line) {
@@ -931,16 +948,10 @@ fn update_inner(
                         continue;
                     }
                     registry.enrich(&mut event);
-                    if let Some(enricher) = reverse_dns.as_mut() {
-                        if let Err(error) = enricher.enrich(&mut event) {
-                            store
-                                .diagnostic(&format!("reverse DNS enrichment failed: {error:#}"))?;
-                        }
-                    }
-                    if let Some(matcher) = referer_spam.as_ref() {
+                    if let Some(matcher) = scanner.as_ref() {
                         matcher.apply(&mut event);
                     }
-                    if let Some(matcher) = scanner.as_ref() {
+                    if let Some(matcher) = referer_spam.as_ref() {
                         matcher.apply(&mut event);
                     }
                     if let Err(error) = enrich_with_native_plugins(&mut event, &mut native_plugins)
@@ -952,8 +963,15 @@ fn update_inner(
                             referer.split('?').next().unwrap_or_default().to_owned()
                         });
                     }
-                    store.record(&event, is_page(&event, &config.filters))?;
-                    events += 1;
+                    event_batch.push(*event);
+                    if event_batch.len() >= 256 {
+                        events += record_event_batch(
+                            &mut event_batch,
+                            reverse_dns.as_mut(),
+                            &mut store,
+                            &config.filters,
+                        )?;
+                    }
                 }
                 ParseOutcome::Diagnostic(error) => {
                     store.diagnostic(&format!("{}: {error}", path.display()))?;
@@ -961,6 +979,12 @@ fn update_inner(
                 }
             }
         }
+        events += record_event_batch(
+            &mut event_batch,
+            reverse_dns.as_mut(),
+            &mut store,
+            &config.filters,
+        )?;
         store.set_input_checkpoint(&current_checkpoint)?;
     }
     let Some((active_path, active_metadata, active_raw, active_hash, active_lines)) =
@@ -2859,19 +2883,23 @@ mod tests {
                 .as_nanos()
         ));
         fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("scanner.rules"), "path_prefix\t/.env\tenv-probe\n").unwrap();
-        let config_path = root.join("stats.conf");
-        let config = Config::parse(
-            "LogFile=access.log\nLogFormat=1\nScannerRules=scanner.rules\n",
+        fs::write(
+            root.join("scanner.rules"),
+            "path_prefix\t/.env\tenv-probe\n",
         )
         .unwrap();
+        let config_path = root.join("stats.conf");
+        let config =
+            Config::parse("LogFile=access.log\nLogFormat=1\nScannerRules=scanner.rules\n").unwrap();
         assert!(configured_scanner(&config_path, &config).unwrap().is_none());
 
         let enabled = Config::parse(
             "LogFile=access.log\nLogFormat=1\nScannerRules=scanner.rules\nLoadPlugin=detectscanner\n",
         )
         .unwrap();
-        assert!(configured_scanner(&config_path, &enabled).unwrap().is_some());
+        assert!(configured_scanner(&config_path, &enabled)
+            .unwrap()
+            .is_some());
         fs::remove_dir_all(root).unwrap();
     }
 }

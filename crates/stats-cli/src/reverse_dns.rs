@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use hickory_resolver::TokioResolver;
 use stats_core::AccessEvent;
 use std::{collections::HashMap, net::IpAddr, time::Duration};
-use tokio::{runtime::Handle, sync::Semaphore, time::timeout};
+use tokio::{runtime::Handle, sync::Semaphore, task::JoinSet, time::timeout};
 
 pub struct ReverseDnsEnricher {
     resolver: TokioResolver,
@@ -20,21 +20,28 @@ impl ReverseDnsEnricher {
         Ok(Self {
             resolver,
             cache: HashMap::new(),
-            semaphore: std::sync::Arc::new(Semaphore::new(1)),
+            semaphore: std::sync::Arc::new(Semaphore::new(32)),
             timeout: Duration::from_millis(timeout_ms.max(1)),
             cache_size: cache_size.max(1),
         })
     }
 
-    pub fn enrich(&mut self, event: &mut AccessEvent) -> Result<()> {
-        let Ok(ip) = event.client_ip.parse::<IpAddr>() else {
-            return Ok(());
-        };
-        if !is_public_address(ip) {
-            return Ok(());
+    pub fn enrich_batch(&mut self, events: &mut [AccessEvent]) -> Result<()> {
+        let mut pending = HashMap::<IpAddr, Vec<usize>>::new();
+        for (index, event) in events.iter_mut().enumerate() {
+            let Ok(ip) = event.client_ip.parse::<IpAddr>() else {
+                continue;
+            };
+            if !is_public_address(ip) {
+                continue;
+            }
+            if let Some(hostname) = self.cache.get(&ip) {
+                event.client_hostname.clone_from(hostname);
+            } else {
+                pending.entry(ip).or_default().push(index);
+            }
         }
-        if let Some(hostname) = self.cache.get(&ip) {
-            event.client_hostname.clone_from(hostname);
+        if pending.is_empty() {
             return Ok(());
         }
 
@@ -42,30 +49,52 @@ impl ReverseDnsEnricher {
         let semaphore = self.semaphore.clone();
         let timeout_duration = self.timeout;
         let handle = Handle::try_current().context("reverse DNS requires a Tokio runtime")?;
-        let hostname = tokio::task::block_in_place(|| {
+        let addresses = pending.keys().copied().collect::<Vec<_>>();
+        let resolved = tokio::task::block_in_place(|| {
             handle.block_on(async move {
-                let _permit = semaphore
-                    .acquire_owned()
-                    .await
-                    .context("acquire reverse DNS permit")?;
-                let lookup = timeout(timeout_duration, resolver.reverse_lookup(ip))
-                    .await
-                    .context("reverse DNS lookup timed out")??;
-                Ok::<_, anyhow::Error>(
-                    lookup
-                        .iter()
-                        .next()
-                        .map(|name| name.to_utf8().trim_end_matches('.').to_owned()),
-                )
+                let mut tasks = JoinSet::new();
+                for ip in addresses {
+                    let resolver = resolver.clone();
+                    let semaphore = semaphore.clone();
+                    tasks.spawn(async move {
+                        let hostname = async {
+                            let _permit = semaphore.acquire_owned().await.ok()?;
+                            let lookup = timeout(timeout_duration, resolver.reverse_lookup(ip))
+                                .await
+                                .ok()
+                                .and_then(Result::ok)?;
+                            lookup
+                                .iter()
+                                .next()
+                                .map(|name| name.to_utf8().trim_end_matches('.').to_owned())
+                        }
+                        .await;
+                        (ip, hostname)
+                    });
+                }
+                let mut resolved = HashMap::new();
+                while let Some(result) = tasks.join_next().await {
+                    if let Ok((ip, hostname)) = result {
+                        resolved.insert(ip, hostname);
+                    }
+                }
+                resolved
             })
-        })?;
-        if self.cache.len() >= self.cache_size {
-            if let Some(key) = self.cache.keys().next().copied() {
-                self.cache.remove(&key);
+        });
+
+        for (ip, hostname) in resolved {
+            if self.cache.len() >= self.cache_size {
+                if let Some(key) = self.cache.keys().next().copied() {
+                    self.cache.remove(&key);
+                }
+            }
+            self.cache.insert(ip, hostname.clone());
+            if let Some(indices) = pending.get(&ip) {
+                for &index in indices {
+                    events[index].client_hostname.clone_from(&hostname);
+                }
             }
         }
-        event.client_hostname.clone_from(&hostname);
-        self.cache.insert(ip, hostname);
         Ok(())
     }
 }
