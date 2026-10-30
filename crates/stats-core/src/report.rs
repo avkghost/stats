@@ -214,10 +214,41 @@ impl Report {
     }
 
     pub fn apply_cluster_info(&mut self, info: &HashMap<String, String>) {
-        for row in &mut self.virtual_hosts {
-            if let Some(label) = info.get(&row.key) {
-                row.key = format!("{} ({label})", row.key);
-            }
+        apply_cluster_info_rows(&mut self.virtual_hosts, info);
+    }
+}
+
+fn apply_cluster_info_rows(rows: &mut [ReportRow], info: &HashMap<String, String>) {
+    for row in rows {
+        if let Some(label) = info.get(&row.key) {
+            row.key = format!("{} ({label})", row.key);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_cluster_info_rows, ReportRow};
+    use std::collections::HashMap;
+
+    #[test]
+    fn cluster_info_decorates_matching_rows_only() {
+        let mut rows = vec![
+            ReportRow {
+                key: "node-a".into(),
+                hits: 3,
+            },
+            ReportRow {
+                key: "node-b".into(),
+                hits: 2,
+            },
+        ];
+        let info = HashMap::from([(String::from("node-a"), String::from("Primary"))]);
+
+        apply_cluster_info_rows(&mut rows, &info);
+
+        assert_eq!(rows[0].key, "node-a (Primary)");
+        assert_eq!(rows[1].key, "node-b");
+        assert_eq!(rows[0].hits, 3);
     }
 }
