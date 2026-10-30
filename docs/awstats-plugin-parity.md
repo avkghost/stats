@@ -12,7 +12,7 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `timezone` | Core `TimeZone` configuration | Keep deterministic and checkpoint-aware |
 | `userinfo` | Core authenticated-user aggregation | Keep in the shared report model |
 | `clusterinfo`, `hashfiles` | Not applicable to the current SQLite/checkpoint design | Revisit only if distributed ingestion is introduced |
-| `tooltips`, `decodeutfkeys` | Presentation/encoding concerns | Add only when a concrete AWStats report compatibility case requires them |
+| `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; tooltips remain presentation-only | Add tooltips only when a concrete AWStats report compatibility case requires them |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
 | `rawlog` | Local CLI export implemented with bounded redacted output; HTTP/CGI remain disabled | Keep network raw-log exposure disabled until authentication and redaction policy are integrated |
@@ -21,9 +21,9 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 
 ## Implementation order
 
-1. Add report-decoration hooks for URL aliases. The alias file must affect only display labels; aggregation, checkpoints, and JSON keys remain canonical URLs.
-2. Add referer-spam classification as an explicit filter dimension. It must be observable in diagnostics and never silently discard records unless configured.
-3. Add optional UTF-8 key normalization for referrer-derived values, preserving the original value when decoding fails.
+1. Completed: report-decoration hooks for URL aliases affect only display labels; aggregation, checkpoints, and JSON keys remain canonical URLs.
+2. Completed: referer-spam classification is an explicit rule dimension and exclusions do not change traffic totals.
+3. Completed: referrer query keys decode valid UTF-8 and preserve the original value when decoding fails.
 4. Re-evaluate raw-log access only after CGI/HTTP authorization and redaction are defined.
 
 The current external renderer ABI is intentionally format-oriented. These features should be implemented as shared report transformations or narrowly scoped plugin capabilities, not by embedding Perl-compatible plugin execution in the Rust process.

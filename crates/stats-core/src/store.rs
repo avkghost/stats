@@ -736,17 +736,17 @@ fn decode_query(value: &str) -> String {
                     decoded.push((high * 16 + low) as u8);
                     index += 3;
                 } else {
-                    decoded.push(bytes[index]);
-                    index += 1;
+                    return value.to_owned();
                 }
             }
+            b'%' => return value.to_owned(),
             byte => {
                 decoded.push(byte);
                 index += 1;
             }
         }
     }
-    String::from_utf8_lossy(&decoded).into_owned()
+    String::from_utf8(decoded).unwrap_or_else(|_| value.to_owned())
 }
 
 fn browser(user_agent: &str) -> &'static str {
@@ -821,6 +821,13 @@ mod tests {
     use super::*;
     use crate::GeoInfo;
     use chrono::DateTime;
+
+    #[test]
+    fn decodes_valid_utf8_query_keys_and_preserves_invalid_values() {
+        assert_eq!(decode_query("caf%C3%A9+search"), "café search");
+        assert_eq!(decode_query("bad%C3"), "bad%C3");
+        assert_eq!(decode_query("bad%ZZ"), "bad%ZZ");
+    }
 
     #[test]
     fn derives_awstats_dimensions() {
