@@ -14,7 +14,7 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 | `clusterinfo`, `hashfiles` | Not applicable to the current SQLite/checkpoint design | Revisit only if distributed ingestion is introduced |
 | `tooltips`, `decodeutfkeys` | Presentation/encoding concerns | Add only when a concrete AWStats report compatibility case requires them |
 | `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
-| `detectrefererspam` | Candidate parity feature | Add configurable referer-spam classification/filtering with diagnostics |
+| `detectrefererspam` | Hook-only upstream plugin; no detection rules are supplied | Add configurable referer-spam classification/filtering with diagnostics rather than inventing a heuristic |
 | `rawlog` | Not enabled | Keep disabled by default; raw log exposure needs explicit authorization and redaction |
 | `hostinfo`, `ipv6` | Partially covered by core parsing/GeoIP | Do not add reverse-DNS lookups to normal updates |
 | `timehires` | Internal diagnostic concern | Keep timing diagnostics outside report data |
@@ -27,3 +27,5 @@ This project treats the AWStats 8.0 source tree as the compatibility reference. 
 4. Re-evaluate raw-log access only after CGI/HTTP authorization and redaction are defined.
 
 The current external renderer ABI is intentionally format-oriented. These features should be implemented as shared report transformations or narrowly scoped plugin capabilities, not by embedding Perl-compatible plugin execution in the Rust process.
+
+The upstream `detectrefererspam` source currently only registers its scan hook and logs a debug call. It does not define a domain list, regular expressions, or a discard policy, so Rust should not claim parity by adding an undocumented heuristic.
