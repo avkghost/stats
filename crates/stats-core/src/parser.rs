@@ -68,6 +68,8 @@ enum TimeFormat {
     Time4,
     Time5,
     Time6,
+    Time7,
+    Time8,
 }
 
 impl LogParser {
@@ -87,6 +89,10 @@ impl LogParser {
             TimeFormat::Time5
         } else if format.contains("%time6") {
             TimeFormat::Time6
+        } else if format.contains("%time7") {
+            TimeFormat::Time7
+        } else if format.contains("%time8") {
+            TimeFormat::Time8
         } else {
             TimeFormat::Time1
         };
@@ -266,7 +272,17 @@ fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffs
             .ok()
             .or_else(|| naive_fixed(value, "%Y-%m-%dT%H:%M:%S")),
         TimeFormat::Time6 => naive_fixed(value, "%d/%m/%Y, %H:%M:%S"),
+        TimeFormat::Time7 => epoch_fractional(value, 1_000),
+        TimeFormat::Time8 => epoch_fractional(value, 1_000_000),
     }
+}
+
+fn epoch_fractional(value: &str, units_per_second: i64) -> Option<DateTime<FixedOffset>> {
+    let value = value.parse::<i64>().ok()?;
+    let seconds = value.div_euclid(units_per_second);
+    let remainder = value.rem_euclid(units_per_second);
+    let nanos = remainder * (1_000_000_000 / units_per_second);
+    DateTime::<Utc>::from_timestamp(seconds, nanos as u32).map(|timestamp| timestamp.fixed_offset())
 }
 
 fn naive_fixed(value: &str, format: &str) -> Option<DateTime<FixedOffset>> {
@@ -362,6 +378,10 @@ fn normalize_apache_format(format: &str) -> String {
             Some(("%{local}p", "%other1"))
         } else if remaining.starts_with("%{sec}t") || remaining.starts_with("%{SEC}t") {
             Some(("%{sec}t", "%time4"))
+        } else if remaining.starts_with("%{msec}t") || remaining.starts_with("%{MSEC}t") {
+            Some(("%{msec}t", "%time7"))
+        } else if remaining.starts_with("%{usec}t") || remaining.starts_with("%{USEC}t") {
+            Some(("%{usec}t", "%time8"))
         } else if remaining.starts_with("%{ms}T") || remaining.starts_with("%{MS}T") {
             Some(("%{ms}T", "%duration_ms"))
         } else if remaining.starts_with("%{us}T") || remaining.starts_with("%{US}T") {
@@ -464,6 +484,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                 "time4" => ("time".into(), r"\d+"),
                 "time5" => ("time".into(), r"\S+"),
                 "time6" => ("time".into(), r"\S+\s+\S+"),
+                "time7" | "time8" => ("time".into(), r"\d+"),
                 "methodurl" | "methodurlnoprot" => ("request".into(), r#".*?"#),
                 "method" => ("method".into(), r"\S+"),
                 "url" => ("url".into(), r"\S+"),
@@ -708,5 +729,25 @@ mod tests {
         };
         assert_eq!(event.timestamp.timestamp(), 1793059200);
         assert_eq!(event.status, 200);
+    }
+
+    #[test]
+    fn parses_high_resolution_apache_epoch_timestamp_tokens() {
+        let parser = LogParser::new(r#"%a %{msec}t "%r" %>s %O"#).unwrap();
+        let ParseOutcome::Event(event) =
+            parser.parse(r#"192.0.2.27 1793059200123 "GET / HTTP/1.1" 200 64"#)
+        else {
+            panic!("expected millisecond epoch event");
+        };
+        assert_eq!(event.timestamp.timestamp(), 1793059200);
+        assert_eq!(event.timestamp.timestamp_subsec_millis(), 123);
+
+        let parser = LogParser::new(r#"%a %{usec}t "%r" %>s %O"#).unwrap();
+        let ParseOutcome::Event(event) =
+            parser.parse(r#"192.0.2.27 1793059200123456 "GET / HTTP/1.1" 200 64"#)
+        else {
+            panic!("expected microsecond epoch event");
+        };
+        assert_eq!(event.timestamp.timestamp_subsec_micros(), 123_456);
     }
 }
