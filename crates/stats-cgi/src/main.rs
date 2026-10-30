@@ -1,6 +1,6 @@
 use anyhow::{bail, Context};
 use stats_core::{ReportService, StatsStore};
-use stats_render::{builtin_renderer_registry, render_report_stream};
+use stats_render::{builtin_renderer_registry, render_html_section, render_report_stream};
 use std::{
     env,
     io::{self, Write},
@@ -40,11 +40,13 @@ impl OutputFormat {
 struct CgiRequest {
     output: OutputFormat,
     limit: usize,
+    section: Option<String>,
 }
 
 fn parse_query(query: &str) -> anyhow::Result<CgiRequest> {
     let mut output = OutputFormat::Html;
     let mut limit = DEFAULT_LIMIT;
+    let mut section = None;
     for pair in query.split('&').filter(|pair| !pair.is_empty()) {
         let (key, raw_value) = pair
             .split_once('=')
@@ -60,10 +62,23 @@ fn parse_query(query: &str) -> anyhow::Result<CgiRequest> {
                     bail!("CGI limit must be between 1 and {MAX_LIMIT}");
                 }
             }
+            "section" => {
+                if value.is_empty() || value.contains('/') || value.contains('\\') {
+                    bail!("invalid CGI section {value:?}");
+                }
+                section = Some(value);
+            }
             _ => bail!("unsupported CGI parameter {key:?}"),
         }
     }
-    Ok(CgiRequest { output, limit })
+    if section.is_some() && output != OutputFormat::Html {
+        bail!("CGI section selection is supported only for HTML output");
+    }
+    Ok(CgiRequest {
+        output,
+        limit,
+        section,
+    })
 }
 
 fn percent_decode(value: &str) -> anyhow::Result<String> {
@@ -103,7 +118,11 @@ fn render_cgi(data_dir: PathBuf, request: &CgiRequest) -> anyhow::Result<(String
     let report = ReportService::new(&store).build(request.limit)?;
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;
-    let body = render_report_stream(&registry, &report, request.output.renderer_name())?;
+    let body = match request.section.as_deref() {
+        Some(section) => render_html_section(&report, section)
+            .map_err(|error| anyhow::anyhow!("render CGI HTML section: {error}"))?,
+        None => render_report_stream(&registry, &report, request.output.renderer_name())?,
+    };
     let media_type = match request.output {
         OutputFormat::Html => "text/html; charset=utf-8",
         OutputFormat::Json => "application/json; charset=utf-8",
@@ -134,6 +153,7 @@ mod tests {
             CgiRequest {
                 output: OutputFormat::Html,
                 limit: DEFAULT_LIMIT,
+                section: None,
             }
         );
     }
@@ -145,6 +165,7 @@ mod tests {
             CgiRequest {
                 output: OutputFormat::Json,
                 limit: 25,
+                section: None,
             }
         );
     }
@@ -154,5 +175,19 @@ mod tests {
         assert!(parse_query("path=../stats.sqlite3").is_err());
         assert!(parse_query("output=../../etc/passwd").is_err());
         assert!(parse_query("limit=10001").is_err());
+        assert!(parse_query("section=../visitors").is_err());
+        assert!(parse_query("output=json&section=visitors").is_err());
+    }
+
+    #[test]
+    fn accepts_allowlisted_html_sections() {
+        assert_eq!(
+            parse_query("section=visitors").unwrap(),
+            CgiRequest {
+                output: OutputFormat::Html,
+                limit: DEFAULT_LIMIT,
+                section: Some("visitors".into()),
+            }
+        );
     }
 }

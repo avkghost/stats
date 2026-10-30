@@ -34,7 +34,7 @@ pub fn render_report_stream(
         .map_err(|error| anyhow!("render {format} report: {error}"))
 }
 
-pub use html::{write_html_site, write_html_site_with_periods};
+pub use html::{render_html_section, write_html_site, write_html_site_with_periods};
 
 #[cfg(test)]
 mod tests {

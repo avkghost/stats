@@ -49,6 +49,7 @@ The generic example configuration is at `examples/awstats.example.test.conf`. Co
     cargo run -p stats-cli -- live --config logs/awstats.example.test.conf --limit 10 --interval 5
     cargo run -p stats-cli -- tui --config logs/awstats.example.test.conf --limit 10 --interval 5
     QUERY_STRING='output=json&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
+    QUERY_STRING='section=visitors&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
 
 The configured GeoIP plugin paths are read from `LoadPlugin` entries. CLI path overrides are intended for local fixtures and tests.
 

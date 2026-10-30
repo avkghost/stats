@@ -406,6 +406,15 @@ pub(crate) fn render_single_file_overview(report: &Report) -> String {
     page_html(report, "overview", "#overview", true, &[])
 }
 
+pub fn render_html_section(report: &Report, section: &str) -> Result<String, String> {
+    let page = match section {
+        "overview" | "visitors" | "pages" | "referrers" | "geography" | "performance"
+        | "calendar" => section,
+        _ => return Err(format!("unsupported HTML report section {section:?}")),
+    };
+    Ok(page_html(report, page, "index.html", true, &[]))
+}
+
 pub fn write_html_site(report: &Report, output: &Path) -> anyhow::Result<()> {
     write_html_site_with_periods(report, output, &[])
 }
