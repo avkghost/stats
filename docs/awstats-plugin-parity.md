@@ -20,9 +20,9 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 | `clusterinfo` | Display-only cluster-info adapter loads `clusterinfo[.<SiteDomain>].txt` | Keep labels out of canonical stored dimensions |
 | `hashfiles` | SQLite-backed compatibility adapter records the selected backend; no incompatible Perl `.hash` files are created | Keep SQLite authoritative and document the format boundary |
 | `tooltips`, `decodeutfkeys` | Referrer UTF-8 key normalization covered; native HTML chart-row tooltips implemented | Keep tooltips presentation-only and offline |
-| `urlalias` | Candidate parity feature | Add a report-decoration hook without changing stored URL keys |
+| `urlalias` | Display-only report-decoration adapter | Keep stored aggregation keys and machine-readable URLs canonical |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
-| `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep endpoints disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and reverse-proxy bearer authentication are configured |
+| `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep network access disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and bearer authentication are configured |
 | `hostinfo`, `ipv6` | Optional bounded reverse-DNS enrichment implemented behind `DNSLookup=1` | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
 | `timehires` | Update summaries expose millisecond elapsed timing when enabled | Keep timing diagnostics outside report data |
 
