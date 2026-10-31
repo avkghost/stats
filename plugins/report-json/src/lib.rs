@@ -38,6 +38,9 @@ unsafe extern "C" fn render_report(
     if request.format.is_null() || request.report_json.is_null() {
         return 1;
     }
+    if !request.section.is_null() {
+        return 2;
+    }
     let format = CStr::from_ptr(request.format).to_bytes();
     if format != b"json" {
         return 2;
@@ -132,5 +135,23 @@ mod tests {
             section: ptr::null(),
         };
         assert_eq!(unsafe { render_report(&request, &mut output) }, 1);
+    }
+
+    #[test]
+    fn rejects_section_requests() {
+        let format = CString::new("json").unwrap();
+        let report = CString::new(r#"{"hits":1}"#).unwrap();
+        let section = CString::new("pages").unwrap();
+        let request = ReportRequest {
+            format: format.as_ptr(),
+            report_json: report.as_ptr(),
+            section: section.as_ptr(),
+        };
+        let mut output = RenderedReport {
+            media_type: ptr::null_mut(),
+            extension: ptr::null_mut(),
+            body: ptr::null_mut(),
+        };
+        assert_eq!(unsafe { render_report(&request, &mut output) }, 2);
     }
 }
