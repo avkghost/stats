@@ -12,8 +12,8 @@ use stats_core::{
 use stats_plugin_api::{HostApi, PluginEvent, ABI_VERSION};
 use stats_plugin_host::LoadedPlugin;
 use stats_render::{
-    builtin_renderer_registry, register_configured_renderer, render_report_stream, write_html_site,
-    write_html_site_with_periods,
+    builtin_renderer_registry, register_configured_renderer, render_report_section_stream,
+    render_report_stream, write_html_site, write_html_site_with_periods,
 };
 use stats_tui::run as run_tui;
 use std::{
@@ -595,13 +595,7 @@ fn regenerate_default_report(
             .map_err(|error| anyhow::anyhow!("register report renderers: {error}"))?;
         register_configured_renderer(&mut registry, &config, "html")
             .with_context(|| format!("load HTML renderer from {}", config_path.display()))?;
-        let body = render_report_stream(&registry, &report, "html")?;
-        if let Some(parent) = output.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("create report directory {}", parent.display()))?;
-        }
-        fs::write(&output, body)
-            .with_context(|| format!("write external HTML report {}", output.display()))?;
+        write_external_html_site(&registry, &report, &output)?;
     } else {
         write_report_site(&config.data_dir, &output, &report, 50)?;
     }
@@ -1518,6 +1512,33 @@ fn report(
         fs::write(&output, content)
             .with_context(|| format!("write report {}", output.display()))?;
         println!("wrote {}", output.display());
+    }
+    Ok(())
+}
+
+fn write_external_html_site(
+    registry: &stats_core::PluginRegistry,
+    report: &stats_core::Report,
+    output: &Path,
+) -> anyhow::Result<()> {
+    let directory = output.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(directory)
+        .with_context(|| format!("create report directory {}", directory.display()))?;
+    let index = render_report_stream(registry, report, "html")?;
+    fs::write(output, index)
+        .with_context(|| format!("write external HTML report {}", output.display()))?;
+    for page in [
+        "visitors",
+        "pages",
+        "referrers",
+        "geography",
+        "performance",
+        "calendar",
+    ] {
+        let body = render_report_section_stream(registry, report, "html", page)?;
+        let path = directory.join(format!("{page}.html"));
+        fs::write(&path, body)
+            .with_context(|| format!("write external HTML report page {}", path.display()))?;
     }
     Ok(())
 }
