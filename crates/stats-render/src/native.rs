@@ -141,7 +141,14 @@ mod tests {
 
     #[test]
     fn ignores_non_report_plugins_and_unknown_formats() {
-        for name in ["html", "report_xml", "geoip2_city", "tooltips"] {
+        for name in [
+            "html",
+            "report_xml",
+            "geoip2_city",
+            "graphapplet",
+            "graphgooglechartapi",
+            "tooltips",
+        ] {
             let plugin = PluginConfig {
                 name: name.into(),
                 args: Vec::new(),
