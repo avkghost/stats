@@ -29,3 +29,19 @@ pub unsafe extern "C" fn stats_plugin_init(_host: *const HostApi) -> *mut Plugin
 }
 
 unsafe extern "C" fn shutdown() {}
+
+#[cfg(test)]
+mod tests {
+    use super::stats_plugin_init;
+    use stats_plugin_api::ABI_VERSION;
+
+    #[test]
+    fn exposes_a_noop_example_plugin_descriptor() {
+        let api = unsafe { Box::from_raw(stats_plugin_init(std::ptr::null())) };
+        assert_eq!(api.descriptor.abi_version, ABI_VERSION);
+        assert_eq!(api.descriptor.capabilities, 0);
+        assert!(api.enrich.is_none());
+        assert!(api.render_report.is_none());
+        assert!(api.shutdown.is_some());
+    }
+}
