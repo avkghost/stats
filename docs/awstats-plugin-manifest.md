@@ -25,7 +25,7 @@ observable behavior.
 | `ipv6` | compatibility adapter | IPv6 parsing, filtering, and enrichment |
 | `rawlog` | compatibility adapter | Bounded redacted CLI, HTTP, and CGI exports |
 | `timehires` | compatibility adapter | Millisecond elapsed timing in update summaries |
-| `timezone` | compatibility adapter | Deterministic `TimeZone` configuration |
+| `timezone` | compatibility adapter | Fixed offsets and named IANA zones with daylight-saving conversion |
 | `tooltips` | compatibility adapter | Escaped HTML chart and table tooltips |
 | `urlalias` | compatibility adapter | Display-only URL alias transformation |
 | `userinfo` | compatibility adapter | Load site-specific or fallback tab-separated user labels and decorate authenticated-user rows |

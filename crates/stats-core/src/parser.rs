@@ -1,4 +1,5 @@
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, TimeZone, Utc};
+use chrono_tz::Tz;
 use regex::Regex;
 use thiserror::Error;
 
@@ -33,6 +34,17 @@ impl AccessEvent {
             return false;
         };
         self.timestamp = self.timestamp.with_timezone(&offset);
+        true
+    }
+
+    pub fn apply_timezone(&mut self, value: &str) -> bool {
+        if let Ok(hours) = value.parse::<i32>() {
+            return self.apply_timezone_offset(hours);
+        }
+        let Ok(time_zone) = value.parse::<Tz>() else {
+            return false;
+        };
+        self.timestamp = self.timestamp.with_timezone(&time_zone).fixed_offset();
         true
     }
 }
@@ -735,6 +747,22 @@ mod tests {
             event.timestamp.format("%Y-%m-%d %H:%M").to_string(),
             "2026-10-28 01:30"
         );
+    }
+
+    #[test]
+    fn applies_named_timezone_with_daylight_saving() {
+        let parser = LogParser::new("%host [%time1] %methodurl %code %bytesd").unwrap();
+        let ParseOutcome::Event(mut event) =
+            parser.parse("192.0.2.24 [01/Jul/2026:23:30:00 +0000] GET / HTTP/1.1 200 1")
+        else {
+            panic!("expected timezone event");
+        };
+        assert!(event.apply_timezone("Europe/Warsaw"));
+        assert_eq!(
+            event.timestamp.format("%Y-%m-%d %H:%M %:z").to_string(),
+            "2026-07-02 01:30 +02:00"
+        );
+        assert!(!event.apply_timezone("Not/AZone"));
     }
 
     #[test]

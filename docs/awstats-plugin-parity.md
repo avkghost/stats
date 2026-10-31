@@ -15,7 +15,7 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 | `geoip2_*`, `geoip_*`, `geoipfree`, `geoip6` | Core MaxMind Country, City, ASN, region, and organization enrichment | Keep as core providers; do not duplicate Perl plugin loading |
 | `export_to_csv` | External CSV report plugin | Keep as a native report renderer |
 | `graphapplet`, `graphgooglechartapi` | Replaced by local HTML/CSS charts | Keep local and offline; do not depend on Java or third-party chart services |
-| `timezone` | Core `TimeZone` configuration | Keep deterministic and checkpoint-aware |
+| `timezone` | Core `TimeZone` configuration with fixed-offset and IANA-zone conversion | Keep deterministic, checkpoint-aware, and DST-aware |
 | `userinfo` | Core authenticated-user aggregation with display decoration from `userinfo[.<SiteDomain>].txt` or `userinfo.txt` | Keep stored user keys canonical; decorate only report rows |
 | `clusterinfo` | Display-only cluster-info adapter loads `clusterinfo[.<SiteDomain>].txt` | Keep labels out of canonical stored dimensions |
 | `hashfiles` | SQLite-backed compatibility adapter records the selected backend; no incompatible Perl `.hash` files are created | Keep SQLite authoritative and document the format boundary |
@@ -38,6 +38,7 @@ entry is `not started`.
 3. Completed: referrer query keys decode valid UTF-8 and preserve the original value when decoding fails.
 4. Completed: raw-log access is available only through bounded redacted CLI, authenticated HTTP, and authenticated CGI paths.
 5. Completed: `userinfo` loads the AWStats-compatible site-specific/fallback mapping and decorates authenticated-user report rows without changing aggregation keys.
+6. Completed: `timezone` accepts numeric offsets and named IANA zones with daylight-saving conversion.
 
 The current external renderer ABI is intentionally format-oriented. These features should be implemented as shared report transformations or narrowly scoped plugin capabilities, not by embedding Perl-compatible plugin execution in the Rust process.
 

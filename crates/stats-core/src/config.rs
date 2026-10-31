@@ -97,7 +97,7 @@ pub struct Config {
     pub host_aliases: Vec<String>,
     pub data_dir: PathBuf,
     pub database_period: DatabasePeriod,
-    pub time_zone: Option<i32>,
+    pub time_zone: Option<String>,
     pub dns_lookup: bool,
     pub dns_lookup_timeout_ms: u64,
     pub dns_lookup_cache_size: usize,
@@ -245,21 +245,20 @@ impl Config {
             time_zone: values
                 .get("TimeZone")
                 .map(|value| {
-                    let offset = value.parse::<i32>().map_err(|_| ConfigError::Invalid {
-                        line: 0,
-                        message: format!(
-                            "invalid TimeZone {value}; expected an integer hour offset"
-                        ),
-                    })?;
-                    if !(-24..=24).contains(&offset) {
+                    let valid_fixed_offset = value
+                        .parse::<i32>()
+                        .map(|offset| (-24..=24).contains(&offset))
+                        .unwrap_or(false);
+                    let valid_named_zone = value.parse::<chrono_tz::Tz>().is_ok();
+                    if !valid_fixed_offset && !valid_named_zone {
                         return Err(ConfigError::Invalid {
                             line: 0,
                             message: format!(
-                                "invalid TimeZone {value}; expected an offset from -24 to 24"
+                                "invalid TimeZone {value}; expected an offset from -24 to 24 or an IANA zone"
                             ),
                         });
                     }
-                    Ok(offset)
+                    Ok(value.to_owned())
                 })
                 .transpose()?,
             dns_lookup: values.get("DNSLookup").map(|v| v != "0").unwrap_or(false),
@@ -554,9 +553,16 @@ mod tests {
     #[test]
     fn parses_optional_timezone_offset() {
         let config = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=2\n").unwrap();
-        assert_eq!(config.time_zone, Some(2));
+        assert_eq!(config.time_zone.as_deref(), Some("2"));
+
+        let named =
+            Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=Europe/Warsaw\n").unwrap();
+        assert_eq!(named.time_zone.as_deref(), Some("Europe/Warsaw"));
 
         let error = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=25\n");
+        assert!(matches!(error, Err(ConfigError::Invalid { .. })));
+
+        let error = Config::parse("LogFile=access.log\nLogFormat=1\nTimeZone=Not/AZone\n");
         assert!(matches!(error, Err(ConfigError::Invalid { .. })));
     }
 
