@@ -79,6 +79,7 @@ pub struct LogParser {
 #[derive(Debug, Clone, Copy)]
 enum TimeFormat {
     Time1,
+    Time1b,
     Time2,
     Time3,
     Time4,
@@ -89,6 +90,7 @@ enum TimeFormat {
 }
 
 const TIME_FORMAT_RULES: &[(&str, TimeFormat)] = &[
+    ("%time1b", TimeFormat::Time1b),
     ("%time1", TimeFormat::Time1),
     ("%time2", TimeFormat::Time2),
     ("%time3", TimeFormat::Time3),
@@ -105,8 +107,19 @@ fn detect_time_format(format: &str) -> TimeFormat {
     }
     TIME_FORMAT_RULES
         .iter()
-        .find_map(|(token, time_format)| format.contains(token).then_some(*time_format))
+        .find_map(|(token, time_format)| {
+            contains_format_token(format, token).then_some(*time_format)
+        })
         .unwrap_or(TimeFormat::Time1)
+}
+
+fn contains_format_token(format: &str, token: &str) -> bool {
+    format.match_indices(token).any(|(index, matched)| {
+        format[index + matched.len()..]
+            .chars()
+            .next()
+            .is_none_or(|character| !character.is_ascii_alphanumeric() && character != '_')
+    })
 }
 
 impl LogParser {
@@ -293,6 +306,9 @@ fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffs
             "%d/%b/%Y:%H:%M:%S %z",
         )
         .ok(),
+        TimeFormat::Time1b => {
+            naive_fixed(value.trim().trim_matches(['[', ']']), "%d/%b/%Y:%H:%M:%S")
+        }
         TimeFormat::Time2 => naive_fixed(value, "%Y-%m-%d %H:%M:%S"),
         TimeFormat::Time3 => {
             let year = Utc::now().year();
@@ -521,6 +537,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                         r"\[[^]]+\]"
                     },
                 ),
+                "time1b" => ("time".into(), r"\[[^]]+\]"),
                 "time1bracket" => ("time".into(), r"\[[^]]+\]"),
                 "time2" => ("time".into(), r"\S+\s+\S+"),
                 "time3" => ("time".into(), r"\S+\s+\S+\s+\S+"),
@@ -576,6 +593,7 @@ mod tests {
     #[test]
     fn detects_time_formats_in_rule_order() {
         assert!(matches!(detect_time_format("1"), TimeFormat::Time1));
+        assert!(matches!(detect_time_format("%time1b"), TimeFormat::Time1b));
         assert!(matches!(
             detect_time_format("%host %time4"),
             TimeFormat::Time4
@@ -741,6 +759,17 @@ mod tests {
         assert_eq!(event.identity.as_deref(), Some("John Begood"));
         assert_eq!(event.status, 411);
         assert_eq!(event.bytes, 0);
+    }
+
+    #[test]
+    fn parses_awstats_time1b_timestamp_without_timezone() {
+        let parser = LogParser::new("%host %time1b %methodurl %code %bytesd").unwrap();
+        let ParseOutcome::Event(event) =
+            parser.parse(r#"192.0.2.1 [01/Jan/2001:13:01:00] "GET / HTTP/1.1" 200 1"#)
+        else {
+            panic!("expected AWStats time1b event");
+        };
+        assert_eq!(event.timestamp.to_rfc3339(), "2001-01-01T13:01:00+00:00");
     }
 
     #[test]
