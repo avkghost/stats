@@ -2,3 +2,5 @@ output
 stats
 logs
 target
+tasks/*
+.rules/*
