@@ -156,41 +156,43 @@ fn render_cgi(
     let store = StatsStore::open_read_only(&database)
         .with_context(|| format!("open CGI database {}", database.display()))?;
     let mut report = ReportService::new(&store).build(request.limit)?;
-    if let Some(config) = config {
-        let config = config.clone().with_overrides(None, Some(data_dir.clone()));
-        let aliases = if config
-            .plugins
-            .iter()
-            .any(|plugin| plugin.name == "urlalias")
-        {
-            let path = sandbox.check_existing(&config.url_alias_path())?;
-            config.url_aliases_from_path(&path)?
-        } else {
-            std::collections::HashMap::new()
-        };
-        report.apply_url_aliases(&aliases);
-        let cluster_info = if config
-            .plugins
-            .iter()
-            .any(|plugin| plugin.name == "clusterinfo")
-        {
-            let path = sandbox.check_existing(&config.cluster_info_path())?;
-            config.cluster_info_from_path(&path)?
-        } else {
-            std::collections::HashMap::new()
-        };
-        report.apply_cluster_info(&cluster_info);
-        let user_info = if config
-            .plugins
-            .iter()
-            .any(|plugin| plugin.name == "userinfo")
-        {
-            let path = sandbox.check_existing(&config.user_info_path())?;
-            config.user_info_from_path(&path)?
-        } else {
-            std::collections::HashMap::new()
-        };
-        report.apply_user_info(&user_info);
+    if request.output == OutputFormat::Html {
+        if let Some(config) = config {
+            let config = config.clone().with_overrides(None, Some(data_dir.clone()));
+            let aliases = if config
+                .plugins
+                .iter()
+                .any(|plugin| plugin.name == "urlalias")
+            {
+                let path = sandbox.check_existing(&config.url_alias_path())?;
+                config.url_aliases_from_path(&path)?
+            } else {
+                std::collections::HashMap::new()
+            };
+            report.apply_url_aliases(&aliases);
+            let cluster_info = if config
+                .plugins
+                .iter()
+                .any(|plugin| plugin.name == "clusterinfo")
+            {
+                let path = sandbox.check_existing(&config.cluster_info_path())?;
+                config.cluster_info_from_path(&path)?
+            } else {
+                std::collections::HashMap::new()
+            };
+            report.apply_cluster_info(&cluster_info);
+            let user_info = if config
+                .plugins
+                .iter()
+                .any(|plugin| plugin.name == "userinfo")
+            {
+                let path = sandbox.check_existing(&config.user_info_path())?;
+                config.user_info_from_path(&path)?
+            } else {
+                std::collections::HashMap::new()
+            };
+            report.apply_user_info(&user_info);
+        }
     }
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;
