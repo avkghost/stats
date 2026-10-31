@@ -1470,6 +1470,7 @@ fn report(
             let config = config.clone().with_overrides(None, Some(data_dir.clone()));
             report.apply_url_aliases(&config.url_aliases()?);
             report.apply_cluster_info(&config.cluster_info()?);
+            report.apply_user_info(&config.user_info()?);
         }
     }
     let external_renderer_configured = config.as_ref().is_some_and(|config| {
