@@ -359,7 +359,15 @@ fn naive_fixed(value: &str, format: &str) -> Option<DateTime<FixedOffset>> {
 }
 
 fn none_dash(value: Option<String>) -> Option<String> {
-    value.filter(|v| v != "-")
+    value
+        .map(|value| {
+            value
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .unwrap_or(&value)
+                .to_owned()
+        })
+        .filter(|value| value != "-")
 }
 
 fn format_request(method: &str, url: &str, protocol: &str) -> String {
@@ -751,6 +759,8 @@ mod tests {
         assert_eq!(event.status, 200);
         assert_eq!(event.url.as_deref(), Some("/"));
         assert_eq!(event.bytes, 42);
+        assert_eq!(event.referer, None);
+        assert_eq!(event.user_agent.as_deref(), Some("test-agent"));
     }
 
     #[test]
