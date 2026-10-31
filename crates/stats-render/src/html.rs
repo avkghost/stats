@@ -469,6 +469,7 @@ pub fn write_html_site_with_periods(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use stats_core::ReportMetadata;
 
     #[test]
     fn escapes_report_table_values() {
@@ -537,6 +538,69 @@ mod tests {
         assert!(html.contains("/.env"));
         assert!(html.contains("- (3)"));
         assert!(html.contains("Error Hits"));
+    }
+
+    #[test]
+    fn pages_view_includes_aggregated_http_errors() {
+        let report = Report {
+            metadata: ReportMetadata {
+                schema_version: None,
+                input_path: None,
+                input_size: None,
+                input_lines: None,
+                config_path: None,
+                config_hash: None,
+                approximations: Vec::new(),
+            },
+            hits: 1,
+            bytes: 0,
+            pages: 0,
+            files: 0,
+            visits: 0,
+            unique_visits: 0,
+            countries: Vec::new(),
+            regions: Vec::new(),
+            cities: Vec::new(),
+            asns: Vec::new(),
+            organizations: Vec::new(),
+            hostnames: Vec::new(),
+            statuses: Vec::new(),
+            status_classes: Vec::new(),
+            errors: vec![ReportRow {
+                key: "500".into(),
+                hits: 1,
+            }],
+            methods: Vec::new(),
+            method_anomalies: Vec::new(),
+            urls: Vec::new(),
+            not_found: Vec::new(),
+            bandwidth_urls: Vec::new(),
+            daily: Vec::new(),
+            users: Vec::new(),
+            user_agents: Vec::new(),
+            referers: Vec::new(),
+            referrer_domains: Vec::new(),
+            referer_spam: Vec::new(),
+            scanners: Vec::new(),
+            file_types: Vec::new(),
+            browsers: Vec::new(),
+            oses: Vec::new(),
+            robots: Vec::new(),
+            request_times: Vec::new(),
+            virtual_hosts: Vec::new(),
+            entry_pages: Vec::new(),
+            exit_pages: Vec::new(),
+            search_engines: Vec::new(),
+            keyphrases: Vec::new(),
+            hours: Vec::new(),
+            dates: Vec::new(),
+            months: Vec::new(),
+            weekdays: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let html = detail_body(&report, "pages");
+        assert!(html.contains("<h2>HTTP errors</h2>"));
+        assert!(html.contains(">500</td><td>1</td>"));
     }
 
     #[test]
