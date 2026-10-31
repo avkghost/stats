@@ -586,6 +586,7 @@ fn regenerate_default_report(
         .parent()
         .unwrap_or_else(|| Path::new("."))
         .join("output/index.html");
+    let periods = period_names(&config.data_dir)?;
     let external_html = config
         .plugins
         .iter()
@@ -595,8 +596,12 @@ fn regenerate_default_report(
             .map_err(|error| anyhow::anyhow!("register report renderers: {error}"))?;
         register_configured_renderer(&mut registry, &config, "html")
             .with_context(|| format!("load HTML renderer from {}", config_path.display()))?;
-        write_external_html_site(&registry, &report, &output)?;
-        for period in period_names(&config.data_dir)? {
+        let links = periods
+            .iter()
+            .map(|period| (period.clone(), format!("periods/{period}/index.html")))
+            .collect::<Vec<_>>();
+        write_external_html_site(&registry, &report, &output, &links)?;
+        for period in periods {
             let mut period_report = build_report_for_period(&config.data_dir, 50, Some(&period))?;
             apply_display_decorations(&mut period_report, &config)?;
             let period_output = output
@@ -605,7 +610,11 @@ fn regenerate_default_report(
                 .join("periods")
                 .join(&period)
                 .join("index.html");
-            write_external_html_site(&registry, &period_report, &period_output)?;
+            let period_links = links
+                .iter()
+                .map(|(label, _)| (label.clone(), format!("../../periods/{label}/index.html")))
+                .collect::<Vec<_>>();
+            write_external_html_site(&registry, &period_report, &period_output, &period_links)?;
         }
     } else {
         write_report_site(&config.data_dir, &output, &report, 50, Some(&config))?;
@@ -1486,7 +1495,7 @@ fn report(
     }
     if matches!(format, ReportFormat::Html) && output != Path::new("-") {
         if external_renderer_configured {
-            write_external_html_site(&renderer_registry, &report, &output)?;
+            write_external_html_site(&renderer_registry, &report, &output, &[])?;
         } else if period.is_some() {
             write_html_site(&report, &output)?;
         } else {
@@ -1531,11 +1540,15 @@ fn write_external_html_site(
     registry: &stats_core::PluginRegistry,
     report: &stats_core::Report,
     output: &Path,
+    period_links: &[(String, String)],
 ) -> anyhow::Result<()> {
     let directory = output.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(directory)
         .with_context(|| format!("create report directory {}", directory.display()))?;
-    let index = render_report_stream(registry, report, "html")?;
+    let index = add_period_links(
+        render_report_stream(registry, report, "html")?,
+        period_links,
+    );
     fs::write(output, index)
         .with_context(|| format!("write external HTML report {}", output.display()))?;
     let canonical_index = directory.join("index.html");
@@ -1561,6 +1574,23 @@ fn write_external_html_site(
             .with_context(|| format!("write external HTML report page {}", path.display()))?;
     }
     Ok(())
+}
+
+fn add_period_links(mut html: String, period_links: &[(String, String)]) -> String {
+    if period_links.is_empty() {
+        return html;
+    }
+    let links = period_links
+        .iter()
+        .map(|(label, href)| format!("<li><a href=\"{href}\">{label}</a></li>"))
+        .collect::<String>();
+    let section = format!(
+        "<section class=\"report-section\"><h2>Periods</h2><ul class=\"period-links\">{links}</ul></section>"
+    );
+    if let Some(position) = html.find("</main>") {
+        html.insert_str(position, &section);
+    }
+    html
 }
 
 fn write_report_site(
@@ -2532,6 +2562,19 @@ mod tests {
             unchanged,
             "unchanged input; no update required (elapsed_ms=17)"
         );
+    }
+
+    #[test]
+    fn external_html_period_links_are_inserted_before_main_close() {
+        let html = super::add_period_links(
+            "<html><main><p>Overview</p></main></html>".into(),
+            &[("2026-01".into(), "periods/2026-01/index.html".into())],
+        );
+        assert!(html.contains(
+            "<h2>Periods</h2><ul class=\"period-links\"><li><a href=\"periods/2026-01/index.html\">2026-01</a></li></ul>"
+        ));
+        assert!(html.find("Periods").unwrap() < html.find("</main>").unwrap());
+        assert_eq!(super::add_period_links("plain".into(), &[]), "plain");
     }
 
     #[cfg(unix)]
