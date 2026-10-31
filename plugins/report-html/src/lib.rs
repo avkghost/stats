@@ -132,6 +132,7 @@ mod tests {
             "methods",
             "method_anomalies",
             "urls",
+            "not_found",
             "bandwidth_urls",
             "daily",
             "users",

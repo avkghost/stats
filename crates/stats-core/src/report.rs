@@ -1,4 +1,4 @@
-use crate::StatsStore;
+use crate::{NotFoundAggregate, StatsStore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -23,6 +23,7 @@ pub struct Report {
     pub methods: Vec<ReportRow>,
     pub method_anomalies: Vec<ReportRow>,
     pub urls: Vec<ReportRow>,
+    pub not_found: Vec<NotFoundRow>,
     pub bandwidth_urls: Vec<BandwidthRow>,
     pub daily: Vec<DailyRow>,
     pub users: Vec<ReportRow>,
@@ -79,6 +80,13 @@ pub struct DailyRow {
     pub pages: u64,
     pub files: u64,
     pub visits: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct NotFoundRow {
+    pub url: String,
+    pub hits: u64,
+    pub referrers: Vec<ReportRow>,
 }
 
 pub struct ReportService<'a> {
@@ -149,6 +157,12 @@ impl<'a> ReportService<'a> {
                 .map(|(key, hits)| ReportRow { key, hits })
                 .collect(),
             urls: rows("urls")?,
+            not_found: self
+                .store
+                .not_found(limit)?
+                .into_iter()
+                .map(not_found_row)
+                .collect(),
             bandwidth_urls: self
                 .store
                 .top_bandwidth(limit)?
@@ -205,6 +219,18 @@ impl<'a> ReportService<'a> {
                 .map(|(key, hits)| ReportRow { key, hits })
                 .collect(),
         })
+    }
+}
+
+fn not_found_row(row: NotFoundAggregate) -> NotFoundRow {
+    NotFoundRow {
+        url: row.url,
+        hits: row.hits,
+        referrers: row
+            .referrers
+            .into_iter()
+            .map(|(key, hits)| ReportRow { key, hits })
+            .collect(),
     }
 }
 
@@ -299,6 +325,7 @@ mod tests {
                 key: "/docs".into(),
                 hits: 4,
             }],
+            not_found: Vec::new(),
             bandwidth_urls: vec![BandwidthRow {
                 key: "/docs".into(),
                 hits: 4,

@@ -46,6 +46,13 @@ pub struct DailyAggregate {
     pub visits: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotFoundAggregate {
+    pub url: String,
+    pub hits: u64,
+    pub referrers: Vec<(String, u64)>,
+}
+
 impl StatsStore {
     /// Opens an existing database without schema setup or write access.
     pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self, StoreError> {
@@ -76,7 +83,7 @@ impl StatsStore {
         conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS method_anomalies(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS method_anomalies(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_urls(url TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_referrers(url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer));",
         )?;
         let previous_schema = conn
             .query_row(
@@ -107,7 +114,7 @@ impl StatsStore {
         }
         if needs_replay {
             conn.execute_batch(
-                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners; DELETE FROM method_anomalies;",
+                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners; DELETE FROM method_anomalies; DELETE FROM not_found_urls; DELETE FROM not_found_referrers;",
             )?;
         }
         conn.execute(
@@ -132,6 +139,23 @@ impl StatsStore {
         tx.execute("INSERT INTO status_classes(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![format!("{}xx", event.status / 100)])?;
         if event.status >= 400 {
             tx.execute("INSERT INTO errors(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![event.status])?;
+        }
+        if event.status == 404 {
+            if let Some(url) = event.url.as_deref().filter(|url| !url.is_empty()) {
+                let referrer = event
+                    .referer
+                    .as_deref()
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("-");
+                tx.execute(
+                    "INSERT INTO not_found_urls(url,hits) VALUES(?1,1) ON CONFLICT(url) DO UPDATE SET hits=hits+1",
+                    params![url],
+                )?;
+                tx.execute(
+                    "INSERT INTO not_found_referrers(url,referrer,hits) VALUES(?1,?2,1) ON CONFLICT(url,referrer) DO UPDATE SET hits=hits+1",
+                    params![url, referrer],
+                )?;
+            }
         }
         tx.execute(
             "INSERT INTO methods(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
@@ -495,7 +519,7 @@ impl StatsStore {
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
         conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM daily;")?;
-        conn.execute_batch("DELETE FROM hostnames; DELETE FROM method_anomalies;")?;
+        conn.execute_batch("DELETE FROM hostnames; DELETE FROM method_anomalies; DELETE FROM not_found_urls; DELETE FROM not_found_referrers;")?;
         conn.execute_batch("DELETE FROM referer_spam;")?;
         conn.execute_batch("DELETE FROM dates; DELETE FROM months; DELETE FROM weekdays;")?;
         Ok(())
@@ -550,6 +574,7 @@ impl StatsStore {
             "errors",
             "methods",
             "method_anomalies",
+            "not_found_urls",
             "urls",
             "users",
             "user_agents",
@@ -617,6 +642,42 @@ impl StatsStore {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
+    }
+
+    pub fn not_found(&self, limit: usize) -> Result<Vec<NotFoundAggregate>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        let exists = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='not_found_urls')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !exists {
+            return Ok(Vec::new());
+        }
+        let mut urls =
+            conn.prepare("SELECT url,hits FROM not_found_urls ORDER BY hits DESC,url LIMIT ?1")?;
+        let rows = urls
+            .query_map([limit as i64], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut result = Vec::with_capacity(rows.len());
+        for (url, hits) in rows {
+            let mut refs = conn.prepare(
+                "SELECT referrer,hits FROM not_found_referrers WHERE url=?1 ORDER BY hits DESC,referrer LIMIT 10",
+            )?;
+            let referrers = refs
+                .query_map([&url], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            result.push(NotFoundAggregate {
+                url,
+                hits,
+                referrers,
+            });
+        }
+        Ok(result)
     }
 
     pub fn daily(&self, limit: usize) -> Result<Vec<DailyAggregate>, StoreError> {
@@ -989,6 +1050,18 @@ mod tests {
         assert_eq!(
             store.top_if_exists("method_anomalies", 10).unwrap(),
             vec![("PROPFIND".into(), 1)]
+        );
+        let mut missing = event("/.env", "2026-01-01T00:34:00+00:00");
+        missing.status = 404;
+        missing.referer = Some("https://example.test/scan".into());
+        store.record(&missing, false).expect("record missing URL");
+        assert_eq!(
+            store.not_found(10).unwrap(),
+            vec![NotFoundAggregate {
+                url: "/.env".into(),
+                hits: 1,
+                referrers: vec![("https://example.test/scan".into(), 1)],
+            }]
         );
         assert_eq!(store.metric("visits").unwrap().0, 2);
         drop(store);

@@ -27,6 +27,10 @@ pub use raw_log::{
     bearer_token_matches, render_redacted as render_redacted_raw_log, MAX_RAW_LOG_LINES,
 };
 pub use referer_spam::{RefererSpamMatcher, RefererSpamRuleError};
-pub use report::{BandwidthRow, DailyRow, Report, ReportMetadata, ReportRow, ReportService};
+pub use report::{
+    BandwidthRow, DailyRow, NotFoundRow, Report, ReportMetadata, ReportRow, ReportService,
+};
 pub use scanner::{ScannerMatcher, ScannerRuleError};
-pub use store::{DailyAggregate, InputCheckpoint, StatsStore, StoreError, UpdateStats};
+pub use store::{
+    DailyAggregate, InputCheckpoint, NotFoundAggregate, StatsStore, StoreError, UpdateStats,
+};

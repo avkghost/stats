@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use anyhow::Context;
-use stats_core::{BandwidthRow, DailyRow, Report, ReportRow};
+use stats_core::{BandwidthRow, DailyRow, NotFoundRow, Report, ReportRow};
 
 pub(crate) fn table(rows: &[ReportRow]) -> String {
     table_with_class(rows, "report-table")
@@ -51,6 +51,30 @@ pub(crate) fn bandwidth_table(rows: &[BandwidthRow]) -> String {
             html_escape(&row.key),
             row.hits,
             row.bytes
+        ));
+    }
+    out.push_str("</tbody></table>");
+    out
+}
+
+pub(crate) fn not_found_table(rows: &[NotFoundRow]) -> String {
+    let mut out = String::from(
+        "<table class=\"report-table\" data-filterable><thead><tr><th>URL</th><th>Error Hits</th><th>Referrers</th></tr></thead><tbody>",
+    );
+    for row in rows {
+        let referrers = row
+            .referrers
+            .iter()
+            .map(|referrer| format!("{} ({})", html_escape(&referrer.key), referrer.hits))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push_str(&format!(
+            "<tr title=\"{}: {} 404 hits\"><td>{}</td><td>{}</td><td>{}</td></tr>",
+            html_escape(&row.url),
+            row.hits,
+            html_escape(&row.url),
+            row.hits,
+            referrers
         ));
     }
     out.push_str("</tbody></table>");
@@ -207,13 +231,17 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Robots", table(&report.robots))
         ),
         "pages" => format!(
-            "{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}",
             section("Methods", table(&report.methods)),
             section(
                 "HTTP method anomalies",
                 anomaly_table(&report.method_anomalies)
             ),
             section("URLs", table(&report.urls)),
+            section(
+                "Required but not found URLs (HTTP code 404)",
+                not_found_table(&report.not_found),
+            ),
             section("File types", table(&report.file_types)),
             section("Entry pages", table(&report.entry_pages)),
             section("Exit pages", table(&report.exit_pages)),
@@ -497,6 +525,21 @@ mod tests {
         let rendered = anomaly_table(&rows);
         assert!(rendered.contains("class=\"report-table anomaly-table\""));
         assert!(site_css().contains(".anomaly-table"));
+    }
+
+    #[test]
+    fn renders_not_found_urls_with_referrers() {
+        let html = not_found_table(&[NotFoundRow {
+            url: "/.env".into(),
+            hits: 4,
+            referrers: vec![ReportRow {
+                key: "-".into(),
+                hits: 3,
+            }],
+        }]);
+        assert!(html.contains("/.env"));
+        assert!(html.contains("- (3)"));
+        assert!(html.contains("Error Hits"));
     }
 
     #[test]

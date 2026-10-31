@@ -101,6 +101,32 @@ fn render_csv(report: &Value) -> String {
             }
         }
     }
+    if let Some(rows) = report.get("not_found").and_then(Value::as_array) {
+        for row in rows {
+            let url = csv_field(row.get("url").and_then(Value::as_str).unwrap_or_default());
+            out.push_str(&format!(
+                "not_found_urls,{url},{},,,,\n",
+                number(row, "hits")
+            ));
+            if let Some(referrers) = row.get("referrers").and_then(Value::as_array) {
+                for referrer in referrers {
+                    let key = format!(
+                        "{} -> {}",
+                        row.get("url").and_then(Value::as_str).unwrap_or_default(),
+                        referrer
+                            .get("key")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default()
+                    );
+                    out.push_str(&format!(
+                        "not_found_referrers,{},{},,,,\n",
+                        csv_field(&key),
+                        number(referrer, "hits")
+                    ));
+                }
+            }
+        }
+    }
     if let Some(rows) = report.get("bandwidth_urls").and_then(Value::as_array) {
         for row in rows {
             out.push_str(&format!(
@@ -222,5 +248,21 @@ mod tests {
         assert!(csv.contains("method_anomalies,PROPFIND,4,,,,\n"));
         assert!(csv.contains("scanners,environment-probe,8,,,,\n"));
         assert!(!csv.contains("unrecognized:PROPFIND"));
+    }
+
+    #[test]
+    fn exports_not_found_urls_and_referrers() {
+        let report = json!({
+            "not_found": [{
+                "url": "/.env",
+                "hits": 4,
+                "referrers": [{"key": "-", "hits": 3}]
+            }]
+        });
+
+        let csv = render_csv(&report);
+
+        assert!(csv.contains("not_found_urls,/.env,4,,,,\n"));
+        assert!(csv.contains("not_found_referrers,/.env -> -,3,,,,\n"));
     }
 }
