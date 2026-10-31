@@ -499,6 +499,31 @@ mod tests {
     }
 
     #[test]
+    fn renders_offline_graph_compatibility_with_escaped_tooltips() {
+        let daily = daily_chart(&[DailyRow {
+            date: "2026-10-31 <day>".into(),
+            hits: 10,
+            bytes: 100,
+            pages: 8,
+            files: 2,
+            visits: 4,
+        }]);
+        assert!(daily.contains("class=\"aw-chart\""));
+        assert!(daily.contains("title=\"2026-10-31 &lt;day&gt;: 10 hits\""));
+        assert!(!daily.contains("http://"));
+        assert!(!daily.contains("https://"));
+
+        let bandwidth = bandwidth_chart(&[BandwidthRow {
+            key: "/<asset>".into(),
+            hits: 2,
+            bytes: 100,
+        }]);
+        assert!(bandwidth.contains("Bandwidth by URL"));
+        assert!(bandwidth.contains("/&lt;asset&gt;"));
+        assert!(bandwidth.contains("style=\"width:100%\""));
+    }
+
+    #[test]
     fn renders_not_found_urls_with_referrers() {
         let html = not_found_table(&[NotFoundRow {
             url: "/.env".into(),
