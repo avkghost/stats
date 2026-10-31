@@ -614,6 +614,10 @@ fn regenerate_default_report(
                 .iter()
                 .map(|(label, _)| (label.clone(), format!("../../periods/{label}/index.html")))
                 .collect::<Vec<_>>();
+            let period_links =
+                std::iter::once(("All periods".to_owned(), "../../index.html".to_owned()))
+                    .chain(period_links)
+                    .collect::<Vec<_>>();
             write_external_html_site(&registry, &period_report, &period_output, &period_links)?;
         }
     } else {
