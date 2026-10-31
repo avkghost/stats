@@ -1472,11 +1472,10 @@ fn report(
             register_configured_renderer(&mut renderer_registry, config, format.as_str())?;
         }
     }
-    if matches!(format, ReportFormat::Html)
-        && output != Path::new("-")
-        && !external_renderer_configured
-    {
-        if period.is_some() {
+    if matches!(format, ReportFormat::Html) && output != Path::new("-") {
+        if external_renderer_configured {
+            write_external_html_site(&renderer_registry, &report, &output)?;
+        } else if period.is_some() {
             write_html_site(&report, &output)?;
         } else {
             write_report_site(&data_dir, &output, &report, limit)?;
