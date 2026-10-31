@@ -2726,13 +2726,27 @@ mod tests {
             "{}-report",
             directory.file_name().unwrap().to_string_lossy()
         ));
-        super::write_report_site(&directory, &output.join("index.html"), &report, 50, None)
-            .unwrap();
+        fs::write(directory.join("urlalias.txt"), "/\tHome page\n").unwrap();
+        let display_config = Config::parse(&format!(
+            "LogFile=access.log\nLogFormat=%host %time1\nDirData={}\nLoadPlugin=urlalias\n",
+            directory.display()
+        ))
+        .unwrap();
+        super::write_report_site(
+            &directory,
+            &output.join("index.html"),
+            &report,
+            50,
+            Some(&display_config),
+        )
+        .unwrap();
         let overview = fs::read_to_string(output.join("index.html")).unwrap();
         assert!(overview.contains("periods/2026-01/index.html"));
         assert!(overview.contains("periods/2026-02/index.html"));
         assert!(output.join("periods/2026-01/index.html").is_file());
         assert!(output.join("periods/2026-02/index.html").is_file());
+        let january_html = fs::read_to_string(output.join("periods/2026-01/index.html")).unwrap();
+        assert!(january_html.contains("Home page"));
         let limited = build_report_for_data_dir(&directory, 1).unwrap();
         assert_eq!(limited.urls.len(), 1);
         assert_eq!(limited.daily.len(), 1);
