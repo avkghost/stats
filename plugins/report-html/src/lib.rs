@@ -159,6 +159,11 @@ mod tests {
         ] {
             report[key] = json!([]);
         }
+        report["not_found"] = json!([{
+            "url": "/.env",
+            "hits": 4,
+            "referrers": [{"key": "-", "hits": 4}]
+        }]);
         CString::new(report.to_string()).unwrap()
     }
 
@@ -166,10 +171,11 @@ mod tests {
     fn renders_html_through_the_plugin_abi() {
         let format = CString::new("html").unwrap();
         let report = report_fixture();
+        let section = CString::new("pages").unwrap();
         let request = ReportRequest {
             format: format.as_ptr(),
             report_json: report.as_ptr(),
-            section: ptr::null(),
+            section: section.as_ptr(),
         };
         let mut output = RenderedReport {
             media_type: ptr::null_mut(),
@@ -180,8 +186,8 @@ mod tests {
         let status = unsafe { render_report(&request, &mut output) };
         assert_eq!(status, 0);
         let body = unsafe { CStr::from_ptr(output.body) }.to_string_lossy();
-        assert!(body.contains("Stats — Overview"));
-        assert!(body.contains("<strong>1</strong>"));
+        assert!(body.contains("Stats — Pages"));
+        assert!(body.contains("Required but not found URLs (HTTP code 404)"));
         unsafe { release_report(&mut output) };
     }
 }
