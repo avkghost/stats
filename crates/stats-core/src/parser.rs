@@ -124,7 +124,13 @@ fn contains_format_token(format: &str, token: &str) -> bool {
 
 impl LogParser {
     pub fn new(format: impl Into<String>) -> Result<Self, regex::Error> {
-        let format = normalize_apache_format(&format.into());
+        let format = format.into();
+        let format = match format.trim() {
+            "2" => {
+                "%time2 %host %logname %method %url %code %bytesd %other %ua %referer".to_owned()
+            }
+            _ => normalize_apache_format(&format),
+        };
         let regex = compile_format(&format)?;
         let json = format.trim().eq_ignore_ascii_case("json");
         let time_format = detect_time_format(&format);
@@ -770,6 +776,21 @@ mod tests {
             panic!("expected AWStats time1b event");
         };
         assert_eq!(event.timestamp.to_rfc3339(), "2001-01-01T13:01:00+00:00");
+    }
+
+    #[test]
+    fn parses_awstats_numeric_iis_format_two() {
+        let parser = LogParser::new("2").unwrap();
+        let ParseOutcome::Event(event) = parser.parse(
+            "2001-01-01 13:01:00 192.0.2.1 - GET /index.html 200 123 HTTP/1.1 Mozilla/5.0 -",
+        ) else {
+            panic!("expected AWStats IIS format event");
+        };
+        assert_eq!(event.client_ip, "192.0.2.1");
+        assert_eq!(event.method.as_deref(), Some("GET"));
+        assert_eq!(event.url.as_deref(), Some("/index.html"));
+        assert_eq!(event.status, 200);
+        assert_eq!(event.bytes, 123);
     }
 
     #[test]
