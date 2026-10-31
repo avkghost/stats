@@ -11,6 +11,7 @@ enum View {
     Geography,
     Clients,
     Performance,
+    Security,
 }
 
 impl View {
@@ -20,6 +21,7 @@ impl View {
             Self::Geography => "Geography",
             Self::Clients => "Clients",
             Self::Performance => "Performance",
+            Self::Security => "Security",
         }
     }
 }
@@ -79,6 +81,7 @@ where
                         KeyCode::Char('2') => view = View::Geography,
                         KeyCode::Char('3') => view = View::Clients,
                         KeyCode::Char('4') => view = View::Performance,
+                        KeyCode::Char('5') => view = View::Security,
                         KeyCode::Char('r') => last_refresh = Instant::now() - refresh,
                         _ => {}
                     }
@@ -133,38 +136,69 @@ fn draw(
     );
     match view {
         View::Overview => {
-            render_rows(frame, top_left, "Top URLs", &report.urls);
-            render_rows(frame, top_right, "HTTP Errors", &report.errors);
-            render_rows(frame, bottom_left, "Referrers", &report.referers);
+            render_rows(frame, top_left, "Top URLs", &report.urls, false);
+            render_rows(frame, top_right, "HTTP Errors", &report.errors, false);
+            render_rows(frame, bottom_left, "Referrers", &report.referers, false);
             render_rows(
                 frame,
                 bottom_right,
                 "Referring Sites",
                 &report.referrer_domains,
+                false,
             );
         }
         View::Geography => {
-            render_rows(frame, top_left, "Countries", &report.countries);
-            render_rows(frame, top_right, "Regions", &report.regions);
-            render_rows(frame, bottom_left, "Cities", &report.cities);
-            render_rows(frame, bottom_right, "Organizations", &report.organizations);
+            render_rows(frame, top_left, "Countries", &report.countries, false);
+            render_rows(frame, top_right, "Regions", &report.regions, false);
+            render_rows(frame, bottom_left, "Cities", &report.cities, false);
+            render_rows(
+                frame,
+                bottom_right,
+                "Organizations",
+                &report.organizations,
+                false,
+            );
         }
         View::Clients => {
-            render_rows(frame, top_left, "User agents", &report.user_agents);
-            render_rows(frame, top_right, "Browsers", &report.browsers);
-            render_rows(frame, bottom_left, "Operating systems", &report.oses);
-            render_rows(frame, bottom_right, "Robots", &report.robots);
+            render_rows(frame, top_left, "User agents", &report.user_agents, false);
+            render_rows(frame, top_right, "Browsers", &report.browsers, false);
+            render_rows(frame, bottom_left, "Operating systems", &report.oses, false);
+            render_rows(frame, bottom_right, "Robots", &report.robots, false);
         }
         View::Performance => {
-            render_rows(frame, top_left, "Request times", &report.request_times);
-            render_rows(frame, top_right, "Hours", &report.hours);
-            render_rows(frame, bottom_left, "Status classes", &report.status_classes);
-            render_rows(frame, bottom_right, "Methods", &report.methods);
+            render_rows(
+                frame,
+                top_left,
+                "Request times",
+                &report.request_times,
+                false,
+            );
+            render_rows(frame, top_right, "Hours", &report.hours, false);
+            render_rows(
+                frame,
+                bottom_left,
+                "Status classes",
+                &report.status_classes,
+                false,
+            );
+            render_rows(frame, bottom_right, "Methods", &report.methods, false);
+        }
+        View::Security => {
+            render_rows(
+                frame,
+                top_left,
+                "HTTP method anomalies",
+                &report.method_anomalies,
+                true,
+            );
+            render_rows(frame, top_right, "Security probes", &report.scanners, true);
+            render_rows(frame, bottom_left, "HTTP methods", &report.methods, false);
+            render_rows(frame, bottom_right, "HTTP errors", &report.errors, false);
         }
     }
     frame.render_widget(
         Paragraph::new(format!(
-            "1-4 views | r refresh | q/Esc/Ctrl-C quit | {} | {}s | diag {}",
+            "1-5 views | r refresh | q/Esc/Ctrl-C quit | {} | {}s | diag {}",
             view.title(),
             refresh.as_secs(),
             report.diagnostics.iter().map(|row| row.hits).sum::<u64>()
@@ -179,11 +213,22 @@ fn render_rows(
     area: ratatui::layout::Rect,
     title: &str,
     rows: &[ReportRow],
+    highlight: bool,
 ) {
-    use ratatui::widgets::{Block, List, ListItem};
+    use ratatui::{
+        style::{Color, Style},
+        widgets::{Block, List, ListItem},
+    };
     let items = rows
         .iter()
-        .map(|row| ListItem::new(format!("{:>8}  {}", row.hits, row.key)))
+        .map(|row| {
+            let item = ListItem::new(format!("{:>8}  {}", row.hits, row.key));
+            if highlight {
+                item.style(Style::default().fg(Color::Red))
+            } else {
+                item
+            }
+        })
         .collect::<Vec<_>>();
     frame.render_widget(List::new(items).block(Block::bordered().title(title)), area);
 }
