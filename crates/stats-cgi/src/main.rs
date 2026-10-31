@@ -304,6 +304,7 @@ mod tests {
         assert!(parse_query("limit=10001").is_err());
         assert!(parse_query("section=../visitors").is_err());
         assert!(parse_query("output=json&section=visitors").is_err());
+        assert!(parse_query("section=visitors&output=json").is_err());
     }
 
     #[test]
