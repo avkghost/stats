@@ -35,6 +35,9 @@ unsafe extern "C" fn render_report(
         return 1;
     }
     let request = &*request;
+    if request.format.is_null() || request.report_json.is_null() {
+        return 1;
+    }
     let format = CStr::from_ptr(request.format).to_bytes();
     if format != b"json" {
         return 2;
@@ -114,5 +117,20 @@ mod tests {
         );
         unsafe { release_report(&mut output) };
         assert!(output.body.is_null());
+    }
+
+    #[test]
+    fn rejects_null_request_strings() {
+        let mut output = RenderedReport {
+            media_type: ptr::null_mut(),
+            extension: ptr::null_mut(),
+            body: ptr::null_mut(),
+        };
+        let request = ReportRequest {
+            format: ptr::null(),
+            report_json: ptr::null(),
+            section: ptr::null(),
+        };
+        assert_eq!(unsafe { render_report(&request, &mut output) }, 1);
     }
 }

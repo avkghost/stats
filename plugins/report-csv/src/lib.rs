@@ -36,6 +36,9 @@ unsafe extern "C" fn render_report(
         return 1;
     }
     let request = &*request;
+    if request.format.is_null() || request.report_json.is_null() {
+        return 1;
+    }
     if CStr::from_ptr(request.format).to_bytes() != b"csv" {
         return 2;
     }
@@ -212,8 +215,10 @@ unsafe extern "C" fn release_report(output: *mut RenderedReport) {
 
 #[cfg(test)]
 mod tests {
-    use super::render_csv;
+    use super::{render_csv, render_report};
     use serde_json::json;
+    use stats_plugin_api::{RenderedReport, ReportRequest};
+    use std::ptr;
 
     #[test]
     fn exports_summary_rows_and_escapes_dimension_keys() {
@@ -264,5 +269,20 @@ mod tests {
 
         assert!(csv.contains("not_found_urls,/.env,4,,,,\n"));
         assert!(csv.contains("not_found_referrers,/.env -> -,3,,,,\n"));
+    }
+
+    #[test]
+    fn rejects_null_request_strings() {
+        let mut output = RenderedReport {
+            media_type: ptr::null_mut(),
+            extension: ptr::null_mut(),
+            body: ptr::null_mut(),
+        };
+        let request = ReportRequest {
+            format: ptr::null(),
+            report_json: ptr::null(),
+            section: ptr::null(),
+        };
+        assert_eq!(unsafe { render_report(&request, &mut output) }, 1);
     }
 }
