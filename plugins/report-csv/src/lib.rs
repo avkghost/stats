@@ -209,4 +209,18 @@ mod tests {
         assert!(csv.contains("urls,\"/search?q=a,b\",4,,,,\n"));
         assert!(csv.contains("bandwidth_urls,/download,1,99,,,\n"));
     }
+
+    #[test]
+    fn exports_security_dimensions_without_display_prefixes() {
+        let report = json!({
+            "method_anomalies": [{"key": "PROPFIND", "hits": 4}],
+            "scanners": [{"key": "environment-probe", "hits": 8}]
+        });
+
+        let csv = render_csv(&report);
+
+        assert!(csv.contains("method_anomalies,PROPFIND,4,,,,\n"));
+        assert!(csv.contains("scanners,environment-probe,8,,,,\n"));
+        assert!(!csv.contains("unrecognized:PROPFIND"));
+    }
 }
