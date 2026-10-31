@@ -89,7 +89,8 @@ mod tests {
     #[test]
     fn renders_json_through_the_plugin_abi() {
         let format = CString::new("json").unwrap();
-        let report = CString::new(r#"{"hits":7,"urls":[]}"#).unwrap();
+        let report =
+            CString::new(r#"{"hits":7,"urls":[],"not_found":[{"url":"/.env","hits":4}]}"#).unwrap();
         let request = ReportRequest {
             format: format.as_ptr(),
             report_json: report.as_ptr(),
