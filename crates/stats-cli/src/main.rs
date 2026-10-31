@@ -1589,6 +1589,10 @@ fn add_period_links(mut html: String, period_links: &[(String, String)]) -> Stri
     );
     if let Some(position) = html.find("</main>") {
         html.insert_str(position, &section);
+    } else if let Some(position) = html.find("</body>") {
+        html.insert_str(position, &section);
+    } else {
+        html.push_str(&section);
     }
     html
 }
@@ -2574,6 +2578,11 @@ mod tests {
             "<h2>Periods</h2><ul class=\"period-links\"><li><a href=\"periods/2026-01/index.html\">2026-01</a></li></ul>"
         ));
         assert!(html.find("Periods").unwrap() < html.find("</main>").unwrap());
+        let body_only = super::add_period_links(
+            "<html><body>Overview</body></html>".into(),
+            &[("2026-01".into(), "periods/2026-01/index.html".into())],
+        );
+        assert!(body_only.contains("<body>Overview<section"));
         assert_eq!(super::add_period_links("plain".into(), &[]), "plain");
     }
 
