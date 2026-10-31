@@ -242,7 +242,7 @@ fn apply_cluster_info_rows(rows: &mut [ReportRow], info: &HashMap<String, String
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_cluster_info_rows, ReportRow};
+    use super::{apply_cluster_info_rows, BandwidthRow, Report, ReportMetadata, ReportRow};
     use std::collections::HashMap;
 
     #[test]
@@ -264,5 +264,83 @@ mod tests {
         assert_eq!(rows[0].key, "node-a (Primary)");
         assert_eq!(rows[1].key, "node-b");
         assert_eq!(rows[0].hits, 3);
+    }
+
+    #[test]
+    fn url_aliases_decorate_all_display_url_dimensions() {
+        let mut report = Report {
+            metadata: ReportMetadata {
+                schema_version: None,
+                input_path: None,
+                input_size: None,
+                input_lines: None,
+                config_path: None,
+                config_hash: None,
+                approximations: Vec::new(),
+            },
+            hits: 0,
+            bytes: 0,
+            pages: 0,
+            files: 0,
+            visits: 0,
+            unique_visits: 0,
+            countries: Vec::new(),
+            regions: Vec::new(),
+            cities: Vec::new(),
+            asns: Vec::new(),
+            organizations: Vec::new(),
+            hostnames: Vec::new(),
+            statuses: Vec::new(),
+            status_classes: Vec::new(),
+            errors: Vec::new(),
+            methods: Vec::new(),
+            method_anomalies: Vec::new(),
+            urls: vec![ReportRow {
+                key: "/docs".into(),
+                hits: 4,
+            }],
+            bandwidth_urls: vec![BandwidthRow {
+                key: "/docs".into(),
+                hits: 4,
+                bytes: 100,
+            }],
+            daily: Vec::new(),
+            users: Vec::new(),
+            user_agents: Vec::new(),
+            referers: Vec::new(),
+            referrer_domains: Vec::new(),
+            referer_spam: Vec::new(),
+            scanners: Vec::new(),
+            file_types: Vec::new(),
+            browsers: Vec::new(),
+            oses: Vec::new(),
+            robots: Vec::new(),
+            request_times: Vec::new(),
+            virtual_hosts: Vec::new(),
+            entry_pages: vec![ReportRow {
+                key: "/docs".into(),
+                hits: 2,
+            }],
+            exit_pages: vec![ReportRow {
+                key: "/docs".into(),
+                hits: 1,
+            }],
+            search_engines: Vec::new(),
+            keyphrases: Vec::new(),
+            hours: Vec::new(),
+            dates: Vec::new(),
+            months: Vec::new(),
+            weekdays: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        report.apply_url_aliases(&HashMap::from([(
+            String::from("/docs"),
+            String::from("Docs"),
+        )]));
+
+        assert_eq!(report.urls[0].key, "Docs");
+        assert_eq!(report.bandwidth_urls[0].key, "Docs");
+        assert_eq!(report.entry_pages[0].key, "Docs");
+        assert_eq!(report.exit_pages[0].key, "Docs");
     }
 }
