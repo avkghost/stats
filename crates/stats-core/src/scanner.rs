@@ -99,6 +99,43 @@ impl ScannerMatcher {
             event.scanner = Some(rule.label.clone());
         }
     }
+
+    pub fn apply_heuristic(&self, event: &mut AccessEvent) {
+        if event.scanner.is_some() || event.status != 404 {
+            return;
+        }
+        let Some(url) = event.url.as_deref() else {
+            return;
+        };
+        let path = url.split('?').next().unwrap_or(url).to_ascii_lowercase();
+        let label = if path == "/.env" || path.starts_with("/.env.") || path.contains("/.env/") {
+            Some("environment-probe")
+        } else if path == "/.git" || path.starts_with("/.git/") {
+            Some("git-probe")
+        } else if path == "/.aws" || path.starts_with("/.aws/") {
+            Some("cloud-credentials-probe")
+        } else if path.starts_with("/wp-")
+            || path.starts_with("/wordpress")
+            || path.starts_with("/wp/")
+        {
+            Some("wordpress-probe")
+        } else if path.contains("phpmyadmin")
+            || path == "/phpinfo.php"
+            || path.contains("/vendor/phpunit/")
+        {
+            Some("runtime-probe")
+        } else if path.starts_with("/actuator/")
+            || path.starts_with("/server-status")
+            || path.starts_with("/cgi-bin/")
+        {
+            Some("service-probe")
+        } else {
+            None
+        };
+        if let Some(label) = label {
+            event.scanner = Some(label.into());
+        }
+    }
 }
 
 impl Rule {
@@ -164,5 +201,17 @@ mod tests {
         let mut event = event("/about/");
         matcher.apply(&mut event);
         assert!(event.scanner.is_none());
+    }
+
+    #[test]
+    fn classifies_high_confidence_404_probe_paths_only() {
+        let matcher = ScannerMatcher::default();
+        let mut probe = event("/.env.production");
+        matcher.apply_heuristic(&mut probe);
+        assert_eq!(probe.scanner.as_deref(), Some("environment-probe"));
+
+        let mut asset = event("/favicon.ico");
+        matcher.apply_heuristic(&mut asset);
+        assert!(asset.scanner.is_none());
     }
 }

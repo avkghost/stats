@@ -77,6 +77,7 @@ pub struct Config {
     pub dns_lookup_cache_size: usize,
     pub referer_spam_rules: Option<PathBuf>,
     pub scanner_rules: Option<PathBuf>,
+    pub scanner_heuristics: bool,
     pub http_method_anomaly_allowed: Vec<String>,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
@@ -154,6 +155,7 @@ impl Config {
             "DNSLookupCacheSize",
             "RefererSpamRules",
             "ScannerRules",
+            "ScannerHeuristics",
             "HttpMethodAnomalyAllowedMethods",
             "SkipHosts",
             "OnlyHosts",
@@ -261,6 +263,10 @@ impl Config {
                 .get("ScannerRules")
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from),
+            scanner_heuristics: values
+                .get("ScannerHeuristics")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             http_method_anomaly_allowed: values
                 .get("HttpMethodAnomalyAllowedMethods")
                 .map(|value| {
@@ -423,6 +429,13 @@ mod tests {
             ["GET", "POST", "PROPFIND"]
         );
         assert_eq!(config.plugins[0].name, "detecthttpmethodanomaly");
+    }
+
+    #[test]
+    fn parses_scanner_heuristics_flag() {
+        let config =
+            Config::parse("LogFile=access.log\nLogFormat=1\nScannerHeuristics=1\n").unwrap();
+        assert!(config.scanner_heuristics);
     }
 
     #[test]

@@ -951,6 +951,9 @@ fn update_inner(
                     registry.enrich(&mut event);
                     if let Some(matcher) = scanner.as_ref() {
                         matcher.apply(&mut event);
+                        if config.scanner_heuristics {
+                            matcher.apply_heuristic(&mut event);
+                        }
                     }
                     if let Some(matcher) = referer_spam.as_ref() {
                         matcher.apply(&mut event);

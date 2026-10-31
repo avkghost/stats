@@ -9,6 +9,7 @@ Enable it in the AWStats-style configuration:
 ```ini
 LoadPlugin="detectscanner"
 ScannerRules="scanner.rules"
+ScannerHeuristics=1
 ```
 
 Rules are tab-separated and use the form:
@@ -24,3 +25,9 @@ The first matching rule wins. Classified requests are aggregated under the
 detail page with red visual emphasis. Rules are intentionally explicit;
 ordinary `404` responses and high request rates are not classified
 automatically.
+
+When `ScannerHeuristics=1` is enabled, unmatched 404 requests are checked for
+high-confidence probe families such as `.env`, `.git`, `.aws`, WordPress,
+phpMyAdmin/phpinfo, PHPUnit, Actuator, CGI, and server-status paths. Explicit
+rules always take precedence, and ordinary missing assets such as
+`/favicon.ico` remain unclassified.
