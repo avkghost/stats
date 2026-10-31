@@ -1030,24 +1030,49 @@ fn update_inner(
     store.set_meta("input_size", &(active_raw.len() as u64).to_string())?;
     store.set_meta("input_lines", &active_lines.to_string())?;
     if !quiet {
-        if processed == 0 && events == 0 && diagnostics == 0 && filtered == 0 {
-            if timehires_enabled {
-                println!(
-                    "unchanged input; no update required (elapsed_ms={})",
-                    update_started.elapsed().as_millis()
-                );
-            } else {
-                println!("unchanged input; no update required");
-            }
-        } else {
-            if timehires_enabled {
-                println!("processed={processed} events={events} diagnostics={diagnostics} filtered={filtered} elapsed_ms={} database={}", update_started.elapsed().as_millis(), db_path.display());
-            } else {
-                println!("processed={processed} events={events} diagnostics={diagnostics} filtered={filtered} database={}", db_path.display());
-            }
-        }
+        println!(
+            "{}",
+            update_summary(
+                processed,
+                events,
+                diagnostics,
+                filtered,
+                timehires_enabled,
+                update_started.elapsed().as_millis(),
+                &db_path,
+            )
+        );
     }
     Ok(())
+}
+
+fn update_summary(
+    processed: u64,
+    events: u64,
+    diagnostics: u64,
+    filtered: u64,
+    timehires: bool,
+    elapsed_ms: u128,
+    database: &Path,
+) -> String {
+    if processed == 0 && events == 0 && diagnostics == 0 && filtered == 0 {
+        return if timehires {
+            format!("unchanged input; no update required (elapsed_ms={elapsed_ms})")
+        } else {
+            "unchanged input; no update required".into()
+        };
+    }
+    let details = format!(
+        "processed={processed} events={events} diagnostics={diagnostics} filtered={filtered}"
+    );
+    if timehires {
+        format!(
+            "{details} elapsed_ms={elapsed_ms} database={}",
+            database.display()
+        )
+    } else {
+        format!("{details} database={}", database.display())
+    }
 }
 
 fn rebuild(
@@ -2394,7 +2419,7 @@ mod tests {
     use super::{
         backup, build_report_for_data_dir, build_report_for_period, configured_referer_spam,
         configured_scanner, database_paths, health, migrate, plugin_paths, resolve_log_file,
-        retention, StoreRouter,
+        retention, update_summary, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
@@ -2421,6 +2446,23 @@ mod tests {
         assert!(error.to_string().contains("must differ from source"));
 
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn timehires_controls_elapsed_time_in_update_summary() {
+        let database = Path::new("stats.sqlite3");
+        let normal = update_summary(2, 2, 0, 0, false, 17, database);
+        assert_eq!(
+            normal,
+            "processed=2 events=2 diagnostics=0 filtered=0 database=stats.sqlite3"
+        );
+        let detailed = update_summary(2, 2, 0, 0, true, 17, database);
+        assert!(detailed.contains("elapsed_ms=17"));
+        let unchanged = update_summary(0, 0, 0, 0, true, 17, database);
+        assert_eq!(
+            unchanged,
+            "unchanged input; no update required (elapsed_ms=17)"
+        );
     }
 
     #[cfg(unix)]
