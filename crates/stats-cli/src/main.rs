@@ -1526,6 +1526,15 @@ fn write_external_html_site(
     let index = render_report_stream(registry, report, "html")?;
     fs::write(output, index)
         .with_context(|| format!("write external HTML report {}", output.display()))?;
+    let canonical_index = directory.join("index.html");
+    if canonical_index != output {
+        fs::copy(output, &canonical_index).with_context(|| {
+            format!(
+                "create canonical external HTML entry point {}",
+                canonical_index.display()
+            )
+        })?;
+    }
     for page in [
         "visitors",
         "pages",
