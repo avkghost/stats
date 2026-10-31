@@ -13,7 +13,7 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 | Upstream plugin family | Current status | Decision |
 | --- | --- | --- |
 | `geoip2_*`, `geoip_*`, `geoipfree`, `geoip6` | Core MaxMind Country, City, ASN, region, and organization enrichment | Keep as core providers; do not duplicate Perl plugin loading |
-| `export_to_csv` | External CSV report plugin | Keep as a native report renderer |
+| `export_to_csv` | External CSV report plugin alias accepted alongside `report_csv` and `renderer_csv` | Keep CSV loading explicit and configuration-selected |
 | `graphapplet`, `graphgooglechartapi` | Replaced by local HTML/CSS charts | Keep local and offline; do not depend on Java or third-party chart services |
 | `timezone` | Core `TimeZone` configuration with fixed-offset and IANA-zone conversion | Keep deterministic, checkpoint-aware, and DST-aware |
 | `userinfo` | Core authenticated-user aggregation with display decoration from `userinfo[.<SiteDomain>].txt` or `userinfo.txt` | Keep stored user keys canonical; decorate only report rows |

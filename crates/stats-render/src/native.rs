@@ -64,12 +64,14 @@ fn configured_renderer_library<'a>(config: &'a Config, format: &str) -> anyhow::
 }
 
 pub fn report_plugin_format(plugin: &PluginConfig) -> Option<String> {
-    plugin
-        .name
-        .strip_prefix("report_")
-        .or_else(|| plugin.name.strip_prefix("renderer_"))
-        .filter(|format| matches!(*format, "html" | "json" | "csv"))
-        .map(str::to_owned)
+    match plugin.name.as_str() {
+        "export_to_csv" => Some("csv".into()),
+        name => name
+            .strip_prefix("report_")
+            .or_else(|| name.strip_prefix("renderer_"))
+            .filter(|format| matches!(*format, "html" | "json" | "csv"))
+            .map(str::to_owned),
+    }
 }
 
 impl ReportRenderer for NativeReportRenderer {
@@ -127,6 +129,7 @@ mod tests {
             ("renderer_html", "html"),
             ("renderer_json", "json"),
             ("renderer_csv", "csv"),
+            ("export_to_csv", "csv"),
         ] {
             let plugin = PluginConfig {
                 name: name.into(),
