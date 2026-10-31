@@ -25,8 +25,8 @@ observable behavior.
 | `graphapplet` | compatibility adapter | Offline HTML/CSS chart equivalent |
 | `graphgooglechartapi` | compatibility adapter | Offline chart equivalent without remote service calls |
 | `hashfiles` | compatibility adapter | Explicitly selects SQLite as the authoritative replacement for Perl `Storable` hash files |
-| `hostinfo` | compatibility adapter | Opt-in bounded reverse-DNS enrichment |
-| `ipv6` | compatibility adapter | IPv6 parsing, filtering, and enrichment |
+| `hostinfo` | compatibility adapter | Opt-in bounded asynchronous reverse-DNS enrichment through `LoadPlugin=hostinfo` or legacy `DNSLookup=1` |
+| `ipv6` | compatibility adapter | Preserve IPv6 client addresses through parsing, filtering, GeoIP, and reverse-DNS enrichment |
 | `rawlog` | compatibility adapter | Bounded redacted CLI, HTTP, and CGI exports |
 | `timehires` | compatibility adapter | Millisecond elapsed timing in update summaries |
 | `timezone` | compatibility adapter | Fixed offsets and named IANA zones with daylight-saving conversion |
