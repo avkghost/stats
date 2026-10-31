@@ -123,28 +123,6 @@ pub(crate) fn daily_chart(rows: &[DailyRow]) -> String {
     out
 }
 
-pub(crate) fn row_chart(rows: &[ReportRow], label: &str) -> String {
-    let maximum = rows.iter().map(|row| row.hits).max().unwrap_or(0);
-    let mut out = format!(
-        "<div class=\"aw-chart\" aria-label=\"{} chart\"><div class=\"aw-chart-caption\"><span>{}</span><span>Hits</span></div>",
-        html_escape(label),
-        html_escape(label)
-    );
-    for row in rows {
-        let width = row
-            .hits
-            .saturating_mul(100)
-            .checked_div(maximum)
-            .unwrap_or(0);
-        out.push_str(&format!(
-            "<div class=\"aw-chart-row\" title=\"{}: {} hits\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
-            html_escape(&row.key), row.hits, html_escape(&row.key), width, row.hits
-        ));
-    }
-    out.push_str("</div>");
-    out
-}
-
 pub(crate) fn bandwidth_chart(rows: &[BandwidthRow]) -> String {
     let maximum = rows.iter().map(|row| row.bytes).max().unwrap_or(0);
     let mut out = String::from(
@@ -204,14 +182,13 @@ fn overview(report: &Report, periods: &[(String, String)]) -> String {
         )
     };
     format!(
-        "<div class=\"eyebrow\">Traffic overview</div><h1>Stats Web Server Statistics</h1><p class=\"lede\">Aggregated activity from the configured access log.</p><div class=\"metric-grid\">{}{}{}{}{}{}</div><div class=\"overview-grid\">{}{}{}{}{}{}</div>",
+        "<div class=\"eyebrow\">Traffic overview</div><h1>Stats Web Server Statistics</h1><p class=\"lede\">Aggregated activity from the configured access log.</p><div class=\"metric-grid\">{}{}{}{}{}{}</div><div class=\"overview-grid\">{}{}{}{}{}</div>",
         metric("Hits", report.hits),
         metric("Bytes", report.bytes),
         metric("Pages", report.pages),
         metric("Files", report.files),
         metric("Visits", report.visits),
         metric("Unique visits", report.unique_visits),
-        section("Status classes", row_chart(&report.status_classes, "Status classes")),
         section("HTTP status codes", table_limited(&report.statuses, 10)),
         section("Daily traffic", daily_chart(&report.daily)),
         section("Top URLs", table_limited(&report.urls, 5)),
@@ -507,14 +484,6 @@ mod tests {
             key: "<unsafe>".into(),
             hits: 2,
         }])
-        .contains("title=\"&lt;unsafe&gt;: 2 hits\""));
-        assert!(row_chart(
-            &[ReportRow {
-                key: "<unsafe>".into(),
-                hits: 2,
-            }],
-            "Requests"
-        )
         .contains("title=\"&lt;unsafe&gt;: 2 hits\""));
     }
 
