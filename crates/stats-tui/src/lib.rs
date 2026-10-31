@@ -1,5 +1,5 @@
 use anyhow::Result;
-use stats_core::{Report, ReportRow};
+use stats_core::{NotFoundRow, Report, ReportRow};
 use std::{
     path::Path,
     time::{Duration, Instant},
@@ -192,7 +192,7 @@ fn draw(
                 true,
             );
             render_rows(frame, top_right, "Security probes", &report.scanners, true);
-            render_rows(frame, bottom_left, "HTTP methods", &report.methods, false);
+            render_not_found(frame, bottom_left, &report.not_found);
             render_rows(frame, bottom_right, "HTTP errors", &report.errors, false);
         }
     }
@@ -205,6 +205,24 @@ fn draw(
         ))
         .style(Style::default().fg(Color::DarkGray)),
         footer,
+    );
+}
+
+fn render_not_found(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, rows: &[NotFoundRow]) {
+    use ratatui::{
+        style::{Color, Style},
+        widgets::{Block, List, ListItem},
+    };
+    let items = rows
+        .iter()
+        .map(|row| {
+            ListItem::new(format!("{:>8}  {}", row.hits, row.url))
+                .style(Style::default().fg(Color::Red))
+        })
+        .collect::<Vec<_>>();
+    frame.render_widget(
+        List::new(items).block(Block::bordered().title("Required but not found (404)")),
+        area,
     );
 }
 
