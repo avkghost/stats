@@ -146,8 +146,12 @@ impl LogParser {
             Some(v) => v,
             None => return ParseOutcome::Diagnostic(ParseError::Number("status".into())),
         };
-        let bytes = match get("bytes").and_then(|v| v.parse().ok()) {
-            Some(v) => v,
+        let bytes = match get("bytes").as_deref() {
+            Some("-") => 0,
+            Some(value) => match value.parse() {
+                Ok(value) => value,
+                Err(_) => return ParseOutcome::Diagnostic(ParseError::Number("bytes".into())),
+            },
             None => return ParseOutcome::Diagnostic(ParseError::Number("bytes".into())),
         };
         let query = none_dash(get("query"));
@@ -507,7 +511,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
             }
             let (name, expression): (String, &str) = match token.as_str() {
                 "host" => ("host".into(), r"\S+"),
-                "logname" => ("logname".into(), r"\S+"),
+                "logname" => ("logname".into(), r".*?"),
                 "user" => ("user".into(), r"\S+"),
                 "time1" => (
                     "time".into(),
@@ -532,7 +536,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                 "duration" => ("duration".into(), r"\d+(?:\.\d+)?"),
                 "duration_ms" | "duration_us" => (token.clone(), r"\d+(?:\.\d+)?"),
                 "code" => ("status".into(), r"\d{3}"),
-                "bytesd" => ("bytes".into(), r"\d+"),
+                "bytesd" => ("bytes".into(), r"(?:\d+|-)"),
                 "referer" | "refererquot" => ("referer".into(), r#".*?"#),
                 "ua" | "uaquot" | "uabracket" => ("ua".into(), r#".*?"#),
                 "extra1" => ("extra1".into(), r"\S+"),
@@ -701,6 +705,42 @@ mod tests {
         assert_eq!(event.status, 200);
         assert_eq!(event.url.as_deref(), Some("/"));
         assert_eq!(event.bytes, 42);
+    }
+
+    #[test]
+    fn parses_awstats_time5_iso8601_timestamp_with_fraction_and_offset() {
+        let parser = LogParser::new(
+            "%host %other %logname %time5 %methodurl %code %bytesd %refererquot %uaquot",
+        )
+        .unwrap();
+        let ParseOutcome::Event(event) = parser.parse(
+            r#"80.8.55.10 - - 2001-01-01T23:55:10.147454Z "GET / HTTP/1.1" 200 70476 "-" "test-agent""#,
+        ) else {
+            panic!("expected AWStats time5 event");
+        };
+        assert_eq!(event.status, 200);
+        assert_eq!(event.url.as_deref(), Some("/"));
+        assert_eq!(event.bytes, 70476);
+        assert_eq!(
+            event.timestamp.to_rfc3339(),
+            "2001-01-01T23:55:10.147454+00:00"
+        );
+    }
+
+    #[test]
+    fn accepts_spaced_logname_and_dash_bytes_in_awstats_format() {
+        let parser = LogParser::new(
+            "%host %other %logname %time1 %methodurl %code %bytesd %refererquot %uaquot",
+        )
+        .unwrap();
+        let ParseOutcome::Event(event) = parser.parse(
+            r#"80.8.55.7 - John Begood [01/Jan/2001:13:01:00 +0100] "SEARCH / -" 411 - "-" "-""#,
+        ) else {
+            panic!("expected AWStats event with optional fields");
+        };
+        assert_eq!(event.identity.as_deref(), Some("John Begood"));
+        assert_eq!(event.status, 411);
+        assert_eq!(event.bytes, 0);
     }
 
     #[test]

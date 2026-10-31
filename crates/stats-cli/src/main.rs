@@ -964,6 +964,9 @@ fn update_inner(
         let mut event_batch = Vec::with_capacity(256);
         for line in lines.iter().skip(skip_lines) {
             processed += 1;
+            if line.trim().is_empty() || line.trim_start().starts_with('#') {
+                continue;
+            }
             match parser.parse(line) {
                 ParseOutcome::Event(mut event) => {
                     if let Some(time_zone) = config.time_zone.as_deref() {
