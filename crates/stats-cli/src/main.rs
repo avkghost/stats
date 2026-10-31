@@ -596,6 +596,16 @@ fn regenerate_default_report(
         register_configured_renderer(&mut registry, &config, "html")
             .with_context(|| format!("load HTML renderer from {}", config_path.display()))?;
         write_external_html_site(&registry, &report, &output)?;
+        for period in period_names(&config.data_dir)? {
+            let period_report = build_report_for_period(&config.data_dir, 50, Some(&period))?;
+            let period_output = output
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("periods")
+                .join(&period)
+                .join("index.html");
+            write_external_html_site(&registry, &period_report, &period_output)?;
+        }
     } else {
         write_report_site(&config.data_dir, &output, &report, 50)?;
     }
