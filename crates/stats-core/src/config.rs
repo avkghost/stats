@@ -112,6 +112,10 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn plugin_enabled(&self, name: &str) -> bool {
+        self.plugins.iter().any(|plugin| plugin.name == name)
+    }
+
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let path = path.as_ref().to_path_buf();
         let text =
@@ -524,6 +528,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             AWSTATS_PLUGIN_INVENTORY
         );
+        assert!(config.plugin_enabled("rawlog"));
+        assert!(!config.plugin_enabled("missing"));
     }
 
     #[test]

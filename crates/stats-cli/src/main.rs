@@ -417,6 +417,12 @@ fn raw_log(
 ) -> anyhow::Result<()> {
     let config = Config::from_path(&config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?;
+    if !config.plugin_enabled("rawlog") {
+        anyhow::bail!(
+            "raw-log requires LoadPlugin=rawlog in {}",
+            config_path.display()
+        );
+    }
     let path = log_override.unwrap_or(config.log_file);
     validate_raw_log_output(&path, output.as_deref())?;
     let body = render_redacted_raw_log(&path, start, lines)?;

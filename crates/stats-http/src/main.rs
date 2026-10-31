@@ -38,6 +38,7 @@ struct AppState {
     config: Option<Config>,
     sandbox: FileSandbox,
     raw_log_token: Option<String>,
+    raw_log_enabled: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -69,6 +70,9 @@ async fn main() -> Result<()> {
             data_dir.display()
         )
     })?;
+    let raw_log_enabled = config
+        .as_ref()
+        .is_some_and(|config| config.plugin_enabled("rawlog"));
     let state = Arc::new(AppState {
         data_dir,
         config,
@@ -76,6 +80,7 @@ async fn main() -> Result<()> {
         raw_log_token: std::env::var("STATS_RAW_LOG_AUTH_TOKEN")
             .ok()
             .filter(|token| !token.is_empty()),
+        raw_log_enabled,
     });
     let app = Router::new()
         .route("/", get(report))
@@ -151,6 +156,9 @@ async fn raw_log(
     headers: HeaderMap,
     Query(query): Query<RawLogQuery>,
 ) -> Response {
+    if !state.raw_log_enabled {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let Some(expected) = state.raw_log_token.as_deref() else {
         return StatusCode::NOT_FOUND.into_response();
     };

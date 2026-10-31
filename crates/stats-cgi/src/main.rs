@@ -142,6 +142,9 @@ fn render_cgi(
         }
         eprintln!("raw-log access granted lines={}", request.limit);
         let config = config.ok_or_else(|| anyhow::anyhow!("raw-log requires STATS_CONFIG"))?;
+        if !config.plugin_enabled("rawlog") {
+            bail!("raw-log requires LoadPlugin=rawlog in STATS_CONFIG");
+        }
         let config = config.clone().with_overrides(None, Some(data_dir));
         let path = sandbox.check_existing(&config.log_file)?;
         return Ok((
