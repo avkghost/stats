@@ -25,7 +25,7 @@ directory: `clusterinfo`, `decodeutfkeys`, `detectrefererspam`, `example`,
 | `urlalias` | Display-only report-decoration adapter | Keep stored aggregation keys and machine-readable URLs canonical |
 | `detectrefererspam` | Minimal explicit rule engine implemented and documented | Extend only with configured rules; do not invent a universal heuristic |
 | `rawlog` | CLI, authenticated HTTP, and authenticated CGI exports use bounded redacted output | Keep network access disabled unless `STATS_RAW_LOG_AUTH_TOKEN` and bearer authentication are configured |
-| `hostinfo`, `ipv6` | Optional bounded reverse-DNS enrichment implemented behind `DNSLookup=1` | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
+| `hostinfo`, `ipv6` | Optional bounded asynchronous reverse-DNS enrichment; `hostinfo` or `DNSLookup=1` enables lookup, and IPv6 client addresses are preserved | Never perform reverse-DNS lookups during normal updates unless explicitly enabled |
 | `timehires` | Update summaries expose millisecond elapsed timing when enabled | Keep timing diagnostics outside report data |
 
 ## Implementation order

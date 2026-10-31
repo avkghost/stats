@@ -788,7 +788,7 @@ fn update_inner(
     registry.add(GeoIpEnricher {
         provider: Box::new(geoip),
     });
-    let mut reverse_dns = if config.dns_lookup {
+    let mut reverse_dns = if reverse_dns_enabled(&config) {
         Some(
             reverse_dns::ReverseDnsEnricher::new(
                 config.dns_lookup_timeout_ms,
@@ -1341,6 +1341,10 @@ fn plugin_worker(path: PathBuf) -> anyhow::Result<()> {
         stdout.flush()?;
     }
     Ok(())
+}
+
+fn reverse_dns_enabled(config: &Config) -> bool {
+    config.dns_lookup || config.plugin_enabled("hostinfo")
 }
 
 fn plugin_paths(
@@ -2429,7 +2433,7 @@ mod tests {
     use super::{
         backup, build_report_for_data_dir, build_report_for_period, configured_referer_spam,
         configured_scanner, database_paths, health, migrate, plugin_paths, resolve_log_file,
-        retention, update_summary, StoreRouter,
+        retention, reverse_dns_enabled, update_summary, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
     use chrono::DateTime;
@@ -2917,6 +2921,19 @@ mod tests {
                 Some(PathBuf::from("org.mmdb"))
             )
         );
+    }
+
+    #[test]
+    fn hostinfo_plugin_enables_reverse_dns_without_changing_legacy_dns_lookup() {
+        let legacy = Config::parse("LogFile=access.log\nLogFormat=1\nDNSLookup=1\n").unwrap();
+        assert!(reverse_dns_enabled(&legacy));
+
+        let plugin =
+            Config::parse("LogFile=access.log\nLogFormat=1\nLoadPlugin=hostinfo\n").unwrap();
+        assert!(reverse_dns_enabled(&plugin));
+
+        let disabled = Config::parse("LogFile=access.log\nLogFormat=1\n").unwrap();
+        assert!(!reverse_dns_enabled(&disabled));
     }
 
     #[test]

@@ -590,6 +590,17 @@ mod tests {
     }
 
     #[test]
+    fn preserves_ipv6_client_addresses_for_ipv6_plugin_compatibility() {
+        let parser = LogParser::new("%host %time4 %methodurl %code %bytesd").unwrap();
+        let outcome = parser.parse("2001:db8::42 1793059200 GET /health 204 0");
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected IPv6 event");
+        };
+        assert_eq!(event.client_ip, "2001:db8::42");
+        assert_eq!(event.status, 204);
+    }
+
+    #[test]
     fn classifies_binary_like_request_as_unknown_method() {
         let parser = LogParser::new(
             "%host %logname %user %time1 %methodurl %code %bytesd %referer %ua %extra1",
