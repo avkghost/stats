@@ -489,6 +489,17 @@ mod tests {
     }
 
     #[test]
+    fn marks_anomaly_rows_with_shared_visual_class() {
+        let rows = [ReportRow {
+            key: "PROPFIND".into(),
+            hits: 1,
+        }];
+        let rendered = anomaly_table(&rows);
+        assert!(rendered.contains("class=\"report-table anomaly-table\""));
+        assert!(site_css().contains(".anomaly-table"));
+    }
+
+    #[test]
     fn shared_assets_support_fast_detail_pages() {
         assert!(site_css().contains(".sidebar"));
         assert!(site_css().contains(".report-table"));
