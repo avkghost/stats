@@ -129,6 +129,7 @@ impl LogParser {
             "2" => {
                 "%time2 %host %logname %method %url %code %bytesd %other %ua %referer".to_owned()
             }
+            "6" => "%host %logname %time1 %methodurl %code %bytesd %refererquot %uaquot".to_owned(),
             _ => normalize_apache_format(&format),
         };
         let regex = compile_format(&format)?;
@@ -791,6 +792,23 @@ mod tests {
         assert_eq!(event.url.as_deref(), Some("/index.html"));
         assert_eq!(event.status, 200);
         assert_eq!(event.bytes, 123);
+    }
+
+    #[test]
+    fn parses_awstats_numeric_lotus_format_six() {
+        let parser = LogParser::new("6").unwrap();
+        let ParseOutcome::Event(event) = parser.parse(
+            r#"111.22.33.44 - Firstname Middlename Lastname [10/Jan/2001:02:14:14 +0200] "GET / HTTP/1.1" 200 1234 "-" "Mozilla/4.0""#,
+        ) else {
+            panic!("expected AWStats Lotus format event");
+        };
+        assert_eq!(event.client_ip, "111.22.33.44");
+        assert_eq!(
+            event.identity.as_deref(),
+            Some("- Firstname Middlename Lastname")
+        );
+        assert_eq!(event.status, 200);
+        assert_eq!(event.bytes, 1234);
     }
 
     #[test]
