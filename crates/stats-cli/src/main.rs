@@ -597,7 +597,8 @@ fn regenerate_default_report(
             .with_context(|| format!("load HTML renderer from {}", config_path.display()))?;
         write_external_html_site(&registry, &report, &output)?;
         for period in period_names(&config.data_dir)? {
-            let period_report = build_report_for_period(&config.data_dir, 50, Some(&period))?;
+            let mut period_report = build_report_for_period(&config.data_dir, 50, Some(&period))?;
+            apply_display_decorations(&mut period_report, &config)?;
             let period_output = output
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
@@ -607,7 +608,7 @@ fn regenerate_default_report(
             write_external_html_site(&registry, &period_report, &period_output)?;
         }
     } else {
-        write_report_site(&config.data_dir, &output, &report, 50)?;
+        write_report_site(&config.data_dir, &output, &report, 50, Some(&config))?;
     }
     if !quiet {
         if external_html {
@@ -1465,12 +1466,12 @@ fn report(
         .map(Config::from_path)
         .transpose()
         .map_err(|error| anyhow::anyhow!("load renderer configuration: {error}"))?;
+    let display_config = config
+        .as_ref()
+        .map(|config| config.clone().with_overrides(None, Some(data_dir.clone())));
     if matches!(format, ReportFormat::Html) {
-        if let Some(config) = config.as_ref() {
-            let config = config.clone().with_overrides(None, Some(data_dir.clone()));
-            report.apply_url_aliases(&config.url_aliases()?);
-            report.apply_cluster_info(&config.cluster_info()?);
-            report.apply_user_info(&config.user_info()?);
+        if let Some(config) = display_config.as_ref() {
+            apply_display_decorations(&mut report, config)?;
         }
     }
     let external_renderer_configured = config.as_ref().is_some_and(|config| {
@@ -1489,7 +1490,7 @@ fn report(
         } else if period.is_some() {
             write_html_site(&report, &output)?;
         } else {
-            write_report_site(&data_dir, &output, &report, limit)?;
+            write_report_site(&data_dir, &output, &report, limit, display_config.as_ref())?;
         }
         println!("wrote HTML report site {}", output.display());
         return Ok(());
@@ -1567,6 +1568,7 @@ fn write_report_site(
     output: &Path,
     report: &stats_core::Report,
     limit: usize,
+    display_config: Option<&Config>,
 ) -> anyhow::Result<()> {
     let periods = period_names(data_dir)?;
     let links = periods
@@ -1575,7 +1577,10 @@ fn write_report_site(
         .collect::<Vec<_>>();
     write_html_site_with_periods(report, output, &links)?;
     for period in periods {
-        let period_report = build_report_for_period(data_dir, limit, Some(&period))?;
+        let mut period_report = build_report_for_period(data_dir, limit, Some(&period))?;
+        if let Some(config) = display_config {
+            apply_display_decorations(&mut period_report, config)?;
+        }
         let period_output = output
             .parent()
             .unwrap_or_else(|| Path::new("."))
@@ -1584,6 +1589,16 @@ fn write_report_site(
             .join("index.html");
         write_html_site(&period_report, &period_output)?;
     }
+    Ok(())
+}
+
+fn apply_display_decorations(
+    report: &mut stats_core::Report,
+    config: &Config,
+) -> anyhow::Result<()> {
+    report.apply_url_aliases(&config.url_aliases()?);
+    report.apply_cluster_info(&config.cluster_info()?);
+    report.apply_user_info(&config.user_info()?);
     Ok(())
 }
 
@@ -2711,7 +2726,8 @@ mod tests {
             "{}-report",
             directory.file_name().unwrap().to_string_lossy()
         ));
-        super::write_report_site(&directory, &output.join("index.html"), &report, 50).unwrap();
+        super::write_report_site(&directory, &output.join("index.html"), &report, 50, None)
+            .unwrap();
         let overview = fs::read_to_string(output.join("index.html")).unwrap();
         assert!(overview.contains("periods/2026-01/index.html"));
         assert!(overview.contains("periods/2026-02/index.html"));
