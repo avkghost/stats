@@ -503,10 +503,10 @@ fn match_apache_long_token(remaining: &str) -> Option<(&'static str, &'static st
 fn compile_format(format: &str) -> Result<Regex, regex::Error> {
     let predefined = match format {
         "1" => Some(
-            r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"$"#,
+            r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"$"#,
         ),
         "4" => Some(
-            r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)$"#,
+            r#"^(?P<host>\S+)\s+\S+\s+(?P<logname>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)$"#,
         ),
         _ => None,
     };
@@ -680,6 +680,18 @@ mod tests {
         let outcome = parser
             .parse("192.0.2.1 - - [27/Oct/2026:00:14:17 +0000] \"GET /health HTTP/1.1\" 200 2");
         assert!(matches!(outcome, ParseOutcome::Event(_)));
+    }
+
+    #[test]
+    fn accepts_dash_bytes_in_predefined_common_log_format() {
+        let parser = LogParser::new("4").unwrap();
+        let ParseOutcome::Event(event) = parser
+            .parse("192.0.2.1 - - [27/Oct/2026:00:14:17 +0000] \"GET /health HTTP/1.1\" 404 -")
+        else {
+            panic!("expected common-format event with missing bytes");
+        };
+        assert_eq!(event.status, 404);
+        assert_eq!(event.bytes, 0);
     }
 
     #[test]
