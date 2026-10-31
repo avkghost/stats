@@ -177,6 +177,17 @@ fn render_cgi(
             std::collections::HashMap::new()
         };
         report.apply_cluster_info(&cluster_info);
+        let user_info = if config
+            .plugins
+            .iter()
+            .any(|plugin| plugin.name == "userinfo")
+        {
+            let path = sandbox.check_existing(&config.user_info_path())?;
+            config.user_info_from_path(&path)?
+        } else {
+            std::collections::HashMap::new()
+        };
+        report.apply_user_info(&user_info);
     }
     let registry = builtin_renderer_registry()
         .map_err(|error| anyhow::anyhow!("register CGI renderers: {error}"))?;

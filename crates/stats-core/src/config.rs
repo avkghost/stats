@@ -429,6 +429,49 @@ impl Config {
         let fallback = self.data_dir.join("clusterinfo.txt");
         site_file.filter(|path| path.is_file()).unwrap_or(fallback)
     }
+
+    pub fn user_info(&self) -> Result<HashMap<String, String>, ConfigError> {
+        if !self.plugins.iter().any(|plugin| plugin.name == "userinfo") {
+            return Ok(HashMap::new());
+        }
+        let path = self.user_info_path();
+        self.user_info_from_path(&path)
+    }
+
+    pub fn user_info_from_path(&self, path: &Path) -> Result<HashMap<String, String>, ConfigError> {
+        let text = fs::read_to_string(path).map_err(|source| ConfigError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let mut info = HashMap::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let Some((user, label)) = line.split_once('\t') else {
+                return Err(ConfigError::Invalid {
+                    line: 0,
+                    message: format!("invalid user info entry in {}", path.display()),
+                });
+            };
+            let user = user.trim();
+            let label = label.trim();
+            if !user.is_empty() && !label.is_empty() {
+                info.insert(user.to_owned(), label.to_owned());
+            }
+        }
+        Ok(info)
+    }
+
+    pub fn user_info_path(&self) -> PathBuf {
+        let site_file = (!self.site_domain.is_empty()).then(|| {
+            self.data_dir
+                .join(format!("userinfo.{}.txt", self.site_domain))
+        });
+        let fallback = self.data_dir.join("userinfo.txt");
+        site_file.filter(|path| path.is_file()).unwrap_or(fallback)
+    }
 }
 
 #[cfg(test)]
@@ -556,6 +599,31 @@ mod tests {
         let info = config.cluster_info().unwrap();
         assert_eq!(info.get("node-a"), Some(&"Primary node".into()));
         assert_eq!(info.get("node-b"), Some(&"Secondary node".into()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn loads_user_info_only_when_plugin_is_enabled() {
+        let root = std::env::temp_dir().join(format!("stats-userinfo-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("userinfo.example.test.txt"),
+            "alice\tAlice Example\n# ignored\n",
+        )
+        .unwrap();
+
+        let mut config = Config::parse(
+            "LogFile=access.log\nLogFormat=1\nSiteDomain=example.test\nLoadPlugin=userinfo\n",
+        )
+        .unwrap()
+        .with_overrides(None, Some(root.clone()));
+        assert_eq!(
+            config.user_info().unwrap().get("alice"),
+            Some(&"Alice Example".into())
+        );
+        config.plugins.clear();
+        assert!(config.user_info().unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
     }
 }

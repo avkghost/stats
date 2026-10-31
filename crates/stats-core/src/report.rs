@@ -256,6 +256,10 @@ impl Report {
     pub fn apply_cluster_info(&mut self, info: &HashMap<String, String>) {
         apply_cluster_info_rows(&mut self.virtual_hosts, info);
     }
+
+    pub fn apply_user_info(&mut self, info: &HashMap<String, String>) {
+        apply_user_info_rows(&mut self.users, info);
+    }
 }
 
 fn apply_cluster_info_rows(rows: &mut [ReportRow], info: &HashMap<String, String>) {
@@ -266,9 +270,20 @@ fn apply_cluster_info_rows(rows: &mut [ReportRow], info: &HashMap<String, String
     }
 }
 
+fn apply_user_info_rows(rows: &mut [ReportRow], info: &HashMap<String, String>) {
+    for row in rows {
+        if let Some(label) = info.get(&row.key) {
+            row.key = format!("{} ({label})", row.key);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{apply_cluster_info_rows, BandwidthRow, Report, ReportMetadata, ReportRow};
+    use super::{
+        apply_cluster_info_rows, apply_user_info_rows, BandwidthRow, Report, ReportMetadata,
+        ReportRow,
+    };
     use std::collections::HashMap;
 
     #[test]
@@ -289,6 +304,27 @@ mod tests {
 
         assert_eq!(rows[0].key, "node-a (Primary)");
         assert_eq!(rows[1].key, "node-b");
+        assert_eq!(rows[0].hits, 3);
+    }
+
+    #[test]
+    fn user_info_decorates_matching_users_only() {
+        let mut rows = vec![
+            ReportRow {
+                key: "alice".into(),
+                hits: 3,
+            },
+            ReportRow {
+                key: "bob".into(),
+                hits: 2,
+            },
+        ];
+        let info = HashMap::from([(String::from("alice"), String::from("Alice Example"))]);
+
+        apply_user_info_rows(&mut rows, &info);
+
+        assert_eq!(rows[0].key, "alice (Alice Example)");
+        assert_eq!(rows[1].key, "bob");
         assert_eq!(rows[0].hits, 3);
     }
 

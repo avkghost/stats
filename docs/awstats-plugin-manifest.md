@@ -28,7 +28,7 @@ observable behavior.
 | `timezone` | compatibility adapter | Deterministic `TimeZone` configuration |
 | `tooltips` | compatibility adapter | Escaped HTML chart and table tooltips |
 | `urlalias` | compatibility adapter | Display-only URL alias transformation |
-| `userinfo` | compatibility adapter | Authenticated-user aggregation |
+| `userinfo` | compatibility adapter | Load site-specific or fallback tab-separated user labels and decorate authenticated-user rows |
 
 AWStats parity must not be reported as complete while any entry is `not
 started` or lacks plugin-specific compatibility tests.

@@ -574,6 +574,7 @@ fn regenerate_default_report(
     let mut report = build_report_for_data_dir(&config.data_dir, 50)?;
     report.apply_url_aliases(&config.url_aliases()?);
     report.apply_cluster_info(&config.cluster_info()?);
+    report.apply_user_info(&config.user_info()?);
     let output = config
         .data_dir
         .parent()
