@@ -284,9 +284,11 @@ fn json_timestamp(value: &serde_json::Value) -> Option<DateTime<FixedOffset>> {
 
 fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffset>> {
     match format {
-        TimeFormat::Time1 => {
-            DateTime::parse_from_str(value.trim_matches(['[', ']']), "%d/%b/%Y:%H:%M:%S %z").ok()
-        }
+        TimeFormat::Time1 => DateTime::parse_from_str(
+            value.trim().trim_matches(['[', ']']),
+            "%d/%b/%Y:%H:%M:%S %z",
+        )
+        .ok(),
         TimeFormat::Time2 => naive_fixed(value, "%Y-%m-%d %H:%M:%S"),
         TimeFormat::Time3 => {
             let year = Utc::now().year();
@@ -492,6 +494,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
     }
     let mut pattern = String::from("^");
     let mut ignored_field = 0usize;
+    let bracketed_time1 = format.contains("[%time1]");
     let mut chars = format.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '%' {
@@ -506,7 +509,14 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
                 "host" => ("host".into(), r"\S+"),
                 "logname" => ("logname".into(), r"\S+"),
                 "user" => ("user".into(), r"\S+"),
-                "time1" => ("time".into(), r"[^]]+"),
+                "time1" => (
+                    "time".into(),
+                    if bracketed_time1 {
+                        r"[^]]+"
+                    } else {
+                        r"\[[^]]+\]"
+                    },
+                ),
                 "time1bracket" => ("time".into(), r"\[[^]]+\]"),
                 "time2" => ("time".into(), r"\S+\s+\S+"),
                 "time3" => ("time".into(), r"\S+\s+\S+\s+\S+"),
@@ -673,6 +683,23 @@ mod tests {
         assert_eq!(event.virtual_host.as_deref(), Some("www.example.test"));
         assert_eq!(event.url.as_deref(), Some("/foo"));
         assert_eq!(event.status, 200);
+        assert_eq!(event.bytes, 42);
+    }
+
+    #[test]
+    fn parses_awstats_custom_time1_format_with_bracketed_log_timestamp() {
+        let parser = LogParser::new(
+            "%host %other %logname %time1 %methodurl %code %bytesd %refererquot %uaquot",
+        )
+        .unwrap();
+        let outcome = parser.parse(
+            r#"127.0.0.1 - - [01/Jan/2001:16:00:00 +0100] "GET / HTTP/1.1" 200 42 "-" "test-agent""#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected AWStats custom-format event");
+        };
+        assert_eq!(event.status, 200);
+        assert_eq!(event.url.as_deref(), Some("/"));
         assert_eq!(event.bytes, 42);
     }
 
