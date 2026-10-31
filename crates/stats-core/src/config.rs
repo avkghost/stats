@@ -22,6 +22,32 @@ pub struct PluginConfig {
     pub args: Vec<String>,
 }
 
+/// Plugin names shipped by the AWStats 8.0 upstream distribution.
+pub const AWSTATS_PLUGIN_INVENTORY: &[&str] = &[
+    "clusterinfo",
+    "decodeutfkeys",
+    "detectrefererspam",
+    "example",
+    "export_to_csv",
+    "geoip",
+    "geoip2_city",
+    "geoip2_country",
+    "geoip2_region",
+    "geoipfree",
+    "geoip6",
+    "graphapplet",
+    "graphgooglechartapi",
+    "hashfiles",
+    "hostinfo",
+    "ipv6",
+    "rawlog",
+    "timehires",
+    "timezone",
+    "tooltips",
+    "urlalias",
+    "userinfo",
+];
+
 #[derive(Debug, Clone)]
 pub struct FilterConfig {
     pub allowed_virtual_hosts: Vec<String>,
@@ -440,33 +466,9 @@ mod tests {
 
     #[test]
     fn accepts_the_complete_awstats_plugin_inventory() {
-        let names = [
-            "clusterinfo",
-            "decodeutfkeys",
-            "detectrefererspam",
-            "example",
-            "export_to_csv",
-            "geoip",
-            "geoip2_city",
-            "geoip2_country",
-            "geoip2_region",
-            "geoipfree",
-            "geoip6",
-            "graphapplet",
-            "graphgooglechartapi",
-            "hashfiles",
-            "hostinfo",
-            "ipv6",
-            "rawlog",
-            "timehires",
-            "timezone",
-            "tooltips",
-            "urlalias",
-            "userinfo",
-        ];
         let mut text = String::from("LogFile=access.log\nLogFormat=1\n");
         text.push_str(
-            &names
+            &AWSTATS_PLUGIN_INVENTORY
                 .iter()
                 .map(|name| format!("LoadPlugin={name}\n"))
                 .collect::<String>(),
@@ -478,7 +480,7 @@ mod tests {
                 .iter()
                 .map(|plugin| plugin.name.as_str())
                 .collect::<Vec<_>>(),
-            names
+            AWSTATS_PLUGIN_INVENTORY
         );
     }
 
