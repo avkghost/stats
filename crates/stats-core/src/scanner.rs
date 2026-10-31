@@ -214,4 +214,14 @@ mod tests {
         matcher.apply_heuristic(&mut asset);
         assert!(asset.scanner.is_none());
     }
+
+    #[test]
+    fn explicit_rule_label_wins_over_heuristic_label() {
+        let matcher =
+            ScannerMatcher::parse("path_prefix\t/.env\tcustom-environment", "rules").unwrap();
+        let mut probe = event("/.env.production");
+        matcher.apply(&mut probe);
+        matcher.apply_heuristic(&mut probe);
+        assert_eq!(probe.scanner.as_deref(), Some("custom-environment"));
+    }
 }
