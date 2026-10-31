@@ -202,8 +202,16 @@ impl LogParser {
                     .and_then(|v| v.parse::<f64>().ok())
                     .map(|v| v / 1_000_000.0)
             });
+        let client_ip = get("host_proxy")
+            .or_else(|| get("host"))
+            .unwrap_or_default()
+            .split(',')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
         ParseOutcome::Event(Box::new(AccessEvent {
-            client_ip: get("host").unwrap_or_default(),
+            client_ip,
             client_hostname: None,
             referer_spam: None,
             referer_excluded: false,
@@ -534,6 +542,7 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
             }
             let (name, expression): (String, &str) = match token.as_str() {
                 "host" => ("host".into(), r"\S+"),
+                "host_proxy" => ("host_proxy".into(), r"[^,\s]+(?:,\s+[^,]+)*"),
                 "logname" => ("logname".into(), r".*?"),
                 "user" => ("user".into(), r"\S+"),
                 "time1" => (
@@ -821,6 +830,17 @@ mod tests {
         );
         assert_eq!(event.status, 200);
         assert_eq!(event.bytes, 1234);
+    }
+
+    #[test]
+    fn uses_first_address_from_awstats_host_proxy_chain() {
+        let parser = LogParser::new("%host_proxy %time1 %methodurl %code %bytesd").unwrap();
+        let ParseOutcome::Event(event) = parser.parse(
+            r#"192.0.2.1, 198.51.100.2 [27/Oct/2026:00:14:17 +0000] "GET / HTTP/1.1" 200 1"#,
+        ) else {
+            panic!("expected host proxy event");
+        };
+        assert_eq!(event.client_ip, "192.0.2.1");
     }
 
     #[test]
