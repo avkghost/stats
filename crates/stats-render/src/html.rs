@@ -204,7 +204,7 @@ fn overview(report: &Report, periods: &[(String, String)]) -> String {
         )
     };
     format!(
-        "<div class=\"eyebrow\">Traffic overview</div><h1>Stats Web Server Statistics</h1><p class=\"lede\">Aggregated activity from the configured access log.</p><div class=\"metric-grid\">{}{}{}{}{}{}</div><div class=\"overview-grid\">{}{}{}{}{}</div>",
+        "<div class=\"eyebrow\">Traffic overview</div><h1>Stats Web Server Statistics</h1><p class=\"lede\">Aggregated activity from the configured access log.</p><div class=\"metric-grid\">{}{}{}{}{}{}</div><div class=\"overview-grid\">{}{}{}{}{}{}</div>",
         metric("Hits", report.hits),
         metric("Bytes", report.bytes),
         metric("Pages", report.pages),
@@ -212,6 +212,7 @@ fn overview(report: &Report, periods: &[(String, String)]) -> String {
         metric("Visits", report.visits),
         metric("Unique visits", report.unique_visits),
         section("Status classes", row_chart(&report.status_classes, "Status classes")),
+        section("HTTP status codes", table_limited(&report.statuses, 10)),
         section("Daily traffic", daily_chart(&report.daily)),
         section("Top URLs", table_limited(&report.urls, 5)),
         section("Top referrers", table_limited(&report.referers, 5)),
