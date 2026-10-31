@@ -209,13 +209,14 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Robots", table(&report.robots))
         ),
         "pages" => format!(
-            "{}{}{}{}{}{}{}{}",
+            "{}{}{}{}{}{}{}{}{}",
             section("Methods", table(&report.methods)),
             section(
                 "HTTP method anomalies",
                 anomaly_table(&report.method_anomalies)
             ),
             section("URLs", table(&report.urls)),
+            section("HTTP errors", table(&report.errors)),
             section(
                 "Required but not found URLs (HTTP code 404)",
                 not_found_table(&report.not_found),
