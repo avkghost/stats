@@ -22,7 +22,8 @@ pub struct PluginConfig {
     pub args: Vec<String>,
 }
 
-/// Plugin names shipped by the AWStats 8.0 upstream distribution.
+/// Plugin names shipped by the AWStats 8.0 upstream distribution, including
+/// the `example` plugin directory.
 pub const AWSTATS_PLUGIN_INVENTORY: &[&str] = &[
     "clusterinfo",
     "decodeutfkeys",
@@ -32,9 +33,13 @@ pub const AWSTATS_PLUGIN_INVENTORY: &[&str] = &[
     "geoip",
     "geoip2_city",
     "geoip2_country",
-    "geoip2_region",
+    "geoip_asn_maxmind",
+    "geoip_city_maxmind",
     "geoipfree",
     "geoip6",
+    "geoip_isp_maxmind",
+    "geoip_org_maxmind",
+    "geoip_region_maxmind",
     "graphapplet",
     "graphgooglechartapi",
     "hashfiles",

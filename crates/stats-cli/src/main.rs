@@ -1353,7 +1353,10 @@ fn plugin_paths(
         let path = plugin.args.last().map(PathBuf::from);
         match plugin.name.as_str() {
             "geoip2_country" | "geoip" | "geoipfree" | "geoip6" => country = path,
-            "geoip2_city" | "geoip2_region" => city = path,
+            "geoip2_city" | "geoip2_region" | "geoip_city_maxmind" | "geoip_region_maxmind" => {
+                city = path
+            }
+            "geoip_asn_maxmind" | "geoip_isp_maxmind" | "geoip_org_maxmind" => asn = path,
             name if name.contains("asn") => asn = path,
             _ => {}
         }
@@ -2884,14 +2887,34 @@ mod tests {
                 name: "geoip2_asn".into(),
                 args: vec!["asn.mmdb".into()],
             },
+            stats_core::PluginConfig {
+                name: "geoip_city_maxmind".into(),
+                args: vec!["city-legacy.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip_region_maxmind".into(),
+                args: vec!["region-legacy.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip_asn_maxmind".into(),
+                args: vec!["asn-legacy.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip_isp_maxmind".into(),
+                args: vec!["isp.mmdb".into()],
+            },
+            stats_core::PluginConfig {
+                name: "geoip_org_maxmind".into(),
+                args: vec!["org.mmdb".into()],
+            },
         ];
 
         assert_eq!(
             plugin_paths(&plugins),
             (
                 Some(PathBuf::from("country.mmdb")),
-                Some(PathBuf::from("city.mmdb")),
-                Some(PathBuf::from("asn.mmdb"))
+                Some(PathBuf::from("region-legacy.mmdb")),
+                Some(PathBuf::from("org.mmdb"))
             )
         );
     }

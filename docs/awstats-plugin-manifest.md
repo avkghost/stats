@@ -15,9 +15,13 @@ observable behavior.
 | `geoip` | compatibility adapter | Core MaxMind provider mapping |
 | `geoip2_city` | compatibility adapter | Core MaxMind City provider mapping |
 | `geoip2_country` | compatibility adapter | Core MaxMind Country provider mapping |
-| `geoip2_region` | compatibility adapter | Core MaxMind region mapping |
+| `geoip_asn_maxmind` | compatibility adapter | Core MaxMind ASN mapping |
+| `geoip_city_maxmind` | compatibility adapter | Core MaxMind City mapping |
 | `geoipfree` | compatibility adapter | Core local MaxMind fallback behavior |
 | `geoip6` | compatibility adapter | IPv6 lookup through the core provider |
+| `geoip_isp_maxmind` | compatibility adapter | Core MaxMind network-organization mapping |
+| `geoip_org_maxmind` | compatibility adapter | Core MaxMind organization mapping |
+| `geoip_region_maxmind` | compatibility adapter | Core MaxMind region mapping |
 | `graphapplet` | compatibility adapter | Offline HTML/CSS chart equivalent |
 | `graphgooglechartapi` | compatibility adapter | Offline chart equivalent without remote service calls |
 | `hashfiles` | compatibility adapter | Explicitly selects SQLite as the authoritative replacement for Perl `Storable` hash files |

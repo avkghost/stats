@@ -2,9 +2,11 @@
 
 This project treats the AWStats 8.0 source tree as the compatibility reference. The upstream plugin inventory is maintained under [`wwwroot/cgi-bin/plugins`](https://github.com/eldy/AWStats/tree/develop/wwwroot/cgi-bin/plugins). The table below is an implementation audit, not a claim of complete parity: parity is complete only when every inventory entry has a Rust implementation or a tested compatibility adapter.
 
-The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkeys`,
-`detectrefererspam`, `example`, `export_to_csv`, `geoip`, `geoip2_city`,
-`geoip2_country`, `geoip2_region`, `geoipfree`, `geoip6`, `graphapplet`,
+The AWStats 8.0 tag contains 25 plugin files plus the `example` plugin
+directory: `clusterinfo`, `decodeutfkeys`, `detectrefererspam`, `example`,
+`export_to_csv`, `geoip`, `geoip2_city`, `geoip2_country`, `geoip6`,
+`geoip_asn_maxmind`, `geoip_city_maxmind`, `geoip_isp_maxmind`,
+`geoip_org_maxmind`, `geoip_region_maxmind`, `geoipfree`, `graphapplet`,
 `graphgooglechartapi`, `hashfiles`, `hostinfo`, `ipv6`, `rawlog`, `timehires`,
 `timezone`, `tooltips`, `urlalias`, and `userinfo`.
 
@@ -12,7 +14,7 @@ The current upstream inventory contains 22 entries: `clusterinfo`, `decodeutfkey
 
 | Upstream plugin family | Current status | Decision |
 | --- | --- | --- |
-| `geoip2_*`, `geoip_*`, `geoipfree`, `geoip6` | Core MaxMind Country, City, ASN, region, and organization enrichment | Keep as core providers; do not duplicate Perl plugin loading |
+| `geoip2_*`, `geoip_*_maxmind`, `geoip`, `geoipfree`, `geoip6` | Core MaxMind Country, City, ASN, region, and organization enrichment | Keep concrete AWStats 8.0 aliases mapped to the local provider roles |
 | `export_to_csv` | External CSV report plugin alias accepted alongside `report_csv` and `renderer_csv` | Keep CSV loading explicit and configuration-selected |
 | `graphapplet`, `graphgooglechartapi` | Replaced by local HTML/CSS charts | Keep local and offline; do not depend on Java or third-party chart services |
 | `timezone` | Core `TimeZone` configuration with fixed-offset and IANA-zone conversion | Keep deterministic, checkpoint-aware, and DST-aware |
