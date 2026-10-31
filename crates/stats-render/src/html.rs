@@ -59,7 +59,7 @@ pub(crate) fn bandwidth_table(rows: &[BandwidthRow]) -> String {
 
 pub(crate) fn not_found_table(rows: &[NotFoundRow]) -> String {
     let mut out = String::from(
-        "<table class=\"report-table\" data-filterable><thead><tr><th>URL</th><th>Error Hits</th><th>Referrers</th></tr></thead><tbody>",
+        "<table class=\"report-table\" data-filterable><thead><tr><th>URL</th><th>HTTP Code</th><th>Error Hits</th><th>Referrers</th></tr></thead><tbody>",
     );
     for row in rows {
         let referrers = row
@@ -69,7 +69,7 @@ pub(crate) fn not_found_table(rows: &[NotFoundRow]) -> String {
             .collect::<Vec<_>>()
             .join(", ");
         out.push_str(&format!(
-            "<tr title=\"{}: {} 404 hits\"><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} 404 hits\"><td>{}</td><td>404</td><td>{}</td><td>{}</td></tr>",
             html_escape(&row.url),
             row.hits,
             html_escape(&row.url),
@@ -273,9 +273,10 @@ fn detail_body(report: &Report, page: &str) -> String {
             section("Daily traffic", daily_table(&report.daily))
         ),
         "performance" => format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             section("Request times", table(&report.request_times)),
             section("Hours", table(&report.hours)),
+            section("Status codes", table(&report.statuses)),
             section(
                 "Bandwidth by URL",
                 format!(
@@ -539,6 +540,8 @@ mod tests {
         }]);
         assert!(html.contains("/.env"));
         assert!(html.contains("- (3)"));
+        assert!(html.contains("HTTP Code"));
+        assert!(html.contains(">404</td>"));
         assert!(html.contains("Error Hits"));
     }
 
