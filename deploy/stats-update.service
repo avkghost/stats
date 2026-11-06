@@ -6,12 +6,12 @@ After=local-fs.target
 Type=oneshot
 User=stats
 Group=stats
-ExecStart=/usr/local/bin/stats update --config=/etc/stats/awstats.example.test.conf
+ExecStart=/opt/stats/bin/stats update --config=/opt/stats/etc/awstats.example.test.conf
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/var/lib/stats /var/www/stats
+ReadWritePaths=/opt/stats/var/lib /opt/stats/var/www
 
 [Install]
 WantedBy=multi-user.target

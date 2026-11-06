@@ -9,13 +9,13 @@ fi
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 stats_user=${STATS_USER:-stats}
 stats_group=${STATS_GROUP:-stats}
-binary_path=${STATS_BINARY_PATH:-/usr/local/bin/stats}
-config_path=${STATS_CONFIG_PATH:-/etc/stats/awstats.example.test.conf}
-data_dir=${STATS_DATA_DIR:-/var/lib/stats}
-output_dir=${STATS_OUTPUT_DIR:-/var/www/stats}
+binary_path=${STATS_BINARY_PATH:-/opt/stats/bin/stats}
+config_path=${STATS_CONFIG_PATH:-/opt/stats/etc/awstats.example.test.conf}
+data_dir=${STATS_DATA_DIR:-/opt/stats/var/lib}
+output_dir=${STATS_OUTPUT_DIR:-/opt/stats/var/www}
 
 if ! id "${stats_user}" >/dev/null 2>&1; then
-    useradd --system --home-dir /var/lib/stats --no-create-home --shell /usr/sbin/nologin "${stats_user}"
+    useradd --system --home-dir /opt/stats --no-create-home --shell /usr/sbin/nologin "${stats_user}"
 fi
 
 if ! getent group "${stats_group}" >/dev/null 2>&1; then

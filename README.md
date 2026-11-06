@@ -129,16 +129,16 @@ Recommended cron/logrotate order is: run `stats update` first, generate the repo
 
 A safe `logrotate` `postrotate` hook can run the analyzer after rotation without scanning archives:
 
-    /usr/local/bin/stats update --config /etc/stats/awstats.example.test.conf
+    /opt/stats/bin/stats update --config /opt/stats/etc/awstats.example.test.conf
 
 For a timer-driven deployment, run the same command before rotation and let the next timer invocation process the replacement active file:
 
     # /etc/cron.d/stats-update
-    */5 * * * * stats /usr/local/bin/stats update --config /etc/stats/awstats.example.test.conf >/var/log/stats-update.log 2>&1
+    */5 * * * * stats /opt/stats/bin/stats update --config /opt/stats/etc/awstats.example.test.conf >/var/log/stats-update.log 2>&1
 
 Do not call `backfill` from the recurring rotation hook: it intentionally reopens numeric archives. Use `backfill` only for an explicit historical import after confirming that the archive set is complete. If a migration is interrupted, keep the backup and rerun `migrate` with a different backup directory only after checking the destination data; the command refuses to overwrite an existing backup directory.
 
-Deployment templates are in `deploy/`: `stats-update.service`, `stats-update.timer`, and `stats-logrotate`. Install the service and timer under `/etc/systemd/system/`, install the logrotate file under `/etc/logrotate.d/stats`, then adjust `/usr/local/bin/stats`, `/etc/stats/awstats.example.test.conf`, `/var/lib/stats`, `/var/www/stats`, and the log owner/group to match the host. The `stats` service account needs read access to the active log and GeoIP databases and write access to the data/output directories.
+Deployment templates are in `deploy/`: `stats-update.service`, `stats-update.timer`, and `stats-logrotate`. Install the service and timer under `/etc/systemd/system/`, install the logrotate file under `/etc/logrotate.d/stats`, then adjust `/opt/stats/bin/stats`, `/opt/stats/etc/awstats.example.test.conf`, `/opt/stats/var/lib`, `/opt/stats/var/www`, and the log owner/group to match the host. The `stats` service account needs read access to the active log and GeoIP databases and write access to the data/output directories.
 
 After building a release, `sudo deploy/install.sh` performs the repeatable installation. It creates the system account and data directories when needed, installs the release binary and service files, reloads systemd, and enables the timer. It intentionally does not run an update until the configuration has been installed. Override paths with `STATS_BINARY_PATH`, `STATS_CONFIG_PATH`, `STATS_DATA_DIR`, and `STATS_OUTPUT_DIR` when the host layout differs.
 
@@ -151,7 +151,7 @@ The release workflow publishes the same bundle when a `v*` tag is pushed. For th
 
 Typical installation and upgrade sequence:
 
-    install -m 0755 target/release/stats-cli /usr/local/bin/stats
+install -D -m 0755 target/release/stats-cli /opt/stats/bin/stats
     install -d -o stats -g stats /etc/stats /var/lib/stats /var/www/stats
     install -m 0644 deploy/stats-update.service deploy/stats-update.timer /etc/systemd/system/
     install -m 0644 deploy/stats-logrotate /etc/logrotate.d/stats
@@ -159,9 +159,9 @@ Typical installation and upgrade sequence:
     systemctl enable --now stats-update.timer
     systemctl start --wait stats-update.service
 
-Before replacing a binary or changing partition settings, run `stats backup --data-dir /var/lib/stats --output-dir /var/backups/stats/<timestamp>` and retain the backup. To roll back, stop the timer, restore the binary/configuration, validate with `stats validate`, restore the database snapshot into a separate recovery directory first, and switch it into place only after checking `stats summary`; then start the timer again. Never use `migrate` as a rollback operation because it clears active aggregates after creating its backup.
+Before replacing a binary or changing partition settings, run `stats backup --data-dir /opt/stats/var/lib --output-dir /opt/stats/var/backups/<timestamp>` and retain the backup. To roll back, stop the timer, restore the binary/configuration, validate with `stats validate`, restore the database snapshot into a separate recovery directory first, and switch it into place only after checking `stats summary`; then start the timer again. Never use `migrate` as a rollback operation because it clears active aggregates after creating its backup.
 
-Trusted native enrichment plugins can be configured with a `.so` path, for example `LoadPlugin="my_enricher /opt/stats/libmy_enricher.so"`. They receive the normalized client IP, method, URL, status, and byte count and may update status or bytes. Native plugins run in supervised worker processes with a bounded response wait; failures disable the plugin for the current update and are recorded as diagnostics.
+Trusted native enrichment plugins can be installed under `/opt/stats/lib/` and configured with a `.so` path, for example `LoadPlugin="my_enricher /opt/stats/lib/libmy_enricher.so"`. They receive the normalized client IP, method, URL, status, and byte count and may update status or bytes. Native plugins run in supervised worker processes with a bounded response wait; failures disable the plugin for the current update and are recorded as diagnostics.
 
 `update` is cumulative by default: it appends new active-log events to the existing database and regenerates the complete HTML site at the data directory's sibling `output/index.html` (for `DirData="stats"`, that is `output/index.html`). `report` can generate the site at a custom output path such as `target/stats-report/index.html`; the overview is intentionally compact so it loads quickly, while detail pages contain the complete tables and visualizations. The static multi-page site remains the default HTML path. When `LoadPlugin=report_html <library>` is configured, the external HTML renderer is used for the overview and every detail page. Stream HTML, JSON, and CSV are external report-renderer plugins and are loaded only when requested and configured with `--config`.
 
@@ -181,7 +181,7 @@ If the AWStats config points at production paths such as `/var/log/nginx/access.
 
 `stats-core` owns normalized events, parsing, GeoIP providers, plugin traits, storage, and report queries. `stats-cli` owns orchestration and output. HTML, terminal summaries, and the Ratatui dashboard consume the same report query API rather than accessing storage directly.
 
-The current plugin implementation includes an in-process Rust trait registry and a C ABI loader. Plugins can contribute event enrichers or report renderers. A configured `LoadPlugin="report_html /opt/stats/libstats-report-html.so"`, `LoadPlugin="report_json /opt/stats/libstats-report-json.so"`, or `LoadPlugin="report_csv /opt/stats/libstats-report-csv.so"` entry loads only the requested stream renderer. Native report plugins receive a format and UTF-8 JSON report, then return a media type, extension, and body through an explicit release callback. Report-renderer callbacks run in short-lived supervised worker processes, so a crash, abort, or timeout terminates the worker and fails the request without crashing the frontend. Native libraries remain trusted deployment code, not a sandbox: they retain the worker's filesystem and operating-system privileges and can read or modify accessible data or spawn processes. Event-enrichment plugins use the separate supervised worker path.
+The current plugin implementation includes an in-process Rust trait registry and a C ABI loader. Plugins can contribute event enrichers or report renderers. A configured `LoadPlugin="report_html /opt/stats/lib/libstats-report-html.so"`, `LoadPlugin="report_json /opt/stats/lib/libstats-report-json.so"`, or `LoadPlugin="report_csv /opt/stats/lib/libstats-report-csv.so"` entry loads only the requested stream renderer. Native report plugins receive a format and UTF-8 JSON report, then return a media type, extension, and body through an explicit release callback. Report-renderer callbacks run in short-lived supervised worker processes, so a crash, abort, or timeout terminates the worker and fails the request without crashing the frontend. Native libraries remain trusted deployment code, not a sandbox: they retain the worker's filesystem and operating-system privileges and can read or modify accessible data or spawn processes. Event-enrichment plugins use the separate supervised worker path.
 
 The CGI adapter uses the same rule: section-specific HTML remains available from the static report templates, while full HTML, JSON, and CSV output requires `STATS_CONFIG` with the requested renderer plugin. The TUI uses its own terminal renderer and never loads report-export plugins.
 
