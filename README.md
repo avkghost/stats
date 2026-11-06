@@ -1,5 +1,10 @@
 # Stats
 
+[![CI](https://github.com/avkghost/stats/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/avkghost/stats/actions/workflows/ci.yml)
+[![Release Build](https://github.com/avkghost/stats/actions/workflows/release.yml/badge.svg)](https://github.com/avkghost/stats/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/avkghost/stats)](https://github.com/avkghost/stats/releases)
+[![License](https://img.shields.io/github/license/avkghost/stats)](https://github.com/avkghost/stats/blob/master/LICENSE)
+
 Stats is a Rust-based, AWStats-style web log analyzer. It is an independent
 implementation motivated by AWStats's November 2025 deprecation notice and is
 not currently presented as a drop-in replacement. The documented compatibility
