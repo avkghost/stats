@@ -72,9 +72,18 @@ pub fn supervise_report_worker(
         .stdin
         .take()
         .ok_or_else(|| io::Error::other("native report worker stdin is unavailable"))?;
-    stdin.write_all(&request)?;
-    stdin.write_all(b"\n")?;
+    let write_result = stdin
+        .write_all(&request)
+        .and_then(|()| stdin.write_all(b"\n"));
     drop(stdin);
+
+    if let Err(error) = write_result {
+        if error.kind() != io::ErrorKind::BrokenPipe {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WorkerRequestError::Io(error));
+        }
+    }
 
     let mut stdout = child
         .stdout
