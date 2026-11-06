@@ -34,7 +34,7 @@ optional GeoIP and external renderer plugins require their own local resources.
 
 Linux-first modular web log analyzer in Rust, with AWStats-style configuration and local MaxMind GeoIP enrichment.
 
-See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.2` release-candidate scope and verification summary.
+See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.2` release scope and verification summary.
 
 ## Current implementation
 

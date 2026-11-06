@@ -3,6 +3,7 @@ set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 version=${STATS_VERSION:-0.1.2}
+version=${version#v}
 platform=${STATS_PLATFORM:-linux-x86_64}
 output_dir=${STATS_RELEASE_DIR:-${project_dir}/target/release-artifacts}
 bundle_name="stats-${version}-${platform}"
@@ -23,6 +24,9 @@ install -m 0644 README.md CHANGELOG.md "${bundle_dir}/"
 
 mkdir -p "${output_dir}"
 tar -C "${staging_dir}" -czf "${output_dir}/${bundle_name}.tar.gz" "${bundle_name}"
-sha256sum "${output_dir}/${bundle_name}.tar.gz" >"${output_dir}/${bundle_name}.tar.gz.sha256"
+(
+    cd "${output_dir}"
+    sha256sum "${bundle_name}.tar.gz" >"${bundle_name}.tar.gz.sha256"
+)
 echo "created ${output_dir}/${bundle_name}.tar.gz"
 echo "created ${output_dir}/${bundle_name}.tar.gz.sha256"

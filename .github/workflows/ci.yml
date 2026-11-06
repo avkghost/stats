@@ -34,7 +34,7 @@ jobs:
           cargo package --workspace --allow-dirty --no-verify
       - name: Build release bundle
         env:
-          STATS_VERSION: 0.1.0-ci-${{ github.sha }}
+          STATS_VERSION: 0.1.2-ci-${{ github.sha }}
           STATS_RELEASE_DIR: target/release-artifacts
         run: bash deploy/package-release.sh
       - name: Upload release bundle
