@@ -1,6 +1,6 @@
 [package]
 name = "stats-http"
-version = "0.1.1"
+version = "0.1.2"
 description = "Standalone HTTP frontend for the AWStats-style Rust web log analyzer"
 edition.workspace = true
 license.workspace = true
@@ -17,3 +17,6 @@ stats-core = { version = "0.1.1", path = "../stats-core" }
 stats-render = { version = "0.1.1", path = "../stats-render" }
 tokio.workspace = true
 xz2.workspace = true
+
+[dev-dependencies]
+stats-report-json = { path = "../../plugins/report-json", features = ["test-fixture"] }

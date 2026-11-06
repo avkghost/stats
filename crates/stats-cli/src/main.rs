@@ -235,6 +235,18 @@ enum Command {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
+    let mut args = std::env::args_os();
+    args.next();
+    if args
+        .next()
+        .is_some_and(|arg| arg == stats_plugin_host::REPORT_WORKER_ARG)
+    {
+        let path = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("native report worker requires a plugin path"))?;
+        return stats_plugin_host::run_report_worker(PathBuf::from(path))
+            .map_err(|error| anyhow::anyhow!("native report worker: {error}"));
+    }
     match Cli::parse().command {
         Command::Update {
             config,

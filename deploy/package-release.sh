@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-version=${STATS_VERSION:-0.1.1}
+version=${STATS_VERSION:-0.1.2}
 platform=${STATS_PLATFORM:-linux-x86_64}
 output_dir=${STATS_RELEASE_DIR:-${project_dir}/target/release-artifacts}
 bundle_name="stats-${version}-${platform}"

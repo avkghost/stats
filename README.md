@@ -1,12 +1,44 @@
 # Stats
 
+Stats is a Rust-based, AWStats-style web log analyzer. It is an independent
+implementation motivated by AWStats's November 2025 deprecation notice and is
+not currently presented as a drop-in replacement. The documented compatibility
+scope and evidence are in [docs/compatibility.md](docs/compatibility.md).
+
+The upstream AWStats project is available at [eldy/awstats](https://github.com/eldy/awstats).
+AWStats was created and maintained by Laurent Destailleur (`eldy`). Its deprecation
+notice recommends [Matomo Log Analytics](https://matomo.org/log-analytics/); this
+project explores preserving selected AWStats-oriented workflows in Rust instead.
+Stats is an independent project and is not affiliated with or endorsed by AWStats,
+Laurent Destailleur, or Matomo.
+
+## Status and license
+
+This repository is under active development and is released under
+`GPL-3.0-or-later`; see [LICENSE](LICENSE). This is an experimental release with
+no guarantee of complete AWStats compatibility or a stable public API.
+
+## Build and test
+
+Requires a current stable Rust toolchain. From the repository root:
+
+```text
+cargo fmt --all -- --check
+cargo check --workspace --all-targets
+cargo test --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+The commands below describe the implementation currently present in the workspace;
+optional GeoIP and external renderer plugins require their own local resources.
+
 Linux-first modular web log analyzer in Rust, with AWStats-style configuration and local MaxMind GeoIP enrichment.
 
-See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verification summary.
+See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.2` release-candidate scope and verification summary.
 
 ## Current implementation
 
-- Cargo workspace with `stats-core` and `stats-cli`.
+- Cargo workspace with 12 packages covering core parsing/storage, CLI, HTTP/CGI/TUI frontends, renderers, and plugins.
 - AWStats-style `Key=Value` configuration parsing.
 - Apache/Nginx custom format support, common LogFormat 4, JSON-line records, Unix timestamps, and AWStats time formats 1–6. Apache aliases include request tokens (`%r`, `%m`, `%U`, `%q`, `%H`), client/vhost fields (`%a`, `%{c}a`, `%v`, `%{Host}i`), epoch timestamps (`%{sec}t`, `%{msec}t`, `%{usec}t`), duration tokens (`%D`, `%T`, `%{ms}T`), and arbitrary quoted headers.
 - Optional `TimeZone=<hour-offset|IANA/Zone>` normalizes parsed event timestamps before aggregation, including daylight-saving transitions for named IANA zones; leaving it unset preserves the timestamp offset from each record.
@@ -16,6 +48,9 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 - Optional monthly/yearly SQLite partitioning with federated reports across all period databases.
 - Static multi-page HTML or machine-readable JSON reports with AWStats-style hits/pages/files/visits totals, daily traffic detail, calendar dimensions, top bandwidth URLs, virtual-host reports, authenticated users, HTTP errors and status classes, request-time buckets, referrer URLs and referring sites, search engines/keyphrases, incremental session entry/exit pages, and status, country, region, city, ASN, network organization, file-type, browser, OS, and robot tables.
 - Rust plugin traits for event enrichment plus a C ABI and dynamic host loader.
+- Configured native report renderers run in short-lived supervised worker processes; a renderer crash, abort, or timeout fails that request without crashing the frontend.
+- Native worker IPC is bounded to 8 MiB per request or response. The supervisor reaps the direct worker, but does not sandbox plugins or clean up independently spawned descendants.
+- HTTP report failures return a generic 500 response, and CGI failures emit a generic 500 response with valid CGI headers; detailed diagnostics remain server-side.
 - Tokio CLI runtime with blocking analysis work isolated from the runtime.
 - Ratatui interactive dashboard backed by the shared report query API.
 - Stable terminal summaries with one-shot and refreshable views.
@@ -26,36 +61,43 @@ See [CHANGELOG.md](CHANGELOG.md) for the current `0.1.1` release scope and verif
 
 ## Run against the example fixture
 
-The generic example configuration is at `examples/awstats.example.test.conf`. Copy it and adjust `LogFile`, `DirData`, and any local GeoIP plugin paths for a deployment.
+The generic example configuration and anonymized fixture are at `examples/awstats.example.test.conf` and `examples/access.log`. The commands below run without GeoIP databases; copy the configuration and adjust `LogFile`, `DirData`, and any local GeoIP plugin paths for a deployment.
 
-    cargo run -p stats-cli -- update --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
-    cargo run -p stats-cli -- backfill --config logs/awstats.example.test.conf --data-dir target/stats-data
-    cargo run -p stats-cli -- rebuild --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
+    cargo run -p stats-cli -- update --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
+    cargo run -p stats-cli -- rebuild --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
     cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report/index.html
-    cargo run -p stats-cli -- report --data-dir target/stats-data --period 2026-10 --output target/stats-october/index.html
+    cargo run -p stats-cli -- summary --data-dir target/stats-data --limit 10
     cargo run -p stats-cli -- optimize --data-dir target/stats-data
     cargo run -p stats-cli -- optimize --data-dir target/stats-data --vacuum
     cargo run -p stats-cli -- storage --data-dir target/stats-data
     cargo run -p stats-cli -- backup --data-dir target/stats-data --output-dir target/stats-backup
-    cargo run -p stats-cli -- retention --data-dir stats --before 2025-01
-    cargo run -p stats-cli -- retention --data-dir stats --before 2025-01 --archive-dir target/stats-archive --remove-source
-    cargo run -p stats-cli -- migrate --config logs/awstats.example.test.conf --log-dir logs --data-dir stats --backup-dir target/pre-partition-backup
-    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output target/stats-report.json --format json
-    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output target/stats-report.csv --format csv
-    cargo run -p stats-cli -- report --config logs/awstats.example.test.conf --data-dir target/stats-data --output - --format json | jq '.hits, .pages'
-    cargo run -p stats-cli -- watch --config logs/awstats.example.test.conf --log-file logs/access.log --data-dir target/stats-data
-    cargo run -p stats-cli -- validate --config logs/awstats.example.test.conf
-    cargo run -p stats-cli -- health --config logs/awstats.example.test.conf --data-dir stats
+    cargo run -p stats-cli -- validate --config examples/awstats.example.test.conf
+
+JSON and CSV report output are optional external renderers. Build and configure
+the corresponding plugin libraries before using `--format json` or `--format csv`:
+
+    cargo build -p stats-report-json -p stats-report-csv
+    cargo run -p stats-cli -- report --config <config-with-report-plugin> --data-dir target/stats-data --output target/stats-report.json --format json
+
+Additional local commands, using the public fixture, are:
+
+    cargo run -p stats-cli -- watch --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
+    cargo run -p stats-cli -- validate --config examples/awstats.example.test.conf
+    cargo run -p stats-cli -- health --config examples/awstats.example.test.conf --data-dir target/stats-data
     cargo run -p stats-cli -- summary --data-dir target/stats-data --limit 10
     cargo run -p stats-cli -- summary --data-dir target/stats-data --watch --interval 5
-    cargo run -p stats-cli -- live --config logs/awstats.example.test.conf --limit 10 --interval 5
-    cargo run -p stats-cli -- tui --config logs/awstats.example.test.conf --limit 10 --interval 5
-    cargo run -p stats-http -- --data-dir target/stats-data --bind 127.0.0.1:3000
+    cargo run -p stats-cli -- live --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data --limit 10 --interval 5
+    cargo run -p stats-cli -- tui --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data --limit 10 --interval 5
+    cargo run -p stats-http -- --config examples/awstats.example.test.conf --data-dir target/stats-data --bind 127.0.0.1:3000
     curl 'http://127.0.0.1:3000/report?output=html&limit=50'
     curl 'http://127.0.0.1:3000/section/visitors?limit=50'
     curl 'http://127.0.0.1:3000/report?output=json&limit=50' # requires LoadPlugin=report_json
-    QUERY_STRING='output=json&limit=50' STATS_CONFIG=logs/awstats.example.test.conf STATS_DATA_DIR=stats cargo run -p stats-cgi
-    QUERY_STRING='section=visitors&limit=50' STATS_DATA_DIR=stats cargo run -p stats-cgi
+    QUERY_STRING='output=html&limit=50' STATS_CONFIG=examples/awstats.example.test.conf STATS_DATA_DIR=target/stats-data cargo run -p stats-cgi
+    QUERY_STRING='section=visitors&limit=50' STATS_CONFIG=examples/awstats.example.test.conf STATS_DATA_DIR=target/stats-data cargo run -p stats-cgi
+
+The historical-file and deployment examples below use illustrative `logs/` and
+system paths; adapt them to the actual log, data, GeoIP, and service-account paths
+on the target host.
 
 The configured GeoIP plugin paths are read from `LoadPlugin` entries. CLI path overrides are intended for local fixtures and tests.
 
@@ -100,12 +142,12 @@ Deployment templates are in `deploy/`: `stats-update.service`, `stats-update.tim
 
 After building a release, `sudo deploy/install.sh` performs the repeatable installation. It creates the system account and data directories when needed, installs the release binary and service files, reloads systemd, and enables the timer. It intentionally does not run an update until the configuration has been installed. Override paths with `STATS_BINARY_PATH`, `STATS_CONFIG_PATH`, `STATS_DATA_DIR`, and `STATS_OUTPUT_DIR` when the host layout differs.
 
-Create a self-contained Linux release bundle with `deploy/package-release.sh`. It produces `target/release-artifacts/stats-0.1.1-linux-x86_64.tar.gz` and a `.sha256` checksum containing the optimized binary, deployment templates, README, and changelog. Set `STATS_VERSION`, `STATS_PLATFORM`, or `STATS_RELEASE_DIR` to customize the artifact name or destination.
+Create a self-contained Linux release bundle with `deploy/package-release.sh`. It produces `target/release-artifacts/stats-0.1.2-linux-x86_64.tar.gz` and a `.sha256` checksum containing the optimized binary, deployment templates, README, and changelog. Set `STATS_VERSION`, `STATS_PLATFORM`, or `STATS_RELEASE_DIR` to customize the artifact name or destination.
 
 The release workflow publishes the same bundle when a `v*` tag is pushed. For the first release, verify CI is green, create the tag, push it, then verify the attached checksum before installation:
 
-    git tag v0.1.1
-    git push origin v0.1.1
+    git tag v0.1.2
+    git push origin v0.1.2
 
 Typical installation and upgrade sequence:
 
@@ -139,7 +181,7 @@ If the AWStats config points at production paths such as `/var/log/nginx/access.
 
 `stats-core` owns normalized events, parsing, GeoIP providers, plugin traits, storage, and report queries. `stats-cli` owns orchestration and output. HTML, terminal summaries, and the Ratatui dashboard consume the same report query API rather than accessing storage directly.
 
-The current plugin implementation includes an in-process Rust trait registry and a C ABI loader. Plugins can contribute event enrichers or report renderers. A configured `LoadPlugin="report_html /opt/stats/libstats-report-html.so"`, `LoadPlugin="report_json /opt/stats/libstats-report-json.so"`, or `LoadPlugin="report_csv /opt/stats/libstats-report-csv.so"` entry loads only the requested stream renderer. Native report plugins receive a format and UTF-8 JSON report, then return a media type, extension, and body through an explicit release callback. Dynamic libraries are trusted deployment code: malformed output is reported as an error, but report-renderer crashes are not isolated from the frontend process. Event-enrichment plugins use the separate supervised worker path.
+The current plugin implementation includes an in-process Rust trait registry and a C ABI loader. Plugins can contribute event enrichers or report renderers. A configured `LoadPlugin="report_html /opt/stats/libstats-report-html.so"`, `LoadPlugin="report_json /opt/stats/libstats-report-json.so"`, or `LoadPlugin="report_csv /opt/stats/libstats-report-csv.so"` entry loads only the requested stream renderer. Native report plugins receive a format and UTF-8 JSON report, then return a media type, extension, and body through an explicit release callback. Report-renderer callbacks run in short-lived supervised worker processes, so a crash, abort, or timeout terminates the worker and fails the request without crashing the frontend. Native libraries remain trusted deployment code, not a sandbox: they retain the worker's filesystem and operating-system privileges and can read or modify accessible data or spawn processes. Event-enrichment plugins use the separate supervised worker path.
 
 The CGI adapter uses the same rule: section-specific HTML remains available from the static report templates, while full HTML, JSON, and CSV output requires `STATS_CONFIG` with the requested renderer plugin. The TUI uses its own terminal renderer and never loads report-export plugins.
 

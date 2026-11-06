@@ -34,6 +34,14 @@ unsafe extern "C" fn render_report(
     if request.is_null() || output.is_null() {
         return 1;
     }
+    #[cfg(feature = "test-fixture")]
+    if let Some(mode) = test_fixture_mode() {
+        match mode.as_str() {
+            "abort" => std::process::abort(),
+            "exit" => std::process::exit(23),
+            _ => {}
+        }
+    }
     let request = &*request;
     if request.format.is_null() || request.report_json.is_null() {
         return 1;
@@ -47,6 +55,14 @@ unsafe extern "C" fn render_report(
     }
     let body = CStr::from_ptr(request.report_json).to_bytes();
     set_output(output, "application/json; charset=utf-8", "json", body)
+}
+
+#[cfg(feature = "test-fixture")]
+fn test_fixture_mode() -> Option<String> {
+    let path = std::env::var_os("STATS_TEST_REPORT_PLUGIN_MODE_FILE")?;
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|mode| mode.trim().to_owned())
 }
 
 unsafe fn set_output(

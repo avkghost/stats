@@ -15,10 +15,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
       - name: Test workspace
-        run: cargo test --workspace
+        run: cargo test --workspace --all-targets
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Audit dependencies
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
       - name: Release build
         run: cargo build --workspace --release
       - name: Package workspace crates

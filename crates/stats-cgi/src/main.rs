@@ -235,7 +235,36 @@ fn render_cgi(
     Ok((media_type.to_owned(), body))
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    let mut args = env::args_os();
+    args.next();
+    if args
+        .next()
+        .is_some_and(|arg| arg == stats_render::REPORT_WORKER_ARG)
+    {
+        let path = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("native report worker requires a plugin path"));
+        let result = path.and_then(|path| stats_render::run_report_worker(PathBuf::from(path)));
+        if let Err(error) = result {
+            eprintln!("native report worker failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if let Err(error) = run_cgi() {
+        let mut stdout = io::BufWriter::new(io::stdout().lock());
+        let _ = writeln!(
+            stdout,
+            "Status: 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nreport request failed"
+        );
+        let _ = stdout.flush();
+        eprintln!("CGI request failed: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn run_cgi() -> anyhow::Result<()> {
     let request = parse_query(&env::var("QUERY_STRING").unwrap_or_default())?;
     let data_dir = PathBuf::from(env::var("STATS_DATA_DIR").unwrap_or_else(|_| "stats".into()));
     let config = env::var_os("STATS_CONFIG")

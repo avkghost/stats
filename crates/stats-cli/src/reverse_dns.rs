@@ -16,7 +16,7 @@ impl ReverseDnsEnricher {
     pub fn new(timeout_ms: u64, cache_size: usize) -> Result<Self> {
         let resolver = TokioResolver::builder_tokio()
             .context("initialize system DNS resolver")?
-            .build();
+            .build()?;
         Ok(Self {
             resolver,
             cache: HashMap::new(),
@@ -63,10 +63,9 @@ impl ReverseDnsEnricher {
                                 .await
                                 .ok()
                                 .and_then(Result::ok)?;
-                            lookup
-                                .iter()
-                                .next()
-                                .map(|name| name.to_utf8().trim_end_matches('.').to_owned())
+                            lookup.answers().first().map(|record| {
+                                record.data.to_string().trim_end_matches('.').to_owned()
+                            })
                         }
                         .await;
                         (ip, hostname)

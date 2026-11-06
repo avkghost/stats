@@ -49,6 +49,17 @@ struct ReportQuery {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let mut args = std::env::args_os();
+    args.next();
+    if args
+        .next()
+        .is_some_and(|arg| arg == stats_render::REPORT_WORKER_ARG)
+    {
+        let path = args
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("native report worker requires a plugin path"))?;
+        return stats_render::run_report_worker(PathBuf::from(path));
+    }
     let args = Args::parse();
     let config = args
         .config
@@ -304,6 +315,6 @@ fn render_report(
     Ok((StatusCode::OK, [(header::CONTENT_TYPE, media_type)], body).into_response())
 }
 
-fn error_response(error: anyhow::Error) -> Response {
-    (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response()
+fn error_response(_error: anyhow::Error) -> Response {
+    (StatusCode::INTERNAL_SERVER_ERROR, "report request failed\n").into_response()
 }

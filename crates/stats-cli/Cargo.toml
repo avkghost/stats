@@ -1,6 +1,6 @@
 [package]
 name = "stats-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "AWStats-style Rust web log analyzer CLI"
 edition.workspace = true
 license.workspace = true
@@ -24,4 +24,7 @@ stats-plugin-api = { version = "0.1.1", path = "../stats-plugin-api" }
 stats-plugin-host = { version = "0.1.1", path = "../stats-plugin-host" }
 stats-render = { version = "0.1.1", path = "../stats-render" }
 stats-tui = { version = "0.1.1", path = "../stats-tui" }
+
+[dev-dependencies]
+stats-report-json = { path = "../../plugins/report-json", features = ["test-fixture"] }
 

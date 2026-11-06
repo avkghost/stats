@@ -5,10 +5,153 @@ use stats_plugin_api::{
 };
 use std::{
     ffi::{CStr, CString, NulError},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     ptr::NonNull,
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
+
+pub const REPORT_WORKER_ARG: &str = "__stats_plugin_render_worker";
+pub const WORKER_PROTOCOL_VERSION: u64 = 1;
+pub const MAX_WORKER_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Debug, Error)]
+pub enum PluginWorkerError {
+    #[error("plugin worker I/O failed: {0}")]
+    Io(#[from] io::Error),
+    #[error("plugin worker protocol failed: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("plugin worker plugin operation failed: {0}")]
+    Plugin(#[from] PluginLoadError),
+    #[error("plugin worker request is missing {0}")]
+    MissingField(&'static str),
+    #[error("plugin worker request has unsupported operation {0:?}")]
+    UnsupportedOperation(String),
+    #[error("plugin worker request exceeds {MAX_WORKER_MESSAGE_BYTES} bytes")]
+    MessageTooLarge,
+}
+
+#[derive(Debug, Error)]
+pub enum WorkerRequestError {
+    #[error("native report worker I/O failed: {0}")]
+    Io(#[from] io::Error),
+    #[error("native report worker protocol failed: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("native report worker message exceeds {MAX_WORKER_MESSAGE_BYTES} bytes")]
+    MessageTooLarge,
+    #[error("native report worker returned an invalid response: {0}")]
+    InvalidResponse(String),
+    #[error("native report worker timed out after {0:?}")]
+    Timeout(Duration),
+    #[error("native report worker exited unsuccessfully: {0}")]
+    Exit(std::process::ExitStatus),
+}
+
+pub fn supervise_report_worker(
+    executable: impl AsRef<Path>,
+    plugin: impl AsRef<Path>,
+    request: &serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, WorkerRequestError> {
+    let request = serde_json::to_vec(request)?;
+    if request.len() > MAX_WORKER_MESSAGE_BYTES {
+        return Err(WorkerRequestError::MessageTooLarge);
+    }
+    let mut child = Command::new(executable.as_ref())
+        .arg(REPORT_WORKER_ARG)
+        .arg(plugin.as_ref())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::other("native report worker stdin is unavailable"))?;
+    stdin.write_all(&request)?;
+    stdin.write_all(b"\n")?;
+    drop(stdin);
+
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("native report worker stdout is unavailable"))?;
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut buffer = [0_u8; 8192];
+        let result = loop {
+            match stdout.read(&mut buffer) {
+                Ok(0) => break Ok(output),
+                Ok(read) => {
+                    if output.len().saturating_add(read) > MAX_WORKER_MESSAGE_BYTES {
+                        break Err(WorkerRequestError::MessageTooLarge);
+                    }
+                    output.extend_from_slice(&buffer[..read]);
+                }
+                Err(error) => break Err(WorkerRequestError::Io(error)),
+            }
+        };
+        let _ = sender.send(result);
+    });
+
+    let deadline = Instant::now() + timeout;
+    let mut status = None;
+    let mut output = None;
+    while Instant::now() < deadline {
+        if output.is_none() {
+            if let Ok(result) = receiver.try_recv() {
+                output = Some(result);
+            }
+        }
+        if status.is_none() {
+            status = child.try_wait()?;
+        }
+        if status.is_some() && output.is_some() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    let status = match status {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WorkerRequestError::Timeout(timeout));
+        }
+    };
+    let output = match output {
+        Some(output) => output,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WorkerRequestError::Timeout(timeout));
+        }
+    }?;
+    if !status.success() {
+        return Err(WorkerRequestError::Exit(status));
+    }
+    let response: serde_json::Value = serde_json::from_slice(&output)?;
+    let version = response
+        .get("protocol_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| WorkerRequestError::InvalidResponse("missing protocol_version".into()))?;
+    if version != WORKER_PROTOCOL_VERSION {
+        return Err(WorkerRequestError::InvalidResponse(format!(
+            "unsupported protocol_version {version}"
+        )));
+    }
+    if !response.is_object() {
+        return Err(WorkerRequestError::InvalidResponse(
+            "response must be a JSON object".into(),
+        ));
+    }
+    Ok(response)
+}
 
 #[derive(Debug, Error)]
 pub enum PluginLoadError {
@@ -209,6 +352,71 @@ impl Drop for LoadedPlugin {
             }
         }
     }
+}
+
+/// Runs one isolated native report-plugin request over stdin/stdout.
+///
+/// Frontends enter this function only when launched with [`REPORT_WORKER_ARG`].
+/// A parent process owns the supervision boundary; a plugin crash or abort ends
+/// this worker without taking down the frontend.
+pub fn run_report_worker(path: impl AsRef<Path>) -> Result<(), PluginWorkerError> {
+    let host = HostApi {
+        abi_version: ABI_VERSION,
+        log: None,
+    };
+    let plugin = unsafe { LoadedPlugin::load(path.as_ref(), &host) }?;
+    let mut request_text = String::new();
+    io::stdin()
+        .take((MAX_WORKER_MESSAGE_BYTES + 1) as u64)
+        .read_to_string(&mut request_text)?;
+    if request_text.len() > MAX_WORKER_MESSAGE_BYTES {
+        return Err(PluginWorkerError::MessageTooLarge);
+    }
+    let request: serde_json::Value = serde_json::from_str(&request_text)?;
+    let operation = request
+        .get("operation")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(PluginWorkerError::MissingField("operation"))?;
+    let response = match operation {
+        "metadata" => serde_json::json!({
+            "protocol_version": WORKER_PROTOCOL_VERSION,
+            "ok": true,
+            "name": plugin.name(),
+            "version": plugin.version(),
+            "capabilities": plugin.capabilities(),
+        }),
+        "render" => {
+            let format = request
+                .get("format")
+                .and_then(serde_json::Value::as_str)
+                .ok_or(PluginWorkerError::MissingField("format"))?;
+            let report_json = request
+                .get("report_json")
+                .and_then(serde_json::Value::as_str)
+                .ok_or(PluginWorkerError::MissingField("report_json"))?;
+            let section = request.get("section").and_then(serde_json::Value::as_str);
+            match plugin.render_report(format, report_json, section) {
+                Ok((media_type, extension, body)) => serde_json::json!({
+                    "protocol_version": WORKER_PROTOCOL_VERSION,
+                    "ok": true,
+                    "media_type": media_type,
+                    "extension": extension,
+                    "body": body,
+                }),
+                Err(error) => serde_json::json!({
+                    "protocol_version": WORKER_PROTOCOL_VERSION,
+                    "ok": false,
+                    "error": error.to_string(),
+                }),
+            }
+        }
+        other => return Err(PluginWorkerError::UnsupportedOperation(other.to_owned())),
+    };
+    let mut stdout = io::BufWriter::new(io::stdout().lock());
+    serde_json::to_writer(&mut stdout, &response)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    Ok(())
 }
 
 unsafe fn read_report_field(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Added the GPLv3 license text and explicit AWStats attribution/non-affiliation language.
+- Added a compatibility matrix, sanitized runnable fixture, and clearer publication limitations.
+- Added all-target workspace checks and `cargo audit` to CI.
+- Upgraded Hickory DNS dependencies to 0.26.3 and adapted reverse-DNS lookup handling.
+- Corrected README commands so the default fixture workflow runs without private local files.
+
 ## 0.1.1
 
 Patch release containing the corrected Linux release bundle contents. Installed bundles no longer include the source-only packaging script.
@@ -26,7 +34,8 @@ Initial modular AWStats-style Rust analyzer release.
 - Bandwidth-by-URL bars scaled by response bytes.
 - Tokio live analysis and refreshable summaries.
 - Ratatui dashboard with Overview, Geography, Clients, and Performance views.
-- Rust plugin traits, versioned C ABI, dynamic loading, and supervised native plugin workers.
+- Rust plugin traits, versioned C ABI, dynamic loading, and supervised native plugin workers; report-renderer callbacks are isolated in short-lived child processes.
+- Added frontend regression coverage for controlled CLI, HTTP, and CGI worker failures; HTTP and CGI error responses no longer expose internal rendering details.
 - Configuration validation with path-aware errors, LogFormat compilation checks, and first-record parsing.
 - Active-path-only log-rotation handling with per-file identity/content checkpoints and legacy checkpoint migration.
 - Normal updates now append cumulative data and regenerate the complete multi-page HTML site automatically.

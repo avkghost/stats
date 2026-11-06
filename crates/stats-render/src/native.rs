@@ -1,27 +1,31 @@
+use serde_json::{json, Value};
 use stats_core::{
     Config, PluginConfig, PluginDescriptor, PluginRegistry, RenderedReport, RendererRegistryError,
     Report, ReportRenderer,
 };
-use stats_plugin_api::{HostApi, ABI_VERSION};
-use stats_plugin_host::LoadedPlugin;
-use std::path::Path;
+use stats_plugin_host::supervise_report_worker;
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 pub struct NativeReportRenderer {
-    plugin: LoadedPlugin,
+    library: PathBuf,
+    name: String,
+    version: String,
     format: String,
 }
 
 impl NativeReportRenderer {
     pub fn load(path: impl AsRef<Path>, format: impl Into<String>) -> anyhow::Result<Self> {
-        let host = HostApi {
-            abi_version: ABI_VERSION,
-            log: None,
-        };
-        let plugin = unsafe { LoadedPlugin::load(path.as_ref(), &host) }.map_err(|error| {
-            anyhow::anyhow!("load report renderer {}: {error}", path.as_ref().display())
+        let library = path.as_ref().to_path_buf();
+        let metadata = run_worker(&library, json!({"operation": "metadata"})).map_err(|error| {
+            anyhow::anyhow!("load report renderer {}: {error}", library.display())
         })?;
         Ok(Self {
-            plugin,
+            name: response_string(&metadata, "name")?,
+            version: response_string(&metadata, "version")?,
+            library,
             format: format.into(),
         })
     }
@@ -77,8 +81,8 @@ pub fn report_plugin_format(plugin: &PluginConfig) -> Option<String> {
 impl ReportRenderer for NativeReportRenderer {
     fn descriptor(&self) -> PluginDescriptor {
         PluginDescriptor {
-            name: self.plugin.name().to_owned(),
-            version: self.plugin.version().to_owned(),
+            name: self.name.clone(),
+            version: self.version.clone(),
             capabilities: vec!["report".into(), self.format.clone()],
         }
     }
@@ -103,16 +107,49 @@ impl NativeReportRenderer {
         section: Option<&str>,
     ) -> Result<RenderedReport, String> {
         let input = serde_json::to_string(report).map_err(|error| error.to_string())?;
-        let (media_type, extension, body) = self
-            .plugin
-            .render_report(&self.format, &input, section)
-            .map_err(|error| error.to_string())?;
+        let mut request = json!({
+            "operation": "render",
+            "format": self.format,
+            "report_json": input,
+        });
+        if let Some(section) = section {
+            request["section"] = Value::String(section.to_owned());
+        }
+        let response = run_worker(&self.library, request).map_err(|error| error.to_string())?;
+        if response.get("ok").and_then(Value::as_bool) != Some(true) {
+            return Err(response
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("native report renderer failed")
+                .to_owned());
+        }
         Ok(RenderedReport {
-            media_type,
-            extension,
-            body,
+            media_type: response_string(&response, "media_type")
+                .map_err(|error| error.to_string())?,
+            extension: response_string(&response, "extension")
+                .map_err(|error| error.to_string())?,
+            body: response_string(&response, "body").map_err(|error| error.to_string())?,
         })
     }
+}
+
+const WORKER_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn response_string(response: &Value, field: &str) -> anyhow::Result<String> {
+    response
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("native report worker response is missing {field}"))
+}
+
+fn run_worker(path: &Path, request: Value) -> anyhow::Result<Value> {
+    Ok(supervise_report_worker(
+        std::env::current_exe()?,
+        path,
+        &request,
+        WORKER_TIMEOUT,
+    )?)
 }
 
 #[cfg(test)]

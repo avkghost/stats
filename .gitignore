@@ -4,3 +4,13 @@ logs
 target
 tasks/*
 .rules/*
+
+# Local credentials and generated databases
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*

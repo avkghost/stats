@@ -1,6 +1,6 @@
 [package]
 name = "stats-report-html"
-version = "0.1.1"
+version = "0.1.2"
 description = "External HTML report renderer for the stats analyzer"
 edition.workspace = true
 license.workspace = true
