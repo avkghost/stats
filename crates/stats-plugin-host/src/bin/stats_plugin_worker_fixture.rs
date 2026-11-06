@@ -1,15 +1,11 @@
 use std::{
-    env,
     io::{self, Write},
     thread,
     time::Duration,
 };
 
 fn main() {
-    let mode = env::var("STATS_WORKER_FIXTURE_MODE")
-        .ok()
-        .or_else(|| std::env::args().nth(2))
-        .unwrap_or_else(|| "valid".into());
+    let mode = std::env::args().nth(2).unwrap_or_else(|| "valid".into());
     let mode = mode.strip_prefix("fixture-mode://").unwrap_or(&mode);
     match mode {
         "valid" => print_response(
