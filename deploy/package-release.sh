@@ -2,7 +2,11 @@
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-version=${STATS_VERSION:-0.1.2}
+version=${STATS_VERSION:-$(sed -nE 's/^version = "([^"]+)"/\1/p' crates/stats-cli/Cargo.toml | head -n 1)}
+if [[ -z ${version} ]]; then
+    echo "could not determine package version" >&2
+    exit 1
+fi
 version=${version#v}
 platform=${STATS_PLATFORM:-linux-x86_64}
 output_dir=${STATS_RELEASE_DIR:-${project_dir}/target/release-artifacts}

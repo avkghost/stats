@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -27,16 +30,13 @@ jobs:
           cargo audit
       - name: Release build
         run: cargo build --workspace --release
-      - name: Package workspace crates
-        run: |
-          # Package together so unpublished internal path dependencies are
-          # resolved as one workspace.
-          cargo package --workspace --allow-dirty --no-verify
       - name: Build release bundle
         env:
-          STATS_VERSION: 0.1.2-ci-${{ github.sha }}
           STATS_RELEASE_DIR: target/release-artifacts
         run: bash deploy/package-release.sh
+      - name: Verify release bundle checksum
+        working-directory: target/release-artifacts
+        run: sha256sum -c *.sha256
       - name: Upload release bundle
         uses: actions/upload-artifact@v4
         with:
