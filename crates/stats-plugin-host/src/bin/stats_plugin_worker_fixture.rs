@@ -47,6 +47,12 @@ fn print_raw(response: &str) {
 #[cfg(unix)]
 fn segv() {
     unsafe {
+        let core_limit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        libc::setrlimit(libc::RLIMIT_CORE, &core_limit);
+        libc::signal(libc::SIGSEGV, libc::SIG_DFL);
         libc::raise(libc::SIGSEGV);
     }
     std::process::abort();
