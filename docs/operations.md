@@ -3,9 +3,11 @@
 ## Incremental updates
 
 `update` is cumulative by default. It appends unseen events to the existing
-database and regenerates the complete HTML site. Source identity and content
-hashes are checked before an append checkpoint is reused. Rewrites, truncation,
-replacement, or changed prefixes trigger a safe aggregate replay.
+database and regenerates the complete HTML site at the default
+`output/index.html` sibling of the configured data directory. Source
+identity and content hashes are checked before an append checkpoint is reused.
+Rewrites, truncation, replacement, or changed prefixes trigger a safe aggregate
+replay. Use `report --output <path>` when a custom report location is required.
 
 The updater analyzes only the configured active file. It does not open
 `access.log.1`, `access.log.2`, or compressed archives during a normal update.
@@ -25,6 +27,9 @@ explicit historical import after confirming the archive set is complete.
 
 Historical files can also be supplied explicitly, oldest to newest, without
 using `rebuild` between files:
+
+The `logs/...` paths below are illustrative placeholders. Replace them with
+the actual active log and rotated archives for the deployment.
 
 ```text
 cargo run -p stats-cli -- update --config logs/awstats.example.test.conf --log-file logs/access.log.2.gz --data-dir stats

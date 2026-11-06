@@ -24,7 +24,6 @@ The generic configuration and anonymized access log are
 
 ```text
 cargo run -p stats-cli -- update --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
-cargo run -p stats-cli -- rebuild --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
 cargo run -p stats-cli -- report --data-dir target/stats-data --output target/stats-report/index.html
 cargo run -p stats-cli -- summary --data-dir target/stats-data --limit 10
 cargo run -p stats-cli -- optimize --data-dir target/stats-data
@@ -36,8 +35,21 @@ cargo run -p stats-cli -- health --config examples/awstats.example.test.conf --d
 ```
 
 `update` is the normal cumulative operation. `rebuild` intentionally clears
-derived aggregates and replays the selected input. `health` is read-only and
-does not create a missing database.
+derived aggregates and replays the selected input. By default, `update` writes
+the generated static site to the `output/index.html` sibling of the configured
+data directory (for `DirData="stats"`, this is `output/index.html`).
+`report --output <path>` writes the report to the requested custom
+path, such as `target/stats-report/index.html`. `health` is read-only and does
+not create a missing database.
+
+### Rebuild (destructive)
+
+Run `rebuild` separately only when intentionally clearing derived aggregates and
+replaying the selected input:
+
+```text
+cargo run -p stats-cli -- rebuild --config examples/awstats.example.test.conf --log-file examples/access.log --data-dir target/stats-data
+```
 
 ## Other frontends
 

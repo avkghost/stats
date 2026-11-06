@@ -37,6 +37,51 @@ If a configuration points at production paths such as
 `/var/log/nginx/access.log` or `/var/lib/awstats`, run as the service account
 with those permissions, or override both paths explicitly for a local run.
 
+## Upgrade, backup, and rollback
+
+Before replacing the binary, changing storage settings, or restoring an older
+deployment, stop scheduled and in-progress updates:
+
+```text
+sudo systemctl stop stats-update.timer
+sudo systemctl stop stats-update.service
+```
+
+Create a backup before the change:
+
+```text
+sudo -u stats /opt/stats/bin/stats backup \
+  --data-dir /opt/stats/var/lib \
+  --output-dir /opt/stats/var/backups/pre-upgrade
+```
+
+For a rollback, restore the selected binary, configuration, and SQLite backup
+using the deployment's normal file-ownership and permission rules. Validate the
+restored configuration and data before making them active:
+
+```text
+sudo -u stats /opt/stats/bin/stats validate \
+  --config /opt/stats/etc/awstats.example.test.conf
+sudo -u stats /opt/stats/bin/stats health \
+  --config /opt/stats/etc/awstats.example.test.conf \
+  --data-dir /opt/stats/var/lib
+sudo -u stats /opt/stats/bin/stats summary \
+  --data-dir /opt/stats/var/lib --limit 10
+```
+
+Review the summary and confirm the expected report data before restarting the
+service. Then reload systemd, run one update, and re-enable the timer:
+
+```text
+sudo systemctl daemon-reload
+sudo systemctl start --wait stats-update.service
+sudo systemctl enable --now stats-update.timer
+```
+
+Keep the pre-upgrade backup until the restored or upgraded deployment has been
+verified. Do not use `rebuild` as a rollback mechanism: it clears derived
+aggregates and replays input rather than restoring the previous database state.
+
 ## Cron and logrotate
 
 A safe logrotate `postrotate` hook can run:
@@ -65,10 +110,21 @@ bash deploy/package-release.sh
 
 The package script derives the version from `crates/stats-cli/Cargo.toml` unless
 `STATS_VERSION` is supplied. A tag value such as `v0.1.2` is normalized to
-`0.1.2`. `STATS_PLATFORM` and `STATS_RELEASE_DIR` are also supported. The bundle
-contains the optimized binary, deployment templates, example configuration,
-README, and changelog, plus a checksum manifest whose paths are valid from the
-artifact directory.
+`0.1.2`. `STATS_PLATFORM` and `STATS_RELEASE_DIR` are also supported. The Linux
+archive contains exactly:
+
+- `stats` — the optimized CLI binary;
+- `awstats.example.test.conf` — the example configuration;
+- `deploy/install.sh`, `deploy/stats-update.service`,
+  `deploy/stats-update.timer`, and `deploy/stats-logrotate`;
+- `README.md` and `CHANGELOG.md`.
+
+The archive does not include source code, the full documentation tree, a
+database, generated reports, or native plugin libraries. The optional
+`stats-report-html`, `stats-report-json`, and `stats-report-csv` renderer
+libraries must be built and installed separately in a trusted directory such as
+`/opt/stats/lib/`. The separate `.tar.gz.sha256` sidecar is written beside the
+archive, and its path is valid when checked from the artifact directory.
 
 ## HTTP and CGI boundaries
 

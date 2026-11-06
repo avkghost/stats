@@ -34,11 +34,12 @@ and is not affiliated with or endorsed by AWStats, Laurent Destailleur, or Matom
 - Event-enrichment plugins and external HTML, JSON, and CSV report renderers.
 - Supervised native report workers with bounded 8 MiB IPC messages and controlled crash, timeout, and malformed-response handling.
 
-Native plugins are trusted deployment code; event-enrichment plugins may execute
-in-process and native report renderers execute in supervised workers. Plugins
-are not OS-sandboxed. Supervised report workers protect the frontend from a
-direct plugin crash, but independently spawned descendant processes are not
-automatically cleaned up. See [Plugin safety](docs/plugins.md#security-and-trust-model).
+Native plugins are trusted deployment code. Event-enrichment callbacks execute
+in-process in the analyzer, while native report renderers execute in supervised
+workers. Plugins are not OS-sandboxed. Supervised report workers protect the
+frontend from a direct report-plugin crash, but independently spawned
+descendant processes are not automatically cleaned up. See
+[Plugin safety](docs/plugins.md#security-and-trust-model).
 
 ## Quick start
 
@@ -50,8 +51,12 @@ cargo run -p stats-cli -- report --data-dir target/stats-data --output target/st
 cargo run -p stats-cli -- summary --data-dir target/stats-data --limit 10
 ```
 
-The fixture is anonymized and runs without GeoIP databases. Build and test the
-workspace with the commands in [Getting started](docs/getting-started.md).
+The fixture is anonymized and runs without GeoIP databases. By default, an
+update generates the static site at the `output/index.html` sibling of the
+configured data directory (for `DirData="stats"`, this is `output/index.html`);
+`report --output <path>` selects a custom output path. Build and test the
+workspace with the commands in
+[Getting started](docs/getting-started.md).
 
 ## AWStats compatibility
 

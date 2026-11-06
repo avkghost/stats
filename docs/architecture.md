@@ -33,9 +33,12 @@ are explicit operational commands rather than hidden background services.
 
 The default HTML path is a static multi-page report. External report renderers
 are separate dynamic libraries and are loaded only when configured and requested.
-Native report calls run through supervised workers with bounded IPC. The worker
-boundary protects the parent frontend from direct native crashes, but does not
-provide OS sandboxing or descendant-process cleanup.
+Event-enrichment callbacks are invoked directly by the analyzer through the
+loaded plugin and therefore run in the analyzer process. Native report-renderer
+calls use short-lived supervised workers with bounded IPC. The worker boundary
+protects the parent frontend from a direct report-plugin crash, but does not
+provide OS sandboxing or descendant-process cleanup; it does not protect
+in-process event callbacks.
 
 See [Plugins](plugins.md), [Operations](operations.md), and
 [AWStats compatibility](compatibility.md) for the operational and behavioral
