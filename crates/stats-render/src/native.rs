@@ -145,11 +145,32 @@ fn response_string(response: &Value, field: &str) -> anyhow::Result<String> {
 
 fn run_worker(path: &Path, request: Value) -> anyhow::Result<Value> {
     Ok(supervise_report_worker(
-        std::env::current_exe()?,
+        report_worker_path()?,
         path,
         &request,
         WORKER_TIMEOUT,
     )?)
+}
+
+/// The worker is a separate `stats-report-worker` binary beside the frontend. Frontends never
+/// re-enter their own argument parsing to act as a worker.
+fn report_worker_path() -> anyhow::Result<PathBuf> {
+    let current = std::env::current_exe()?;
+    let directory = current
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("cannot locate the directory of {}", current.display()))?;
+    let worker = directory.join(format!(
+        "stats-report-worker{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    if !worker.is_file() {
+        anyhow::bail!(
+            "native report worker not found at {}; install stats-report-worker next to {}",
+            worker.display(),
+            current.display()
+        );
+    }
+    Ok(worker)
 }
 
 #[cfg(test)]

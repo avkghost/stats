@@ -49,6 +49,62 @@ pub enum WorkerRequestError {
     Timeout(Duration),
     #[error("native report worker exited unsuccessfully: {0}")]
     Exit(std::process::ExitStatus),
+    #[error("native report worker request writer panicked")]
+    WriterPanicked,
+}
+
+/// Kills the worker's whole process group on Unix, then the worker itself, and reaps it.
+/// On other platforms only the direct worker is killed; descendants are not reached.
+fn terminate_worker(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // SAFETY: killpg only sends a signal. The leader is not reaped at this point unless
+        // `try_wait` already collected it, and failure (for example ESRCH) is ignored.
+        unsafe {
+            libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+enum WorkerFinish {
+    Exited(
+        std::process::ExitStatus,
+        Result<Vec<u8>, WorkerRequestError>,
+    ),
+    TimedOut,
+}
+
+/// Waits until the worker has exited and its response has been read, or the deadline passes.
+fn await_worker(
+    child: &mut std::process::Child,
+    output: &mpsc::Receiver<Result<Vec<u8>, WorkerRequestError>>,
+    deadline: Instant,
+) -> io::Result<WorkerFinish> {
+    let mut status = None;
+    let mut response = None;
+    loop {
+        if response.is_none() {
+            if let Ok(result) = output.try_recv() {
+                response = Some(result);
+            }
+        }
+        if status.is_none() {
+            status = child.try_wait()?;
+        }
+        if let (Some(_), Some(_)) = (&status, &response) {
+            break;
+        }
+        if Instant::now() >= deadline {
+            return Ok(WorkerFinish::TimedOut);
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    match (status, response) {
+        (Some(status), Some(response)) => Ok(WorkerFinish::Exited(status, response)),
+        _ => Ok(WorkerFinish::TimedOut),
+    }
 }
 
 pub fn supervise_report_worker(
@@ -61,34 +117,40 @@ pub fn supervise_report_worker(
     if request.len() > MAX_WORKER_MESSAGE_BYTES {
         return Err(WorkerRequestError::MessageTooLarge);
     }
-    let mut child = Command::new(executable.as_ref())
-        .arg(REPORT_WORKER_ARG)
+    let deadline = Instant::now() + timeout;
+    let mut command = Command::new(executable.as_ref());
+    command
         .arg(plugin.as_ref())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-    let mut stdin = child
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // The worker leads its own process group, so termination reaches descendants too.
+        command.process_group(0);
+    }
+    let mut child = command.spawn()?;
+    let stdin = child
         .stdin
         .take()
         .ok_or_else(|| io::Error::other("native report worker stdin is unavailable"))?;
-    let write_result = stdin
-        .write_all(&request)
-        .and_then(|()| stdin.write_all(b"\n"));
-    drop(stdin);
-
-    if let Err(error) = write_result {
-        if error.kind() != io::ErrorKind::BrokenPipe {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(WorkerRequestError::Io(error));
-        }
-    }
-
     let mut stdout = child
         .stdout
         .take()
         .ok_or_else(|| io::Error::other("native report worker stdout is unavailable"))?;
+
+    // The request is written on its own thread, so a worker that never reads stdin cannot hold
+    // the supervisor past its deadline. The handle is joined below on every path.
+    let writer = thread::spawn(move || {
+        let mut stdin = stdin;
+        let result = stdin
+            .write_all(&request)
+            .and_then(|()| stdin.write_all(b"\n"));
+        drop(stdin);
+        result
+    });
+
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let mut output = Vec::new();
@@ -108,39 +170,35 @@ pub fn supervise_report_worker(
         let _ = sender.send(result);
     });
 
-    let deadline = Instant::now() + timeout;
-    let mut status = None;
-    let mut output = None;
-    while Instant::now() < deadline {
-        if output.is_none() {
-            if let Ok(result) = receiver.try_recv() {
-                output = Some(result);
-            }
-        }
-        if status.is_none() {
-            status = child.try_wait()?;
-        }
-        if status.is_some() && output.is_some() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(5));
+    let finish = await_worker(&mut child, &receiver, deadline);
+    // A worker that exited successfully has already read its stdin to EOF, so the writer is
+    // finished. Any other outcome may leave a descendant holding stdin open, so the whole group
+    // is terminated before the writer is joined.
+    let settled = matches!(&finish, Ok(WorkerFinish::Exited(status, _)) if status.success());
+    if !settled {
+        terminate_worker(&mut child);
     }
-    let status = match status {
-        Some(status) => status,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(WorkerRequestError::Timeout(timeout));
+    // Every path reaches this join after the worker and its group are gone, so the pipe's read
+    // ends are closed and a blocked write has returned.
+    let written = writer.join();
+    let (status, response) = match finish? {
+        WorkerFinish::TimedOut => {
+            return Err(match written {
+                Err(_) => WorkerRequestError::WriterPanicked,
+                Ok(_) => WorkerRequestError::Timeout(timeout),
+            });
         }
+        WorkerFinish::Exited(status, response) => (status, response),
     };
-    let output = match output {
-        Some(output) => output,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(WorkerRequestError::Timeout(timeout));
+    match written {
+        Err(_) => return Err(WorkerRequestError::WriterPanicked),
+        Ok(Err(error)) if error.kind() != io::ErrorKind::BrokenPipe => {
+            return Err(WorkerRequestError::Io(error));
         }
-    }?;
+        // A broken pipe means the worker exited before reading; its exit status explains why.
+        Ok(_) => {}
+    }
+    let output = response?;
     if !status.success() {
         return Err(WorkerRequestError::Exit(status));
     }
@@ -365,7 +423,7 @@ impl Drop for LoadedPlugin {
 
 /// Runs one isolated native report-plugin request over stdin/stdout.
 ///
-/// Frontends enter this function only when launched with [`REPORT_WORKER_ARG`].
+/// Only the `stats-report-worker` binary calls this function.
 /// A parent process owns the supervision boundary; a plugin crash or abort ends
 /// this worker without taking down the frontend.
 pub fn run_report_worker(path: impl AsRef<Path>) -> Result<(), PluginWorkerError> {

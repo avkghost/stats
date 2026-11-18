@@ -1,6 +1,6 @@
 [package]
 name = "stats-plugin-example"
-version = "0.1.6"
+version = "0.1.7"
 description = "Example no-op native plugin for Stats extensions"
 edition.workspace = true
 license.workspace = true
@@ -11,4 +11,4 @@ documentation.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-stats-plugin-api = { version = "0.1.6", path = "../../crates/stats-plugin-api" }
+stats-plugin-api = { version = "0.1.7", path = "../../crates/stats-plugin-api" }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- Native report plugins run in a separate `stats-report-worker` binary, which must be installed next to `stats-cgi`, `stats-http`, and `stats-cli`. Frontends no longer re-enter their own argument parsing as a worker, so a CGI request cannot reach worker mode through arguments.
+- The plugin supervisor writes the request off its deadline path. A plugin worker that never reads stdin now times out after the configured limit instead of blocking the frontend.
+- On Unix, native plugin workers run in their own process group, and a timeout or failed response kills the whole group. Descendants that inherit the worker's stdin can no longer hold the supervisor past its timeout. Processes that leave the group are not covered, and on other platforms only the direct worker is killed.
+
 ## 0.1.6
 
 - Report metadata now records the processed active log: `input_path`, `input_size`, and `input_lines` are populated for unpartitioned stores again.

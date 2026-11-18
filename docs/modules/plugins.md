@@ -22,8 +22,12 @@ analyzer process. They can affect event fields and are trusted deployment code.
 
 Report renderers receive a bounded JSON report request in a short-lived worker
 and return a media type, extension, and body through the ABI release callback.
-The supervisor limits messages to 8 MiB and reaps the direct worker. It does
-not provide OS sandboxing or automatic process-group cleanup.
+The supervisor limits messages to 8 MiB. On Unix the worker leads its own process
+group; on timeout, a malformed or failed response, or an unsuccessful exit, the
+whole group receives SIGKILL before the request writer is joined. Processes that
+leave the group (for example with `setsid`) are not reached. On other platforms
+only the direct worker is killed, so descendants may outlive the request. The
+supervisor provides no OS sandboxing.
 
 ## Configuration and deployment
 
@@ -44,7 +48,7 @@ family is recorded in the [parity manifest](../awstats-plugin-manifest.md).
 sequenceDiagram
     participant Renderer as NativeReportRenderer (stats-render native.rs)
     participant Sup as supervise_report_worker (stats-plugin-host)
-    participant Child as worker: current_exe __stats_plugin_render_worker
+    participant Child as worker: stats-report-worker <plugin-path>
     participant Plugin as native plugin library
 
     Renderer->>Sup: request JSON, timeout 10 s

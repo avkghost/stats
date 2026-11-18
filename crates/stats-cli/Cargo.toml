@@ -1,6 +1,6 @@
 [package]
 name = "stats-cli"
-version = "0.1.6"
+version = "0.1.7"
 description = "AWStats-style Rust web log analyzer CLI"
 edition.workspace = true
 license.workspace = true
@@ -21,11 +21,11 @@ serde.workspace = true
 tokio.workspace = true
 notify.workspace = true
 libc.workspace = true
-stats-core = { version = "0.1.6", path = "../stats-core" }
-stats-plugin-api = { version = "0.1.6", path = "../stats-plugin-api" }
-stats-plugin-host = { version = "0.1.6", path = "../stats-plugin-host" }
-stats-render = { version = "0.1.6", path = "../stats-render" }
-stats-tui = { version = "0.1.6", path = "../stats-tui" }
+stats-core = { version = "0.1.7", path = "../stats-core" }
+stats-plugin-api = { version = "0.1.7", path = "../stats-plugin-api" }
+stats-plugin-host = { version = "0.1.7", path = "../stats-plugin-host" }
+stats-render = { version = "0.1.7", path = "../stats-render" }
+stats-tui = { version = "0.1.7", path = "../stats-tui" }
 
 [dev-dependencies]
 rusqlite.workspace = true

@@ -5,7 +5,7 @@ use std::{
 };
 
 fn main() {
-    let mode = std::env::args().nth(2).unwrap_or_else(|| "valid".into());
+    let mode = std::env::args().nth(1).unwrap_or_else(|| "valid".into());
     let mode = mode.strip_prefix("fixture-mode://").unwrap_or(&mode);
     match mode {
         "valid" => print_response(
@@ -30,6 +30,7 @@ fn main() {
         "exit" => std::process::exit(17),
         "abort" => std::process::abort(),
         "segv" => segv(),
+        "fork-hold" => fork_hold_stdin(),
         other => panic!("unknown worker fixture mode {other}"),
     }
 }
@@ -61,4 +62,24 @@ fn segv() {
 #[cfg(not(unix))]
 fn segv() {
     std::process::abort();
+}
+
+#[cfg(unix)]
+fn fork_hold_stdin() {
+    // The child inherits stdin and stays alive, so the pipe stays open after this process exits.
+    let _child = std::process::Command::new("sleep")
+        .arg("30")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    // Tell the test that the descendant exists, so the timeout is reached while it holds stdin.
+    if let Ok(marker) = std::env::var("STATS_FIXTURE_MARKER") {
+        let _ = std::fs::write(marker, b"ready");
+    }
+    thread::sleep(Duration::from_secs(30));
+}
+
+#[cfg(not(unix))]
+fn fork_hold_stdin() {
+    std::process::exit(3);
 }

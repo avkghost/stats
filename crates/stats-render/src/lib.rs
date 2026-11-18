@@ -5,8 +5,6 @@ use anyhow::anyhow;
 use stats_core::{PluginRegistry, RendererRegistryError, Report};
 use std::path::Path;
 
-pub const REPORT_WORKER_ARG: &str = stats_plugin_host::REPORT_WORKER_ARG;
-
 pub fn run_report_worker(path: impl AsRef<Path>) -> anyhow::Result<()> {
     stats_plugin_host::run_report_worker(path)
         .map_err(|error| anyhow!("native report worker: {error}"))

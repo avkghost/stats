@@ -1,6 +1,6 @@
 [package]
 name = "stats-plugin-host"
-version = "0.1.6"
+version = "0.1.7"
 description = "Native plugin loading and supervision for the stats web log analyzer"
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ documentation.workspace = true
 [dependencies]
 libc.workspace = true
 libloading.workspace = true
-stats-plugin-api = { version = "0.1.6", path = "../stats-plugin-api" }
+stats-plugin-api = { version = "0.1.7", path = "../stats-plugin-api" }
 serde_json.workspace = true
 thiserror.workspace = true
 

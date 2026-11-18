@@ -27,7 +27,7 @@ and must not be inferred from the presence of a renderer plugin. See
 
 ## Failure boundary
 
-Native report renderers run through supervised worker processes. A direct worker
+Native report renderers run through supervised worker processes. The worker is the `stats-report-worker` binary, which must sit next to the frontend binary. A direct worker
 crash, timeout, malformed response, or non-zero exit fails the request without
 crashing the parent frontend. This is crash containment, not an OS sandbox;
 event-enrichment callbacks and independently spawned descendants remain trusted

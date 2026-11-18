@@ -1,6 +1,9 @@
 use serde_json::json;
 use stats_plugin_host::{supervise_report_worker, WorkerRequestError, MAX_WORKER_MESSAGE_BYTES};
-use std::{path::PathBuf, time::Duration};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_stats_plugin_worker_fixture"))
@@ -92,4 +95,66 @@ fn timeout_kills_partial_and_silent_workers() {
         assert!(matches!(result, Err(WorkerRequestError::Timeout(_))));
         assert!(run("valid", Duration::from_secs(2)).is_ok());
     }
+}
+
+#[test]
+fn request_larger_than_pipe_buffer_still_times_out_for_non_reading_worker() {
+    let request = json!({
+        "operation": "metadata",
+        "padding": "x".repeat(4 * 1024 * 1024),
+    });
+    let started = Instant::now();
+    let result = supervise_report_worker(
+        fixture(),
+        "fixture-mode://hang",
+        &request,
+        Duration::from_millis(200),
+    );
+    assert!(matches!(result, Err(WorkerRequestError::Timeout(_))));
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "supervisor blocked on stdin write for {:?}",
+        started.elapsed()
+    );
+    assert!(run("valid", Duration::from_secs(2)).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn descendant_holding_stdin_cannot_block_supervisor_past_timeout() {
+    let marker = std::env::temp_dir().join(format!("stats-fork-hold-{}", std::process::id()));
+    let _ = std::fs::remove_file(&marker);
+    std::env::set_var("STATS_FIXTURE_MARKER", &marker);
+    let request = json!({
+        "operation": "metadata",
+        "padding": "x".repeat(4 * 1024 * 1024),
+    });
+    let started = Instant::now();
+    let supervisor = std::thread::spawn(move || {
+        supervise_report_worker(
+            fixture(),
+            "fixture-mode://fork-hold",
+            &request,
+            Duration::from_secs(3),
+        )
+    });
+    // Wait until the worker's descendant exists, so the timeout fires while stdin is held open.
+    let ready_deadline = Instant::now() + Duration::from_secs(2);
+    while !marker.exists() && Instant::now() < ready_deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(marker.exists(), "fixture did not start its descendant");
+    let result = supervisor.join().expect("supervisor thread");
+    std::env::remove_var("STATS_FIXTURE_MARKER");
+    let _ = std::fs::remove_file(&marker);
+    assert!(
+        matches!(result, Err(WorkerRequestError::Timeout(_))),
+        "{result:?}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "descendant kept stdin open and blocked the supervisor for {:?}",
+        started.elapsed()
+    );
+    assert!(run("valid", Duration::from_secs(2)).is_ok());
 }
