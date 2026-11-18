@@ -31,6 +31,74 @@ impl Batch<'_, '_> {
     }
 }
 
+pub(super) fn record_http_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    is_page: bool,
+    limit: usize,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    tx.execute(
+        "INSERT INTO totals(key,hits,bytes) VALUES('all',1,?1) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes",
+        params![event.bytes as i64],
+    )?;
+    let class = if is_page { "pages" } else { "files" };
+    tx.execute(
+        "INSERT INTO totals(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes",
+        params![class, event.bytes as i64],
+    )?;
+    tx.execute(
+        "INSERT INTO statuses(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![event.status],
+    )?;
+    tx.execute(
+        "INSERT INTO status_classes(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![format!("{}xx", event.status / 100)],
+    )?;
+    if event.status >= 400 {
+        tx.execute(
+            "INSERT INTO errors(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![event.status],
+        )?;
+    }
+    if event.status == 404 {
+        if let Some(url) = event.url.as_deref().filter(|url| !url.is_empty()) {
+            let url = super::capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "not_found_urls",
+                "url",
+                url,
+                limit,
+            )?;
+            let referrer = event
+                .referer
+                .as_deref()
+                .filter(|value| !value.is_empty())
+                .unwrap_or("-");
+            tx.execute(
+                "INSERT INTO not_found_urls(url,hits) VALUES(?1,1) ON CONFLICT(url) DO UPDATE SET hits=hits+1",
+                params![url],
+            )?;
+            tx.execute(
+                "INSERT INTO not_found_referrers(url,referrer,hits) VALUES(?1,?2,1) ON CONFLICT(url,referrer) DO UPDATE SET hits=hits+1",
+                params![url, referrer],
+            )?;
+        }
+    }
+    tx.execute(
+        "INSERT INTO methods(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![event.method.as_deref().unwrap_or("UNKNOWN")],
+    )?;
+    if let Some(anomaly) = &event.method_anomaly {
+        tx.execute(
+            "INSERT INTO method_anomalies(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![anomaly],
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"

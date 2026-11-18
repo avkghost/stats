@@ -14,7 +14,7 @@ mod metadata;
 mod report;
 mod schema;
 mod session;
-use aggregate::{bump, decrement};
+use aggregate::{bump, decrement, record_http_aggregates};
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
 use classify::decode_query;
@@ -289,49 +289,7 @@ impl StatsStore {
         let date = event.timestamp.format("%Y-%m-%d").to_string();
         let month = event.timestamp.format("%Y-%m").to_string();
         let weekday = event.timestamp.format("%A").to_string();
-        tx.execute("INSERT INTO totals(key,hits,bytes) VALUES('all',1,?1) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![event.bytes as i64])?;
-        let class = if is_page { "pages" } else { "files" };
-        tx.execute("INSERT INTO totals(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![class, event.bytes as i64])?;
-        tx.execute("INSERT INTO statuses(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![event.status])?;
-        tx.execute("INSERT INTO status_classes(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![format!("{}xx", event.status / 100)])?;
-        if event.status >= 400 {
-            tx.execute("INSERT INTO errors(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![event.status])?;
-        }
-        if event.status == 404 {
-            if let Some(url) = event.url.as_deref().filter(|url| !url.is_empty()) {
-                let url = capped_key(
-                    tx,
-                    &batch.cardinality_counts,
-                    "not_found_urls",
-                    "url",
-                    url,
-                    limit,
-                )?;
-                let referrer = event
-                    .referer
-                    .as_deref()
-                    .filter(|value| !value.is_empty())
-                    .unwrap_or("-");
-                tx.execute(
-                    "INSERT INTO not_found_urls(url,hits) VALUES(?1,1) ON CONFLICT(url) DO UPDATE SET hits=hits+1",
-                    params![url],
-                )?;
-                tx.execute(
-                    "INSERT INTO not_found_referrers(url,referrer,hits) VALUES(?1,?2,1) ON CONFLICT(url,referrer) DO UPDATE SET hits=hits+1",
-                    params![url, referrer],
-                )?;
-            }
-        }
-        tx.execute(
-            "INSERT INTO methods(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![event.method.as_deref().unwrap_or("UNKNOWN")],
-        )?;
-        if let Some(anomaly) = &event.method_anomaly {
-            tx.execute(
-                "INSERT INTO method_anomalies(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-                params![anomaly],
-            )?;
-        }
+        record_http_aggregates(batch, event, is_page, limit)?;
         if let Some(user) = event
             .user
             .as_deref()
@@ -1500,9 +1458,14 @@ mod capped_call_site_tests {
     #[test]
     fn every_capped_call_site_targets_a_listed_table_and_every_listed_table_has_a_call() {
         let source = include_str!("store.rs");
+        let aggregate_source = include_str!("store/aggregate.rs");
         let marker = "\n#[cfg(test)]\nmod ";
-        let production = &source[..source.find(marker).expect("first test module marker")];
-        let called = literal_capped_tables(production);
+        let production = format!(
+            "{}\n{}",
+            &source[..source.find(marker).expect("first test module marker")],
+            aggregate_source
+        );
+        let called = literal_capped_tables(&production);
         let listed: BTreeSet<String> = CARDINALITY_TABLES
             .iter()
             .map(|table| (*table).to_owned())
