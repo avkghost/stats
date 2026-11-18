@@ -26,5 +26,6 @@ stats-render = { version = "0.1.1", path = "../stats-render" }
 stats-tui = { version = "0.1.1", path = "../stats-tui" }
 
 [dev-dependencies]
+rusqlite.workspace = true
 stats-report-json = { path = "../../plugins/report-json", features = ["test-fixture"] }
 

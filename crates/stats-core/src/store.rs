@@ -1,5 +1,7 @@
 use crate::AccessEvent;
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
+use rusqlite::{
+    params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
+};
 use std::{path::Path, sync::Mutex, time::Duration};
 use thiserror::Error;
 
@@ -26,6 +28,23 @@ pub struct InputCheckpoint {
     pub content_hash: String,
     pub size: u64,
     pub lines: u64,
+}
+
+/// One stored state of a stream's complete-line prefix (plan decision I).
+///
+/// For active logs, `size` is the position just after the last newline inside
+/// the processed bound, so an unterminated fragment is never part of a state.
+/// For archives, `size` is the full decoded length. `sha256` covers exactly
+/// the first `size` decoded bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrefixState {
+    pub source_key: String,
+    pub config_hash: String,
+    pub identity: String,
+    pub path: String,
+    pub size: u64,
+    pub lines: u64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -82,6 +101,7 @@ impl StatsStore {
         }
         conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
+        ensure_checkpoint_columns(&conn)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS method_anomalies(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_urls(url TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_referrers(url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer));",
         )?;
@@ -130,8 +150,14 @@ impl StatsStore {
         })
     }
     pub fn record(&self, event: &AccessEvent, is_page: bool) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
-        let tx = conn.unchecked_transaction()?;
+        self.with_batch(|batch| batch.record(event, is_page))
+    }
+
+    fn record_in(
+        tx: &Transaction<'_>,
+        event: &AccessEvent,
+        is_page: bool,
+    ) -> Result<(), StoreError> {
         tx.execute("INSERT INTO totals(key,hits,bytes) VALUES('all',1,?1) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![event.bytes as i64])?;
         let class = if is_page { "pages" } else { "files" };
         tx.execute("INSERT INTO totals(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![class, event.bytes as i64])?;
@@ -280,15 +306,15 @@ impl StatsStore {
                 .as_ref()
                 .is_none_or(|(last_seen, _)| timestamp >= *last_seen);
             if new_session || previous_url.is_none() {
-                bump(&tx, "entry_pages", current_url)?;
+                bump(tx, "entry_pages", current_url)?;
             }
             if new_session || previous_url.is_none() {
-                bump(&tx, "exit_pages", current_url)?;
+                bump(tx, "exit_pages", current_url)?;
             } else if should_update_page && previous_url != Some(current_url) {
                 if let Some(previous_url) = previous_url {
-                    decrement(&tx, "exit_pages", previous_url)?;
+                    decrement(tx, "exit_pages", previous_url)?;
                 }
-                bump(&tx, "exit_pages", current_url)?;
+                bump(tx, "exit_pages", current_url)?;
             }
         }
         match previous {
@@ -351,7 +377,6 @@ impl StatsStore {
             "INSERT INTO hostnames(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
             params![visitor],
         )?;
-        tx.commit()?;
         Ok(())
     }
 
@@ -414,6 +439,10 @@ impl StatsStore {
     }
     pub fn diagnostic(&self, reason: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::diagnostic_on(&conn, reason)
+    }
+
+    fn diagnostic_on(conn: &Connection, reason: &str) -> Result<(), StoreError> {
         conn.execute("INSERT INTO diagnostics(reason,count) VALUES(?1,1) ON CONFLICT(reason) DO UPDATE SET count=count+1", params![reason])?;
         Ok(())
     }
@@ -425,16 +454,25 @@ impl StatsStore {
     }
     pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::set_meta_on(&conn, key, value)
+    }
+
+    fn set_meta_on(conn: &Connection, key: &str, value: &str) -> Result<(), StoreError> {
         conn.execute("INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key, value])?;
         Ok(())
     }
     pub fn reset_checkpoint(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::reset_checkpoint_on(&conn)
+    }
+
+    fn reset_checkpoint_on(conn: &Connection) -> Result<(), StoreError> {
         conn.execute(
             "DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%'",
             [],
         )?;
         conn.execute("DELETE FROM input_checkpoints", [])?;
+        conn.execute("DELETE FROM input_prefix_snapshots", [])?;
         Ok(())
     }
     pub fn input_checkpoint_by_identity(
@@ -510,6 +548,13 @@ impl StatsStore {
     }
     pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::set_input_checkpoint_on(&conn, checkpoint)
+    }
+
+    fn set_input_checkpoint_on(
+        conn: &Connection,
+        checkpoint: &InputCheckpoint,
+    ) -> Result<(), StoreError> {
         conn.execute(
             "INSERT INTO input_checkpoints(identity,path,config_hash,content_hash,size,lines) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(identity) DO UPDATE SET path=excluded.path,config_hash=excluded.config_hash,content_hash=excluded.content_hash,size=excluded.size,lines=excluded.lines",
             params![checkpoint.identity, checkpoint.path, checkpoint.config_hash, checkpoint.content_hash, checkpoint.size as i64, checkpoint.lines as i64],
@@ -518,6 +563,10 @@ impl StatsStore {
     }
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::clear_aggregates_on(&conn)
+    }
+
+    fn clear_aggregates_on(conn: &Connection) -> Result<(), StoreError> {
         conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM daily;")?;
         conn.execute_batch("DELETE FROM hostnames; DELETE FROM method_anomalies; DELETE FROM not_found_urls; DELETE FROM not_found_referrers;")?;
         conn.execute_batch("DELETE FROM referer_spam;")?;
@@ -698,6 +747,324 @@ impl StatsStore {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
+}
+
+/// Writes and reads bound to one open transaction. Created only by
+/// [`StatsStore::with_batch`]; nothing written through it is visible until the
+/// batch commits.
+pub struct Batch<'t, 'c> {
+    tx: &'t Transaction<'c>,
+}
+
+impl Batch<'_, '_> {
+    pub fn record(&self, event: &AccessEvent, is_page: bool) -> Result<(), StoreError> {
+        StatsStore::record_in(self.tx, event, is_page)
+    }
+
+    pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
+        StatsStore::set_input_checkpoint_on(self.tx, checkpoint)
+    }
+
+    pub fn set_prefix_state(&self, state: &PrefixState) -> Result<(), StoreError> {
+        StatsStore::set_prefix_state_on(self.tx, state)
+    }
+
+    pub fn snapshot_prefix(&self, state: &PrefixState, captured_at: i64) -> Result<(), StoreError> {
+        StatsStore::snapshot_prefix_on(self.tx, state, captured_at)
+    }
+
+    pub fn delete_checkpoint(&self, identity: &str) -> Result<(), StoreError> {
+        StatsStore::delete_checkpoint_on(self.tx, identity)
+    }
+
+    pub fn prefix_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        StatsStore::prefix_states_on(self.tx, source_key, config_hash)
+    }
+
+    pub fn snapshot_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        StatsStore::snapshot_states_on(self.tx, source_key, config_hash)
+    }
+
+    pub fn legacy_checkpoint_count(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<u64, StoreError> {
+        StatsStore::legacy_checkpoint_count_on(self.tx, source_key, config_hash)
+    }
+
+    pub fn clear_aggregates(&self) -> Result<(), StoreError> {
+        StatsStore::clear_aggregates_on(self.tx)
+    }
+
+    pub fn reset_checkpoint(&self) -> Result<(), StoreError> {
+        StatsStore::reset_checkpoint_on(self.tx)
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
+        StatsStore::set_meta_on(self.tx, key, value)
+    }
+
+    pub fn diagnostic(&self, reason: &str) -> Result<(), StoreError> {
+        StatsStore::diagnostic_on(self.tx, reason)
+    }
+
+    pub fn meta(&self, key: &str) -> Result<Option<String>, StoreError> {
+        StatsStore::meta_on(self.tx, key)
+    }
+
+    pub fn input_checkpoint_by_identity(
+        &self,
+        identity: &str,
+        config_hash: &str,
+    ) -> Result<Option<InputCheckpoint>, StoreError> {
+        StatsStore::input_checkpoint_by_identity_on(self.tx, identity, config_hash)
+    }
+
+    /// Renames the configuration hash on every checkpoint and snapshot row, keeping them.
+    pub fn migrate_config_hash(&self, from: &str, to: &str) -> Result<(), StoreError> {
+        self.tx.execute(
+            "UPDATE input_checkpoints SET config_hash=?2 WHERE config_hash=?1",
+            params![from, to],
+        )?;
+        self.tx.execute(
+            "UPDATE input_prefix_snapshots SET config_hash=?2 WHERE config_hash=?1",
+            params![from, to],
+        )?;
+        Ok(())
+    }
+}
+
+impl StatsStore {
+    /// Runs `f` inside one `BEGIN IMMEDIATE` transaction on this store.
+    ///
+    /// Writes made through the [`Batch`] commit together when `f` returns `Ok`
+    /// and roll back together when it returns `Err`. `f` must not call other
+    /// methods on this store: the connection mutex is held for the whole batch
+    /// and is not re-entrant.
+    pub fn with_batch<T, E: From<StoreError>>(
+        &self,
+        f: impl FnOnce(&Batch<'_, '_>) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|_| E::from(StoreError::Poisoned))?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| E::from(StoreError::from(error)))?;
+        let value = f(&Batch { tx: &tx })?;
+        tx.commit()
+            .map_err(|error| E::from(StoreError::from(error)))?;
+        Ok(value)
+    }
+
+    pub fn set_prefix_state(&self, state: &PrefixState) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::set_prefix_state_on(&conn, state)
+    }
+
+    pub fn prefix_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::prefix_states_on(&conn, source_key, config_hash)
+    }
+
+    pub fn snapshot_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::snapshot_states_on(&conn, source_key, config_hash)
+    }
+
+    pub fn legacy_checkpoint_count(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<u64, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::legacy_checkpoint_count_on(&conn, source_key, config_hash)
+    }
+
+    pub fn snapshot_prefix(&self, state: &PrefixState, captured_at: i64) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::snapshot_prefix_on(&conn, state, captured_at)
+    }
+
+    pub fn delete_checkpoint(&self, identity: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::delete_checkpoint_on(&conn, identity)
+    }
+
+    fn set_prefix_state_on(conn: &Connection, state: &PrefixState) -> Result<(), StoreError> {
+        // Inserted rows reuse the size and line count for the legacy columns, which
+        // are NOT NULL. Existing rows keep their legacy content_hash, size, and lines.
+        conn.execute(
+            "INSERT INTO input_checkpoints(identity,path,config_hash,content_hash,size,lines,source_key,prefix_size,prefix_lines,prefix_sha256) VALUES(?1,?2,?3,'',?4,?5,?6,?4,?5,?7) ON CONFLICT(identity) DO UPDATE SET path=excluded.path,config_hash=excluded.config_hash,source_key=excluded.source_key,prefix_size=excluded.prefix_size,prefix_lines=excluded.prefix_lines,prefix_sha256=excluded.prefix_sha256",
+            params![
+                state.identity,
+                state.path,
+                state.config_hash,
+                state.size as i64,
+                state.lines as i64,
+                state.source_key,
+                state.sha256
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn prefix_states_on(
+        conn: &Connection,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let mut statement = conn.prepare(
+            "SELECT identity,path,config_hash,source_key,prefix_size,prefix_lines,prefix_sha256 FROM input_checkpoints WHERE source_key=?1 AND config_hash=?2 AND prefix_sha256 IS NOT NULL ORDER BY identity",
+        )?;
+        let rows = statement.query_map(params![source_key, config_hash], prefix_state_row)?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn snapshot_states_on(
+        conn: &Connection,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let mut statement = conn.prepare(
+            "SELECT identity,path,config_hash,source_key,prefix_size,prefix_lines,prefix_sha256 FROM input_prefix_snapshots WHERE source_key=?1 AND config_hash=?2 ORDER BY captured_at, identity",
+        )?;
+        let rows = statement.query_map(params![source_key, config_hash], prefix_state_row)?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Legacy rows have no stable prefix fields. Rows written before `source_key`
+    /// existed carry an empty `source_key`, so they are counted for every source.
+    fn legacy_checkpoint_count_on(
+        conn: &Connection,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<u64, StoreError> {
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM input_checkpoints WHERE (source_key=?1 OR source_key='') AND config_hash=?2 AND prefix_sha256 IS NULL",
+            params![source_key, config_hash],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
+    fn snapshot_prefix_on(
+        conn: &Connection,
+        state: &PrefixState,
+        captured_at: i64,
+    ) -> Result<(), StoreError> {
+        conn.execute(
+            "INSERT OR IGNORE INTO input_prefix_snapshots(source_key,config_hash,prefix_size,prefix_lines,prefix_sha256,identity,path,captured_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                state.source_key,
+                state.config_hash,
+                state.size as i64,
+                state.lines as i64,
+                state.sha256,
+                state.identity,
+                state.path,
+                captured_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn meta_on(conn: &Connection, key: &str) -> Result<Option<String>, StoreError> {
+        Ok(conn
+            .query_row("SELECT value FROM meta WHERE key=?1", [key], |row| {
+                row.get(0)
+            })
+            .optional()?)
+    }
+
+    fn input_checkpoint_by_identity_on(
+        conn: &Connection,
+        identity: &str,
+        config_hash: &str,
+    ) -> Result<Option<InputCheckpoint>, StoreError> {
+        Ok(conn
+            .query_row(
+                "SELECT identity,path,config_hash,content_hash,size,lines FROM input_checkpoints WHERE identity=?1 AND config_hash=?2",
+                params![identity, config_hash],
+                |row| {
+                    Ok(InputCheckpoint {
+                        identity: row.get(0)?,
+                        path: row.get(1)?,
+                        config_hash: row.get(2)?,
+                        content_hash: row.get(3)?,
+                        size: row.get::<_, i64>(4)? as u64,
+                        lines: row.get::<_, i64>(5)? as u64,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    fn delete_checkpoint_on(conn: &Connection, identity: &str) -> Result<(), StoreError> {
+        conn.execute(
+            "DELETE FROM input_checkpoints WHERE identity=?1",
+            params![identity],
+        )?;
+        Ok(())
+    }
+}
+
+/// Adds the prefix columns and snapshot table to a pre-existing database.
+///
+/// Additive only: the schema version is unchanged, so nothing is cleared and
+/// existing aggregates and checkpoints are kept (plan decision and finding F-6).
+fn ensure_checkpoint_columns(conn: &Connection) -> Result<(), StoreError> {
+    let existing = conn
+        .prepare("PRAGMA table_info(input_checkpoints)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    for (name, declaration) in [
+        ("source_key", "TEXT NOT NULL DEFAULT ''"),
+        ("prefix_size", "INTEGER"),
+        ("prefix_lines", "INTEGER"),
+        ("prefix_sha256", "TEXT"),
+    ] {
+        if !existing.iter().any(|column| column.as_str() == name) {
+            conn.execute(
+                &format!("ALTER TABLE input_checkpoints ADD COLUMN {name} {declaration}"),
+                [],
+            )?;
+        }
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS input_checkpoints_source ON input_checkpoints(source_key, config_hash); CREATE TABLE IF NOT EXISTS input_prefix_snapshots(source_key TEXT NOT NULL, config_hash TEXT NOT NULL, prefix_size INTEGER NOT NULL, prefix_lines INTEGER NOT NULL, prefix_sha256 TEXT NOT NULL, identity TEXT NOT NULL, path TEXT NOT NULL, captured_at INTEGER NOT NULL, PRIMARY KEY(source_key, config_hash, prefix_size, prefix_sha256));",
+    )?;
+    Ok(())
+}
+
+fn prefix_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrefixState> {
+    Ok(PrefixState {
+        identity: row.get(0)?,
+        path: row.get(1)?,
+        config_hash: row.get(2)?,
+        source_key: row.get(3)?,
+        size: row.get::<_, i64>(4)? as u64,
+        lines: row.get::<_, i64>(5)? as u64,
+        sha256: row.get(6)?,
+    })
 }
 
 fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {

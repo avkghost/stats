@@ -27,7 +27,7 @@ Production files changed: `crates/stats-core/src/store.rs`, `crates/stats-cli/sr
 | G | copy-without-truncate | Documented limitation; out of scope. |
 | H | Failure policy | Non-zero exit and no writes. |
 | I | Partial trailing line (new, from F-7) | The updater consumes only newline-terminated lines of the active file. The checkpoint `size` and `lines` cover only those complete lines. Archives are complete files, so their final unterminated line is consumed at end of file. See "Complete-line rule". |
-| J | Preflight input and TOCTOU (new, from review) | Preflight streams each file through a hasher; it does not keep decoded content in memory. Apply re-streams and verifies the same digests and length before the commit. Any mismatch aborts the transaction. See "Preflight input strategy". |
+| J | Preflight input and TOCTOU (new, from review) | Preflight streams each file through a hasher; it does not keep decoded content in memory. For the active file, preflight and apply use the same byte limit `S` (the size at preflight start). Apply verifies the digest of `[0, S)` only; bytes after `S` are ignored and handled by the next run. For archives, apply verifies the whole file. Any mismatch inside the verified range aborts and rolls back the transaction. See "Preflight input strategy". |
 | K | Replacement policy | Additive, confirmed. A changed prefix adds the new records to the existing aggregates. This is not a replay and does not delete earlier statistics. `docs/operations.md` must say this (Phase 3). |
 
 ## Lock wiring (decision F)
@@ -40,7 +40,9 @@ The lock is taken once, in the dispatcher, before any store is opened. Every com
 | `backfill` | acquire | `backfill_unlocked()` (refuses partitioned stores, B) |
 | `rebuild` | acquire | `rebuild_unlocked()` → `update_unlocked()` (today `rebuild` calls the public `update`, `main.rs:1118-1138`; it must call the unlocked form) |
 | `migrate` | acquire | `migrate_unlocked()` → `backfill_partitioned_unlocked()` (replaces the call at `main.rs:1899`) |
-| `watch` | acquire for the process lifetime | the update loop calls `update_unlocked()` per change (`main.rs:369-421`) |
+| `live` | **acquire per refresh** (correction: it runs `update` every interval, so it is a writer) | lock around each `update_unlocked()` call; `summary` is read-only and runs unlocked |
+| `tui` | **acquire per refresh** (correction: the initial and each refresh call `update_inner`) | lock around each `update_inner` call |
+| `watch` | **acquire per iteration, not for the process lifetime** | loop: wait for change, acquire lock, `update_unlocked()`, release. Manual `update`, `backfill`, and `retention` can run between iterations (`main.rs:369-421`) |
 | `retention` with `--remove-source` | acquire | removes partitions; takes the lock because it deletes data |
 | `backup`, `optimize`, `storage`, `summary`, `report`, `tui`, `live`, `validate`, `health` | none | read-only or self-contained; to verify during implementation that none of them calls `update` or `backfill` |
 
@@ -49,9 +51,12 @@ Verification: a unit test asserts that `update`, `backfill`, `rebuild`, and `mig
 ## Complete-line rule (decision I, verified as F-7)
 
 - Lines are split on `\n` only. For the active file, a trailing fragment without `\n` is not consumed and is not counted in `lines`.
-- Checkpoint `size` = bytes through the last `\n` at processing time. `lines` = number of complete lines in that range.
-- Archives: the final unterminated line is consumed at end of file, because archives are complete.
-- Consequence: a fragment is not counted until its newline arrives, and then it is counted once.
+- Define, for a byte bound `B` (the active file's size `S` for active files; the decoded length for archives):
+  - `complete_prefix_size` = position just after the last `\n` within `[0, B)`; 0 if there is none;
+  - `prefix_lines` = number of lines through that newline;
+  - `prefix_sha256` = SHA-256 of `decoded[0..complete_prefix_size]`.
+- The checkpoint stores `complete_prefix_size`, `prefix_lines`, and `prefix_sha256`. Archives: the final unterminated line is consumed at EOF, so their `complete_prefix_size` is the full decoded length.
+- Consequence: a fragment is neither checkpointed nor imported. When its newline arrives, the next run imports it exactly once.
 - Test: T11 (in phase 05). The verified baseline is 109 hits against the clean import's 110 with the current code.
 
 ## Preflight input strategy (decision J)
@@ -59,7 +64,7 @@ Verification: a unit test asserts that `update`, `backfill`, `rebuild`, and `mig
 Problems: a multi-day archive can be large, and the active file is appended while it is read.
 
 Strategy:
-1. **Bounded snapshot of the active file.** Preflight records the active file's size at the start (`S`) and reads only the first `S` bytes. Bytes appended later are ignored and handled by the next run. This also applies the complete-line rule (decision I) at `S`.
+1. **Bounded snapshot of the active file.** Preflight records the active file's size at the start (`S`) and reads only the first `S` bytes. Apply uses the same `S`. Bytes appended after `S` are ignored and handled by the next run, so a normal write between preflight and apply is not an error. The complete-line rule (decision I) is applied within `[0, S)`.
 2. **Streaming preflight.** Decode each file (`GzDecoder` / `BzDecoder` / `XzDecoder`, or plain read) through a `Read` adaptor that feeds `Sha256` and records:
    - decoded length `d`;
    - SHA-256 of the decoded prefix at each state size needed by matching (sizes come from the stored states, which are known before streaming);
@@ -113,7 +118,10 @@ Not applicable (anyhow messages). Message formats are specified in phase 04.
 ## Findings from planning
 
 - **F-1 (verified):** copytruncate then backfill double counts: 250 vs clean 150. Mechanism: the truncated identity's checkpoint is overwritten; the copied archive has a new identity and no path match. Addressed by decision C.
-- **F-2 (documented by Rust; not reproduced):** `DefaultHasher` is not specified across Rust releases. The existing checkpoint comparisons (`main.rs:1140-1145`) use it. Mitigated for new fields by decision A; legacy comparisons remain.
+- **F-2 (resolved in code; documented):** `DefaultHasher` is not specified across Rust releases. `hash_bytes` now uses a frozen SipHash-1-3 implementation (`crates/stats-cli/src/legacy_hash.rs`) that matches `DefaultHasher` on the toolchain that wrote existing data (unit-tested). The new config fingerprint is SHA-256. A stored legacy config hash is migrated in place, keeping aggregates and checkpoints (test T12); only a genuinely different config clears (T12b).
+- **Limitation: legacy rows.** Rows written before checkpoint support (no stable prefix fields) cannot be matched against compressed archives. Such a backfill aborts with a message and needs the documented rebuild recovery (test T6). This is a permanent requirement for those databases, not a bug to fix.
+- **Limitation: lock cost.** The writer lock is held through preflight. Each archive is decoded twice (preflight and apply, plus one extra pass when a backfill has several files for overlap detection). Large archives block other writers for that time.
+- **Limitation: containment.** Overlap detection in one run covers both identical files and one file that begins with another. An archive that ends mid-line and is then continued by another file is not detected. Copy-without-truncate (decision G) is out of scope.
 - **F-3 (verified):** an in-place rewrite that keeps 100 records and appends 10 gives 110 (correct). Truncate-and-replace with 40 different records adds them on top (150). The docs claim a "safe aggregate replay" (`docs/operations.md:9-10`), which is incorrect. Decision K confirms the additive behaviour; the docs will be corrected.
 - **F-4 (from code; not reproduced):** no writer lock existed. Addressed by decisions F and the dispatcher wiring.
 - **F-5 (verified by reading `store.rs:132-133`):** each event opens its own transaction; a multi-file backfill is not atomic. Addressed by phase 02 and 05.

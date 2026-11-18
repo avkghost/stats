@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Rotations are counted correctly: a plain, gzip, bzip2, or xz archive that holds records already counted from the active log is no longer counted twice by `backfill`. Records written after the last update and before rotation (the unread tail) are counted once.
+- Unpartitioned `update` and `backfill` are atomic: a failure leaves the database as it was. `backfill` checks the whole set before writing and rejects a set with identical or contained overlapping files, with a non-zero exit.
+- copytruncate: the superseded content of a truncated active log is kept as a snapshot, so the copied archive is not counted again.
+- Checkpoint config fingerprints are SHA-256. The earlier hash is renamed in place on the first update after upgrading, without clearing aggregates. Only a changed configuration clears them.
+- Writers take an exclusive lock on `DirData/stats.lock`. A command that finds it held exits without writing. `watch`, `live`, and `tui` hold it per refresh.
+- Only newline-terminated lines of the active log are counted. A partly written line is counted once, when it completes.
+- Limits: `backfill` refuses partitioned stores (`migrate` still replays them). Partitioned `update` keeps the per-event path, without the new atomicity. Databases written before checkpoint support need the rebuild recovery described in `docs/operations.md` before compressed archives can be backfilled.
+
 ## 0.1.2
 
 - Added the GPLv3 license text and explicit AWStats attribution/non-affiliation language.

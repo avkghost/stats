@@ -13,6 +13,9 @@
         systemctl start --wait stats-update.service
     endscript
     postrotate
+        # The web server must reopen its log file before the update below, or it keeps
+        # writing to the renamed file. Send that deployment's reopen signal here, e.g.
+        # for nginx: kill -USR1 "$(cat /run/nginx.pid)"
         systemctl start --wait stats-update.service
     endscript
 }

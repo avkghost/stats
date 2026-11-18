@@ -35,12 +35,13 @@ Stored in `input_checkpoints.source_key` (phase 01) and in `input_prefix_snapsho
 - Path: `config.data_dir.join("stats.lock")`. Created if missing; the data directory is created before the lock is taken.
 - Acquire with `flock(fd, LOCK_EX | LOCK_NB)` through `libc` (already a dependency of `stats-cli`, `Cargo.toml`). Hold the `File` for the whole command.
 - On `EWOULDBLOCK`, return an error: `"another stats process holds {path}; wait for it to finish and retry"`, non-zero exit, no writes.
-- **Single acquisition in the dispatcher** (decision F). `main()` (`main.rs:237`) acquires the lock before dispatching any writing command: `update`, `backfill`, `rebuild`, `migrate`, `watch`, and `retention --remove-source`. Acquisition happens before any store is opened, so a refused run cannot open or migrate the store.
+- **Single acquisition in the dispatcher** (decision F). `main()` (`main.rs:237`) acquires the lock before dispatching `update`, `backfill`, `rebuild`, `migrate`, and `retention --remove-source`. Acquisition happens before any store is opened, so a refused run cannot open or migrate the store.
+- **`watch` is the exception:** it acquires the lock per iteration, around one `update_unlocked()` call, and releases it before waiting for the next change. A process-lifetime lock would block manual `update`, `backfill`, and `retention` indefinitely.
 - Internal functions are split so that none of them locks:
   - `update` → `update_unlocked`; `backfill` → `backfill_unlocked`
   - `rebuild` → `rebuild_unlocked` → `update_unlocked` (today `rebuild` calls the public `update`, `main.rs:1118-1138`)
   - `migrate` → `migrate_unlocked` → `backfill_partitioned_unlocked` (replaces the call to `backfill` at `main.rs:1899`)
-  - `watch` calls `update_unlocked` per change (`main.rs:369-421`)
+  - `watch` takes the lock around each `update_unlocked` call (`main.rs:369-421`)
 - The lock helper carries a test-only acquisition counter. A test asserts that each writing command acquires exactly once per process. A second acquisition in the same process fails `flock`, so nested locking is refused at runtime as well as caught by the test.
 - Released when the `File` drops, including on error paths.
 

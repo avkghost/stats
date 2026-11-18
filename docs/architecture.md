@@ -22,8 +22,10 @@ API rather than accessing storage directly.
 The default layout uses a single SQLite database. Optional monthly or yearly
 partitioning keeps control/session state in `DirData/stats.sqlite3` and places
 event aggregates under `DirData/periods/`. Reports federate period databases.
-Append checkpoints use source identity and content hashes; changed prefixes,
-replacement, or truncation trigger safe replay behavior.
+Append checkpoints use the stable source identity and complete-line prefix digests.
+Replacement or truncation adds the new records to existing aggregates and keeps the
+superseded state as a snapshot; see [Operations](operations.md#replacement-and-truncation-are-additive).
+Unpartitioned updates and backfills commit in one transaction.
 
 SQLite uses WAL mode, a five-second busy timeout, normal synchronous durability,
 and in-memory temporary storage. `backup`, `optimize`, `storage`, and `retention`

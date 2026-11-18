@@ -72,10 +72,14 @@ For each file, oldest to newest (decision J: streaming, bounded memory):
 2. **Stream and digest.** Decode through `GzDecoder` / `BzDecoder` / `XzDecoder` (or plain bytes), feeding a `PrefixDigest`. Record: decoded length `d`, the digest of the prefix at each state size needed by matching (sizes come from the stored states, read before streaming), `full_digest`, and the complete-line count (decision I: for the active file, only bytes through the last `\n`; for archives, EOF terminates the last line).
 3. **Any decode error or I/O error aborts the whole plan** (a corrupt archive fails before any write; today it fails after earlier files were committed).
 4. Compute the decision through `decide` using the digests from step 2.
-5. Record the `FilePlan`: identity, path, raw size and raw SHA-256 (archives), decoded length `d`, `full_digest`, action (`Skip { lines }` or `Import { skip_lines }`), `replaces: Option<identity>`, `snapshot_before: Option<PrefixState>`, `new_state` (`prefix_size = bound`, `prefix_lines`, `prefix_sha256`).
+5. Record the `FilePlan`: identity, path, the byte bound (`S` for the active file, the full decoded length for archives), `verified_digest` (SHA-256 of `[0, bound)`), action (`Skip { lines }` or `Import { skip_lines }`), `replaces: Option<identity>`, `snapshot_before: Option<PrefixState>`, and `new_state` with the complete-line fields:
+   - `prefix_size` = `complete_prefix_size` (position after the last `\n` within the bound; the full length for archives, per the EOF rule);
+   - `prefix_lines` = lines through that position;
+   - `prefix_sha256` = SHA-256 of `decoded[0..prefix_size]`.
+   A trailing fragment inside the bound is therefore never in the checkpoint.
 6. Check the within-run overlap rule against files already in the plan.
 
-**Apply re-verifies (decision J).** Apply streams each file again and, before `COMMIT`, checks that the decoded length and `full_digest` equal the plan's values. A difference (the file was replaced, truncated, or altered) returns an error inside the transaction, so all earlier files roll back with it. Verification happens before commit, so a change between preflight and apply cannot produce a partial commit.
+**Apply re-verifies (decision J).** Apply streams each file again, reading only `[0, bound)`, and before `COMMIT` checks that the digest of that range equals `verified_digest`. For the active file the bound is `S`, so bytes appended after `S` are not part of the check and are not an error. For archives the bound is the whole file. A difference inside the range (the file was replaced, truncated, or altered) returns an error inside the transaction, so all earlier files roll back with it. Verification happens before commit, so a change between preflight and apply cannot produce a partial commit.
 
 Also compute `reset: bool`: true when the stored `config_hash` differs from the current one (`main.rs:52-59`). `reset` is applied inside the apply transaction, not here.
 

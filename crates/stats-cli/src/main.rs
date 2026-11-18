@@ -17,10 +17,9 @@ use stats_render::{
 };
 use stats_tui::run as run_tui;
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
+    collections::HashMap,
     ffi::CString,
     fs,
-    hash::{Hash, Hasher},
     io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command as ProcessCommand, Stdio},
@@ -30,6 +29,9 @@ use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
 
 mod reverse_dns;
+mod atomic_update;
+mod legacy_hash;
+mod writer_lock;
 
 #[derive(Parser)]
 #[command(name = "stats", version, about = "AWStats-style Rust web log analyzer")]
@@ -252,17 +254,32 @@ async fn main() -> anyhow::Result<()> {
             config,
             log_file,
             data_dir,
-        } => tokio::task::spawn_blocking(move || update(config, log_file, data_dir)).await??,
+        } => tokio::task::spawn_blocking(move || {
+            with_writer_lock(&config, data_dir.clone(), || {
+                update(config.clone(), log_file, data_dir)
+            })
+        })
+        .await??,
         Command::Rebuild {
             config,
             log_file,
             data_dir,
-        } => tokio::task::spawn_blocking(move || rebuild(config, log_file, data_dir)).await??,
+        } => tokio::task::spawn_blocking(move || {
+            with_writer_lock(&config, data_dir.clone(), || {
+                rebuild(config.clone(), log_file, data_dir)
+            })
+        })
+        .await??,
         Command::Backfill {
             config,
             log_dir,
             data_dir,
-        } => tokio::task::spawn_blocking(move || backfill(config, log_dir, data_dir)).await??,
+        } => tokio::task::spawn_blocking(move || {
+            with_writer_lock(&config, data_dir.clone(), || {
+                backfill(config.clone(), log_dir, data_dir)
+            })
+        })
+        .await??,
         Command::RawLog {
             config,
             log_file,
@@ -286,9 +303,10 @@ async fn main() -> anyhow::Result<()> {
             })
             .await??
         }
-        Command::Optimize { data_dir, vacuum } => {
-            tokio::task::spawn_blocking(move || optimize(data_dir, vacuum)).await??
-        }
+        Command::Optimize { data_dir, vacuum } => tokio::task::spawn_blocking(move || {
+            with_data_lock(&data_dir, || optimize(data_dir.clone(), vacuum))
+        })
+        .await??,
         Command::Storage { data_dir } => {
             tokio::task::spawn_blocking(move || storage(data_dir)).await??
         }
@@ -303,7 +321,14 @@ async fn main() -> anyhow::Result<()> {
             remove_source,
         } => {
             tokio::task::spawn_blocking(move || {
-                retention(data_dir, before, archive_dir, remove_source)
+                if remove_source {
+                    // Removing partitions deletes data, so it is a writer.
+                    with_data_lock(&data_dir, || {
+                        retention(data_dir.clone(), before, archive_dir, remove_source)
+                    })
+                } else {
+                    retention(data_dir, before, archive_dir, remove_source)
+                }
             })
             .await??
         }
@@ -312,10 +337,12 @@ async fn main() -> anyhow::Result<()> {
             log_dir,
             data_dir,
             backup_dir,
-        } => {
-            tokio::task::spawn_blocking(move || migrate(config, log_dir, data_dir, backup_dir))
-                .await??
-        }
+        } => tokio::task::spawn_blocking(move || {
+            with_writer_lock(&config, data_dir.clone(), || {
+                migrate(config.clone(), log_dir, data_dir, backup_dir)
+            })
+        })
+        .await??,
         Command::Summary {
             data_dir,
             limit,
@@ -366,6 +393,30 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Runs `run` while holding the writer lock for the store that `config_path`
+/// (with `data_override`) selects. Called once per command or per refresh;
+/// never nested, because the lock is not re-entrant.
+fn with_writer_lock<T>(
+    config_path: &Path,
+    data_override: Option<PathBuf>,
+    run: impl FnOnce() -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let config = Config::from_path(config_path)
+        .with_context(|| format!("load configuration {}", config_path.display()))?
+        .with_overrides(None, data_override);
+    let _lock = writer_lock::WriterLock::acquire(&config.data_dir)?;
+    run()
+}
+
+/// Runs `run` while holding the writer lock for an explicit data directory.
+fn with_data_lock<T>(
+    data_dir: &Path,
+    run: impl FnOnce() -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let _lock = writer_lock::WriterLock::acquire(data_dir)?;
+    run()
+}
+
 async fn watch(
     config_path: PathBuf,
     log_override: Option<PathBuf>,
@@ -379,7 +430,11 @@ async fn watch(
         let config_path = config_path.clone();
         let log_override = log_override.clone();
         let data_override = data_override.clone();
-        move || update(config_path, log_override, data_override)
+        move || {
+            with_writer_lock(&config_path, data_override.clone(), || {
+                update(config_path.clone(), log_override.clone(), data_override.clone())
+            })
+        }
     })
     .await??;
 
@@ -412,7 +467,13 @@ async fn watch(
                     let config_path = config_path.clone();
                     let log_override = log_override.clone();
                     let data_override = data_override.clone();
-                    move || update(config_path, log_override, data_override)
+                    // Lock per refresh: released before the next wait, so manual
+                    // commands can run between refreshes.
+                    move || {
+                        with_writer_lock(&config_path, data_override.clone(), || {
+                            update(config_path.clone(), log_override.clone(), data_override.clone())
+                        })
+                    }
                 }).await??;
             }
         }
@@ -497,7 +558,51 @@ fn update(
     regenerate_default_report(&config_path, log_override, data_override, false)
 }
 
+/// Imports every rotation of the configured log, oldest first, in one transaction.
+/// Partitioned stores are refused here; `migrate` uses `backfill_partitioned_unlocked`.
 fn backfill(
+    config_path: PathBuf,
+    log_dir_override: Option<PathBuf>,
+    data_override: Option<PathBuf>,
+) -> anyhow::Result<()> {
+    let base = Config::from_path(&config_path)
+        .with_context(|| format!("load configuration {}", config_path.display()))?;
+    if base.database_period != stats_core::DatabasePeriod::None {
+        bail!("backfill is not supported when DatabasePeriod is set; see docs/operations.md");
+    }
+    let active_name = base
+        .log_file
+        .file_name()
+        .map(PathBuf::from)
+        .context("configured LogFile must include a file name")?;
+    let log_dir = log_dir_override.clone().unwrap_or_else(|| {
+        base.log_file
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    });
+    let files = discover_backfill_files(&log_dir, &active_name)?;
+    if files.is_empty() {
+        bail!(
+            "no log files matching {} found in {}",
+            active_name.display(),
+            log_dir.display()
+        );
+    }
+    println!(
+        "backfilling {} log files from {}",
+        files.len(),
+        log_dir.display()
+    );
+    // The live log is the discovered entry for the configured name in the same
+    // directory, so both sides of the comparison use the same path form.
+    let active = log_dir.join(&active_name);
+    let config = base.with_overrides(None, data_override.clone());
+    atomic_update::run(&config_path, &config, &active, &files, false)?;
+    regenerate_default_report(&config_path, None, data_override, false)
+}
+
+fn backfill_partitioned_unlocked(
     config_path: PathBuf,
     log_dir_override: Option<PathBuf>,
     data_override: Option<PathBuf>,
@@ -531,7 +636,7 @@ fn backfill(
     );
     for path in &files {
         println!("processing {}", path.display());
-        update_inner(
+        update_inner_partitioned(
             config_path.clone(),
             Some(path.clone()),
             data_override.clone(),
@@ -781,7 +886,26 @@ fn record_event_batch(
     Ok(count)
 }
 
+/// Incremental update. Unpartitioned stores go through the single-transaction path;
+/// partitioned stores keep the per-event path (plan decision E).
 fn update_inner(
+    config_path: PathBuf,
+    log_override: Option<PathBuf>,
+    data_override: Option<PathBuf>,
+    quiet: bool,
+) -> anyhow::Result<()> {
+    let base = Config::from_path(&config_path)
+        .with_context(|| format!("load configuration {}", config_path.display()))?;
+    if base.database_period != stats_core::DatabasePeriod::None {
+        return update_inner_partitioned(config_path, log_override, data_override, quiet);
+    }
+    let active = resolve_log_file(&config_path, base.log_file.clone());
+    let config = base.with_overrides(log_override, data_override);
+    let files = vec![resolve_log_file(&config_path, config.log_file.clone())];
+    atomic_update::run(&config_path, &config, &active, &files, quiet)
+}
+
+fn update_inner_partitioned(
     config_path: PathBuf,
     log_override: Option<PathBuf>,
     data_override: Option<PathBuf>,
@@ -1137,10 +1261,10 @@ fn rebuild(
     update(config_path, log_override, data_override)
 }
 
+/// Checkpoint hash of earlier versions, computed without `DefaultHasher` so it does not
+/// change across toolchains (see `legacy_hash`).
 fn hash_bytes(bytes: &[u8]) -> String {
-    let mut hasher = DefaultHasher::new();
-    bytes.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    legacy_hash::hash_bytes(bytes)
 }
 
 fn decode_log_bytes(path: &Path, raw: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -1896,7 +2020,7 @@ fn migrate(
         "replaying logs into {:?} partitions",
         config.database_period
     );
-    backfill(config_path, log_dir, data_override)
+    backfill_partitioned_unlocked(config_path, log_dir, data_override)
 }
 
 fn database_paths(data_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -2171,8 +2295,12 @@ async fn live(
         let update_config = config_path.clone();
         let update_log = log_override.clone();
         let update_data = data_override.clone();
-        tokio::task::spawn_blocking(move || update(update_config, update_log, update_data))
-            .await??;
+        tokio::task::spawn_blocking(move || {
+            with_writer_lock(&update_config, update_data.clone(), || {
+                update(update_config.clone(), update_log.clone(), update_data.clone())
+            })
+        })
+        .await??;
         let data_dir = Config::from_path(&config_path)
             .with_context(|| format!("load configuration {}", config_path.display()))?
             .with_overrides(log_override.clone(), data_override.clone())
@@ -2194,24 +2322,28 @@ fn tui(
     limit: usize,
     interval_seconds: u64,
 ) -> anyhow::Result<()> {
-    update_inner(
-        config_path.clone(),
-        log_override.clone(),
-        data_override.clone(),
-        true,
-    )?;
+    with_writer_lock(&config_path, data_override.clone(), || {
+        update_inner(
+            config_path.clone(),
+            log_override.clone(),
+            data_override.clone(),
+            true,
+        )
+    })?;
     let config = Config::from_path(&config_path)
         .with_context(|| format!("load configuration {}", config_path.display()))?
         .with_overrides(log_override, data_override);
     let refresh = Duration::from_secs(interval_seconds.max(1));
     let report = build_report(&config.data_dir, limit)?;
     run_tui(report, &config.log_file, refresh, || {
-        update_inner(
-            config_path.clone(),
-            Some(config.log_file.clone()),
-            Some(config.data_dir.clone()),
-            true,
-        )?;
+        with_writer_lock(&config_path, Some(config.data_dir.clone()), || {
+            update_inner(
+                config_path.clone(),
+                Some(config.log_file.clone()),
+                Some(config.data_dir.clone()),
+                true,
+            )
+        })?;
         build_report(&config.data_dir, limit)
     })
 }

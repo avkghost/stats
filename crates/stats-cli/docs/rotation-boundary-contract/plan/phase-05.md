@@ -12,6 +12,8 @@ Apply a validated plan in one transaction, route normal `update` through the sam
 
 ## Apply (`crates/stats-cli/src/main.rs`)
 
+Bounds (decision J, refined): for the active file, apply reads only `[0, S)`, the same limit used by preflight, and verifies the digest of that range before `COMMIT`. Bytes after `S` are not read and are handled by the next run. For archives apply verifies the whole file. A mismatch inside the verified range aborts and rolls back the transaction.
+
 The command flow for `update` and `backfill` becomes:
 
 ```text
