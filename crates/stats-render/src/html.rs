@@ -325,7 +325,9 @@ fn detail_body(report: &Report, page: &str) -> String {
             section(
                 "Status codes",
                 table(&ordered_rows(&report.statuses, |a, b| {
-                    compare_numeric(&a.key, &b.key, true).then_with(|| a.key.cmp(&b.key))
+                    b.hits.cmp(&a.hits).then_with(|| {
+                        compare_numeric(&a.key, &b.key, true).then_with(|| a.key.cmp(&b.key))
+                    })
                 })),
             ),
             section(
@@ -699,11 +701,11 @@ mod tests {
             asns: Vec::new(),
             organizations: Vec::new(),
             hostnames: Vec::new(),
-            statuses: ["404", "200", "500", "301", "x"]
+            statuses: [("404", 2), ("200", 5), ("500", 5), ("301", 1), ("x", 3)]
                 .iter()
-                .map(|key| ReportRow {
+                .map(|(key, hits)| ReportRow {
                     key: (*key).into(),
-                    hits: 1,
+                    hits: *hits,
                 })
                 .collect(),
             status_classes: Vec::new(),
@@ -782,7 +784,7 @@ mod tests {
             ">=5s"
         ])));
         assert!(in_order(cells(&["00", "01", "10", "23"])));
-        assert!(in_order(cells(&["500", "404", "301", "200", "x"])));
+        assert!(in_order(cells(&["500", "200", "x", "404", "301"])));
         let _ = fs::remove_dir_all(&directory);
     }
 
