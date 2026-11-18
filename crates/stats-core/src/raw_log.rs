@@ -67,16 +67,16 @@ fn redact_line(line: &str, query: &Regex, secret: &Regex, header_secret: &Regex)
 mod tests {
     use super::{bearer_token_matches, render_redacted};
     use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEST_PATH: AtomicUsize = AtomicUsize::new(0);
 
     #[test]
     fn redacts_identity_queries_and_headers() {
         let path = std::env::temp_dir().join(format!(
             "stats-core-raw-log-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            NEXT_TEST_PATH.fetch_add(1, Ordering::Relaxed)
         ));
         fs::write(
             &path,

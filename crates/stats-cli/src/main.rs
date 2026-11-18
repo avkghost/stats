@@ -2700,17 +2700,21 @@ mod tests {
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEST_DIR: AtomicUsize = AtomicUsize::new(0);
+
+    fn test_dir(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "stats-cli-test-{name}-{}-{}",
+            std::process::id(),
+            NEXT_TEST_DIR.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
 
     #[test]
     fn rejects_raw_log_output_that_is_the_source() {
-        let directory = std::env::temp_dir().join(format!(
-            "stats-raw-log-safety-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let directory = test_dir("raw-log-safety");
         fs::create_dir_all(&directory).unwrap();
         let source = directory.join("access.log");
         fs::write(&source, b"log").unwrap();
@@ -2761,14 +2765,7 @@ mod tests {
     fn rejects_raw_log_output_symlink() {
         use std::os::unix::fs::symlink;
 
-        let directory = std::env::temp_dir().join(format!(
-            "stats-raw-log-symlink-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let directory = test_dir("raw-log-symlink");
         fs::create_dir_all(&directory).unwrap();
         let source = directory.join("access.log");
         let output = directory.join("export.log");
@@ -2828,11 +2825,7 @@ mod tests {
 
     #[test]
     fn discovers_rotations_oldest_to_newest() {
-        let directory = std::env::temp_dir().join(format!(
-            "stats-backfill-test-{}-{}",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("worker")
-        ));
+        let directory = test_dir("backfill");
         fs::create_dir_all(&directory).unwrap();
         for name in [
             "access.log",
@@ -2867,15 +2860,7 @@ mod tests {
 
     #[test]
     fn partitions_events_and_federates_reports() {
-        let directory = std::env::temp_dir().join(format!(
-            "stats-partition-test-{}-{}-{}",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("worker"),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let directory = test_dir("partition");
         fs::create_dir_all(&directory).unwrap();
         let mut router = StoreRouter::open(
             &directory,
@@ -2994,15 +2979,7 @@ mod tests {
 
     #[test]
     fn migration_backs_up_old_store_before_replaying_into_partitions() {
-        let root = std::env::temp_dir().join(format!(
-            "stats-migrate-test-{}-{}-{}",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("worker"),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = test_dir("migrate");
         let log_dir = root.join("logs");
         let data_dir = root.join("data");
         let backup_dir = root.join("backup");
@@ -3076,14 +3053,7 @@ mod tests {
 
     #[test]
     fn retention_archives_old_partitions_before_removing_sources() {
-        let root = std::env::temp_dir().join(format!(
-            "stats-retention-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = test_dir("retention");
         let data_dir = root.join("data");
         let archive_dir = root.join("archive");
         fs::create_dir_all(&data_dir).unwrap();
@@ -3143,14 +3113,7 @@ mod tests {
 
     #[test]
     fn health_check_does_not_create_a_missing_database() {
-        let root = std::env::temp_dir().join(format!(
-            "stats-health-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = test_dir("health");
         let log_path = root.join("access.log");
         let data_dir = root.join("data");
         let config_path = root.join("stats.conf");
@@ -3240,14 +3203,7 @@ mod tests {
 
     #[test]
     fn resolves_relative_log_file_from_config_directory_when_needed() {
-        let root = std::env::temp_dir().join(format!(
-            "stats-log-path-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = test_dir("log-path");
         let config_dir = root.join("logs");
         fs::create_dir_all(&config_dir).unwrap();
         fs::write(config_dir.join("access.log"), "line\n").unwrap();
@@ -3284,14 +3240,7 @@ mod tests {
 
     #[test]
     fn scanner_rules_require_the_matching_plugin() {
-        let root = std::env::temp_dir().join(format!(
-            "stats-scanner-rules-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+        let root = test_dir("scanner-rules");
         fs::create_dir_all(&root).unwrap();
         fs::write(
             root.join("scanner.rules"),
