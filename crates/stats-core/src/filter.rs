@@ -94,6 +94,44 @@ mod tests {
     }
 
     #[test]
+    fn regex_patterns_in_skip_and_only_filters_match_by_regex() {
+        let skip = FilterConfig {
+            skip_files: vec![r"REGEX[\.(css|js)$]".into()],
+            ..Default::default()
+        };
+        assert!(!accepts(&event("/static/app.css", "Mozilla"), &skip));
+        assert!(!accepts(&event("/static/app.js", "Mozilla"), &skip));
+        assert!(accepts(&event("/cssdocs/page", "Mozilla"), &skip));
+
+        let only = FilterConfig {
+            only_user_agents: vec!["REGEX[^(Googlebot|bingbot)]".into()],
+            ..Default::default()
+        };
+        assert!(accepts(&event("/", "Googlebot/2.1"), &only));
+        assert!(!accepts(&event("/", "Mozilla/5.0"), &only));
+    }
+
+    #[test]
+    fn regex_patterns_in_not_page_files_exclude_assets_from_pages() {
+        let filters = FilterConfig {
+            not_page_files: vec![r"REGEX[\.(png|jpg)$]".into()],
+            ..Default::default()
+        };
+        assert!(!is_page(&event("/images/logo.png", "Mozilla"), &filters));
+        assert!(is_page(&event("/index.html", "Mozilla"), &filters));
+    }
+
+    #[test]
+    fn substring_patterns_are_not_treated_as_regex() {
+        let filters = FilterConfig {
+            skip_files: vec!["a.b".into()],
+            ..Default::default()
+        };
+        assert!(!accepts(&event("/a.b", "Mozilla"), &filters));
+        assert!(accepts(&event("/axb", "Mozilla"), &filters));
+    }
+
+    #[test]
     fn filters_virtual_hosts_when_configured() {
         let mut allowed = event("/public", "Mozilla");
         allowed.virtual_host = Some("www.example.test".into());
