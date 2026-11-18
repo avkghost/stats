@@ -76,10 +76,12 @@ fn render_csv(report: &Value) -> String {
         "method_anomalies",
         "urls",
         "users",
+        "hostnames",
         "user_agents",
         "referers",
         "referrer_domains",
         "scanners",
+        "referer_spam",
         "file_types",
         "browsers",
         "oses",
@@ -168,13 +170,22 @@ fn number(value: &Value, key: &str) -> u64 {
 }
 
 fn csv_field(value: &str) -> String {
+    let value = if value
+        .chars()
+        .next()
+        .is_some_and(|character| matches!(character, '=' | '+' | '-' | '@' | '\t' | '\r'))
+    {
+        format!("'{value}")
+    } else {
+        value.to_owned()
+    };
     if value
         .chars()
         .any(|character| matches!(character, ',' | '"' | '\n' | '\r'))
     {
         format!("\"{}\"", value.replace('"', "\"\""))
     } else {
-        value.to_owned()
+        value
     }
 }
 
@@ -242,6 +253,22 @@ mod tests {
         assert!(csv.contains("summary,bytes,,123,,,\n"));
         assert!(csv.contains("urls,\"/search?q=a,b\",4,,,,\n"));
         assert!(csv.contains("bandwidth_urls,/download,1,99,,,\n"));
+    }
+
+    #[test]
+    fn neutralizes_csv_formula_prefixes() {
+        let report = json!({"urls": [
+            {"key": "=1+1", "hits": 1},
+            {"key": "+cmd", "hits": 1},
+            {"key": "-cmd", "hits": 1},
+            {"key": "@cmd", "hits": 1},
+            {"key": "\tcmd", "hits": 1},
+            {"key": "\rcmd", "hits": 1}
+        ]});
+        let csv = render_csv(&report);
+        for value in ["'=1+1", "'+cmd", "'-cmd", "'@cmd", "'\tcmd", "'\rcmd"] {
+            assert!(csv.contains(value), "missing neutralized value {value:?}");
+        }
     }
 
     #[test]
