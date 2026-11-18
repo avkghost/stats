@@ -10,6 +10,13 @@
   existence-query overhead of capped dimensions without changing the reported
   aggregates.
 
+## 0.1.18
+
+- Updated GitHub Actions to use the supported macOS 15 arm64 and Intel runner
+  labels for release and CI packaging.
+- Release packaging now detects the host platform when `STATS_PLATFORM` is not
+  supplied, so a native macOS package uses `.dylib` plugins automatically.
+
 ## 0.1.16
 
 - Moved the private `stats-core` store unit tests into `store/tests.rs`, reducing the production module to its storage types and implementation while preserving private access and test coverage.
