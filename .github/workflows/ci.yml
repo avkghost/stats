@@ -65,3 +65,33 @@ jobs:
         run: cargo test -p stats-core --test store_golden benchmark_cardinality_limit -- --ignored --nocapture
       - name: Run wide cardinality benchmark
         run: cargo test -p stats-core --test store_golden benchmark_cardinality_limit_wide_events -- --ignored --nocapture
+
+  macos-release:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - runner: macos-13
+            platform: macos-x86_64
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2.9.1
+      - name: Build macOS release bundle
+        env:
+          STATS_PLATFORM: ${{ matrix.platform }}
+          STATS_TARGET: ${{ matrix.target }}
+          STATS_RELEASE_DIR: target/release-artifacts
+        run: bash deploy/package-release.sh
+      - name: Verify macOS checksums
+        working-directory: target/release-artifacts
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c *.sha256; else shasum -a 256 -c *.sha256; fi
+      - name: Verify macOS archive contents
+        run: bash deploy/verify-release-artifacts.sh target/release-artifacts

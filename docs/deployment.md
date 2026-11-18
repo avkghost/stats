@@ -47,6 +47,29 @@ If a configuration points at production paths such as
 `/var/log/nginx/access.log` or `/var/lib/awstats`, run as the service account
 with those permissions, or override both paths explicitly for a local run.
 
+### macOS
+
+The Linux installer and systemd units are not used on macOS. Build the
+workspace for the host architecture and install the CLI and native worker
+side by side:
+
+```text
+cargo build --workspace --release
+mkdir -p "$HOME/.local/bin"
+cp target/release/stats-cli "$HOME/.local/bin/stats"
+cp target/release/stats-report-worker "$HOME/.local/bin/"
+```
+
+For periodic updates, render `deploy/com.avkghost.stats-update.plist` with
+absolute values for `@STATS_BINARY_PATH@`, `@STATS_CONFIG_PATH@`, and
+`@STATS_LOG_DIR@`, then load it with `launchctl`. The plist uses a five-minute
+`StartInterval`; it does not run at login unless `RunAtLoad` is added.
+
+Cross-target release packaging is supported by setting both variables, for
+example `STATS_PLATFORM=macos-arm64 STATS_TARGET=aarch64-apple-darwin` or
+`STATS_PLATFORM=macos-x86_64 STATS_TARGET=x86_64-apple-darwin`. The package
+contains the CLI, `stats-report-worker`, and the `.dylib` report plugins.
+
 ## Upgrade, backup, and rollback
 
 Before replacing the binary, changing storage settings, or restoring an older
@@ -128,7 +151,7 @@ bash deploy/package-release.sh
 
 The package script derives the version from `crates/stats-cli/Cargo.toml` unless
 `STATS_VERSION` is supplied. A tag value such as `v0.1.2` is normalized to
-`0.1.2`. `STATS_PLATFORM` and `STATS_RELEASE_DIR` are also supported. It refuses
+`0.1.2`. `STATS_PLATFORM`, `STATS_TARGET`, and `STATS_RELEASE_DIR` are also supported. Checksums use `sha256sum` when available and fall back to macOS `shasum -a 256`. It refuses
 to package when an explicitly supplied version differs from the crate version.
 The script creates four archives, each with a `.sha256` sidecar:
 

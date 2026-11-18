@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.avkghost.stats-update</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@STATS_BINARY_PATH@</string>
+        <string>update</string>
+        <string>--config</string>
+        <string>@STATS_CONFIG_PATH@</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>StandardOutPath</key>
+    <string>@STATS_LOG_DIR@/stats-update.log</string>
+    <key>StandardErrorPath</key>
+    <string>@STATS_LOG_DIR@/stats-update.error.log</string>
+</dict>
+</plist>

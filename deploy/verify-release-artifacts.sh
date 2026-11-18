@@ -2,6 +2,11 @@
 set -euo pipefail
 
 artifact_dir=${1:?usage: verify-release-artifacts.sh <artifact-dir>}
+if command -v sha256sum >/dev/null 2>&1; then
+    checksum_check() { sha256sum -c "$@"; }
+else
+    checksum_check() { shasum -a 256 -c "$@"; }
+fi
 
 archive_for() {
     local prefix=$1
@@ -27,7 +32,7 @@ verify_archive() {
     local archive
     archive=$(archive_for "${prefix}")
     [[ -n ${archive} ]] || { echo "missing ${prefix} archive" >&2; return 1; }
-    (cd "${artifact_dir}" && sha256sum -c "$(basename "${archive}").sha256")
+    (cd "${artifact_dir}" && checksum_check "$(basename "${archive}").sha256")
     tar -tzf "${archive}"
 }
 
