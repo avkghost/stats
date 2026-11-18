@@ -4,6 +4,8 @@ on:
   push:
   pull_request:
   workflow_call:
+  schedule:
+    - cron: '17 3 * * 1'
 
 permissions:
   contents: read
@@ -52,3 +54,12 @@ jobs:
           name: stats-linux-release-${{ github.sha }}
           path: target/release-artifacts/*
           if-no-files-found: error
+
+  cardinality-benchmark:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run cardinality benchmark
+        run: cargo test -p stats-core --test store_golden benchmark_cardinality_limit -- --ignored --nocapture

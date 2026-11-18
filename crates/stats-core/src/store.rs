@@ -2,6 +2,7 @@ use crate::AccessEvent;
 use rusqlite::{
     params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
 };
+use std::{cell::RefCell, collections::HashMap};
 use std::{path::Path, sync::Mutex, time::Duration};
 use thiserror::Error;
 
@@ -33,6 +34,7 @@ fn aggregate_tables() -> impl Iterator<Item = &'static str> {
 
 fn capped_key(
     tx: &Transaction<'_>,
+    counts: &RefCell<HashMap<String, usize>>,
     table: &str,
     column: &str,
     key: &str,
@@ -45,8 +47,22 @@ fn capped_key(
     if tx.query_row(&exists_sql, [key], |row| row.get::<_, bool>(0))? {
         return Ok(key.to_owned());
     }
-    let count_sql = format!("SELECT COUNT(*) FROM {table}");
-    let count = tx.query_row(&count_sql, [], |row| row.get::<_, i64>(0))? as usize;
+    let cached_count = { counts.borrow().get(table).copied() };
+    let count = match cached_count {
+        Some(count) => count,
+        None => {
+            let count_sql = format!("SELECT COUNT(*) FROM {table}");
+            let count = tx.query_row(&count_sql, [], |row| row.get::<_, i64>(0))? as usize;
+            counts.borrow_mut().insert(table.to_owned(), count);
+            count
+        }
+    };
+    if count < limit.max(1) {
+        counts
+            .borrow_mut()
+            .entry(table.to_owned())
+            .and_modify(|count| *count += 1);
+    }
     Ok(if count >= limit.max(1) {
         "other".to_owned()
     } else {
@@ -79,12 +95,13 @@ fn capped_key_connection(
 
 fn capped_key_transaction(
     tx: &Transaction<'_>,
+    counts: &RefCell<HashMap<String, usize>>,
     table: &str,
     column: &str,
     key: &str,
     limit: usize,
 ) -> Result<String, rusqlite::Error> {
-    capped_key(tx, table, column, key, limit)
+    capped_key(tx, counts, table, column, key, limit)
 }
 
 #[derive(Debug, Error)]
@@ -245,11 +262,12 @@ impl StatsStore {
     }
 
     fn record_in(
-        tx: &Transaction<'_>,
+        batch: &Batch<'_, '_>,
         event: &AccessEvent,
         is_page: bool,
         limit: usize,
     ) -> Result<(), StoreError> {
+        let tx = batch.tx;
         // Resolve values reused by several dimensions once per event. This keeps
         // the hot path deterministic while avoiding repeated formatting and UA
         // classification work for every aggregate insert.
@@ -272,7 +290,14 @@ impl StatsStore {
         }
         if event.status == 404 {
             if let Some(url) = event.url.as_deref().filter(|url| !url.is_empty()) {
-                let url = capped_key(tx, "not_found_urls", "url", url, limit)?;
+                let url = capped_key(
+                    tx,
+                    &batch.cardinality_counts,
+                    "not_found_urls",
+                    "url",
+                    url,
+                    limit,
+                )?;
                 let referrer = event
                     .referer
                     .as_deref()
@@ -303,7 +328,7 @@ impl StatsStore {
             .as_deref()
             .filter(|user| !user.is_empty() && *user != "-")
         {
-            let user = capped_key(tx, "users", "key", user, limit)?;
+            let user = capped_key(tx, &batch.cardinality_counts, "users", "key", user, limit)?;
             tx.execute(
                 "INSERT INTO users(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
                 params![user],
@@ -311,6 +336,7 @@ impl StatsStore {
         }
         let url_key = capped_key(
             tx,
+            &batch.cardinality_counts,
             "urls",
             "key",
             event.url.as_deref().unwrap_or("UNKNOWN"),
@@ -322,6 +348,7 @@ impl StatsStore {
         )?;
         let bandwidth_key = capped_key(
             tx,
+            &batch.cardinality_counts,
             "url_bandwidth",
             "key",
             event.url.as_deref().unwrap_or("UNKNOWN"),
@@ -333,6 +360,7 @@ impl StatsStore {
         )?;
         let user_agent_key = capped_key(
             tx,
+            &batch.cardinality_counts,
             "user_agents",
             "key",
             event.user_agent.as_deref().unwrap_or("UNKNOWN"),
@@ -342,6 +370,7 @@ impl StatsStore {
         if !event.referer_excluded {
             let referer_key = capped_key(
                 tx,
+                &batch.cardinality_counts,
                 "referers",
                 "key",
                 event.referer.as_deref().unwrap_or("UNKNOWN"),
@@ -349,23 +378,51 @@ impl StatsStore {
             )?;
             tx.execute("INSERT INTO referers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![referer_key])?;
             if let Some(domain) = referrer_domain(event.referer.as_deref()) {
-                let domain = capped_key(tx, "referrer_domains", "key", &domain, limit)?;
+                let domain = capped_key(
+                    tx,
+                    &batch.cardinality_counts,
+                    "referrer_domains",
+                    "key",
+                    &domain,
+                    limit,
+                )?;
                 tx.execute("INSERT INTO referrer_domains(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![domain])?;
             }
             if let Some((engine, phrase)) = search_referrer(event.referer.as_deref()) {
                 tx.execute("INSERT INTO search_engines(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![engine])?;
                 if !phrase.is_empty() {
-                    let phrase = capped_key(tx, "keyphrases", "key", &phrase, limit)?;
+                    let phrase = capped_key(
+                        tx,
+                        &batch.cardinality_counts,
+                        "keyphrases",
+                        "key",
+                        &phrase,
+                        limit,
+                    )?;
                     tx.execute("INSERT INTO keyphrases(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![phrase])?;
                 }
             }
         }
         if let Some(label) = &event.referer_spam {
-            let label = capped_key(tx, "referer_spam", "key", label, limit)?;
+            let label = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "referer_spam",
+                "key",
+                label,
+                limit,
+            )?;
             tx.execute("INSERT INTO referer_spam(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![label])?;
         }
         if let Some(label) = &event.scanner {
-            let label = capped_key(tx, "scanners", "key", label, limit)?;
+            let label = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "scanners",
+                "key",
+                label,
+                limit,
+            )?;
             tx.execute(
                 "INSERT INTO scanners(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
                 params![label],
@@ -387,7 +444,14 @@ impl StatsStore {
             tx.execute("INSERT INTO request_times(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![request_time_bucket(duration)])?;
         }
         if let Some(virtual_host) = &event.virtual_host {
-            let virtual_host = capped_key(tx, "virtual_hosts", "key", virtual_host, limit)?;
+            let virtual_host = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "virtual_hosts",
+                "key",
+                virtual_host,
+                limit,
+            )?;
             tx.execute("INSERT INTO virtual_hosts(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![virtual_host])?;
         }
         tx.execute(
@@ -495,27 +559,62 @@ impl StatsStore {
             Some(_) => {}
         }
         if let Some(country) = &event.geo.country {
-            let country = capped_key(tx, "countries", "key", country, limit)?;
+            let country = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "countries",
+                "key",
+                country,
+                limit,
+            )?;
             tx.execute("INSERT INTO countries(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![country])?;
         }
         if let Some(region) = &event.geo.region {
-            let region = capped_key(tx, "regions", "key", region, limit)?;
+            let region = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "regions",
+                "key",
+                region,
+                limit,
+            )?;
             tx.execute("INSERT INTO regions(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![region])?;
         }
         if let Some(city) = &event.geo.city {
-            let city = capped_key(tx, "cities", "key", city, limit)?;
+            let city = capped_key(tx, &batch.cardinality_counts, "cities", "key", city, limit)?;
             tx.execute("INSERT INTO cities(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![city])?;
         }
         if let Some(asn) = event.geo.asn {
-            let asn = capped_key(tx, "asns", "key", &asn.to_string(), limit)?;
+            let asn = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "asns",
+                "key",
+                &asn.to_string(),
+                limit,
+            )?;
             tx.execute("INSERT INTO asns(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![asn])?;
         }
         if let Some(organization) = &event.geo.organization {
-            let organization = capped_key(tx, "organizations", "key", organization, limit)?;
+            let organization = capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "organizations",
+                "key",
+                organization,
+                limit,
+            )?;
             tx.execute("INSERT INTO organizations(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![organization])?;
         }
         let visitor = visitor_label(&event.client_ip, event.client_hostname.as_deref());
-        let visitor = capped_key(tx, "hostnames", "key", &visitor, limit)?;
+        let visitor = capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "hostnames",
+            "key",
+            &visitor,
+            limit,
+        )?;
         tx.execute(
             "INSERT INTO hostnames(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
             params![visitor],
@@ -833,6 +932,7 @@ impl StatsStore {
 /// batch commits.
 pub struct Batch<'t, 'c> {
     tx: &'t Transaction<'c>,
+    cardinality_counts: RefCell<HashMap<String, usize>>,
 }
 
 impl Batch<'_, '_> {
@@ -846,7 +946,7 @@ impl Batch<'_, '_> {
         is_page: bool,
         limit: usize,
     ) -> Result<(), StoreError> {
-        StatsStore::record_in(self.tx, event, is_page, limit)
+        StatsStore::record_in(self, event, is_page, limit)
     }
 
     pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
@@ -910,7 +1010,14 @@ impl Batch<'_, '_> {
         reason: &str,
         limit: usize,
     ) -> Result<(), StoreError> {
-        let key = capped_key_transaction(self.tx, "diagnostics", "reason", reason, limit)?;
+        let key = capped_key_transaction(
+            self.tx,
+            &self.cardinality_counts,
+            "diagnostics",
+            "reason",
+            reason,
+            limit,
+        )?;
         self.tx.execute("INSERT INTO diagnostics(reason,count) VALUES(?1,1) ON CONFLICT(reason) DO UPDATE SET count=count+1", params![key])?;
         Ok(())
     }
@@ -959,7 +1066,10 @@ impl StatsStore {
         let tx = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| E::from(StoreError::from(error)))?;
-        let value = f(&Batch { tx: &tx })?;
+        let value = f(&Batch {
+            tx: &tx,
+            cardinality_counts: RefCell::new(HashMap::new()),
+        })?;
         tx.commit()
             .map_err(|error| E::from(StoreError::from(error)))?;
         Ok(value)
