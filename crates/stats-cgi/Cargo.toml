@@ -1,14 +1,14 @@
 [package]
 name = "stats-cgi"
-version = "0.1.3"
+version = "0.1.4"
 description = "Read-only CGI adapter for Stats reports"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-stats-core = { version = "0.1.3", path = "../stats-core" }
-stats-render = { version = "0.1.3", path = "../stats-render" }
+stats-core = { version = "0.1.4", path = "../stats-core" }
+stats-render = { version = "0.1.4", path = "../stats-render" }
 
 [dev-dependencies]
 stats-report-json = { path = "../../plugins/report-json", features = ["test-fixture"] }

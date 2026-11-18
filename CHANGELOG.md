@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Updated bundled SQLite through `rusqlite` to the patched `libsqlite3-sys` release, addressing RUSTSEC-2026-0459.
+- Known follow-up: `chrono` and `chrono-tz` are unmaintained and require a separate migration review.
+
 ## 0.1.3
 
 - Rotations are counted correctly: a plain, gzip, bzip2, or xz archive that holds records already counted from the active log is no longer counted twice by `backfill`. Records written after the last update and before rotation (the unread tail) are counted once.

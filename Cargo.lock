@@ -1237,9 +1237,9 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.38.2"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1d20bef17f513b9b3004532233187769cd072d790971f4e4da0e346eb6401e8"
+checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
 dependencies = [
  "cc",
  "pkg-config",
@@ -1772,9 +1772,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.40.2"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f2a97da3e3873c73cb2a2e71b35c40ff95e0b1eefa8d72d8499a6928c3b5b3"
+checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -2030,7 +2030,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stats-cgi"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "stats-core",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "stats-cli"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "bzip2",
@@ -2065,7 +2065,7 @@ dependencies = [
 
 [[package]]
 name = "stats-core"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "bzip2",
@@ -2084,7 +2084,7 @@ dependencies = [
 
 [[package]]
 name = "stats-http"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2102,18 +2102,18 @@ dependencies = [
 
 [[package]]
 name = "stats-plugin-api"
-version = "0.1.3"
+version = "0.1.4"
 
 [[package]]
 name = "stats-plugin-example"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "stats-plugin-api",
 ]
 
 [[package]]
 name = "stats-plugin-host"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "libc",
  "libloading",
@@ -2124,7 +2124,7 @@ dependencies = [
 
 [[package]]
 name = "stats-render"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -2135,7 +2135,7 @@ dependencies = [
 
 [[package]]
 name = "stats-report-csv"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "stats-plugin-api",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "stats-report-html"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "serde_json",
  "stats-core",
@@ -2153,14 +2153,14 @@ dependencies = [
 
 [[package]]
 name = "stats-report-json"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "stats-plugin-api",
 ]
 
 [[package]]
 name = "stats-tui"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "ratatui",
