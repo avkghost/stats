@@ -144,7 +144,11 @@ impl Config {
                 });
             };
             let key = key.trim();
-            let value = value.trim().trim_matches('"').to_string();
+            // AWStats configurations commonly put whitespace around quoted
+            // values. Strip it after removing the quotes so a path such as
+            // `" /var/lib/stats "` cannot become a relative path containing
+            // a leading space. Whitespace inside the value remains intact.
+            let value = value.trim().trim_matches('"').trim().to_string();
             match key {
                 "LoadPlugin" => {
                     let mut parts = value.split_whitespace();
@@ -493,6 +497,17 @@ mod tests {
         assert_eq!(config.site_domain, "example.test");
         assert_eq!(config.plugins[0].name, "geoip2_city");
         assert!(config.filters.not_page_files.iter().any(|v| v == ".css"));
+    }
+
+    #[test]
+    fn trims_outer_whitespace_from_quoted_paths() {
+        let config = Config::parse(
+            "LogFile=\" /var/log/access.log \"\nLogFormat=\"%host %time1\"\nDirData=\" /var/lib/stats \"\n",
+        )
+        .unwrap();
+
+        assert_eq!(config.log_file, PathBuf::from("/var/log/access.log"));
+        assert_eq!(config.data_dir, PathBuf::from("/var/lib/stats"));
     }
 
     #[test]
