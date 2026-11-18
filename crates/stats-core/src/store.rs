@@ -15,8 +15,8 @@ mod report;
 mod schema;
 mod session;
 use aggregate::{
-    bump, decrement, record_http_aggregates, record_referer_aggregates, record_security_aggregates,
-    record_user_url_aggregates,
+    bump, decrement, record_client_aggregates, record_http_aggregates, record_referer_aggregates,
+    record_security_aggregates, record_user_url_aggregates,
 };
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
@@ -296,32 +296,15 @@ impl StatsStore {
         record_user_url_aggregates(batch, event, limit)?;
         record_referer_aggregates(batch, event, limit)?;
         record_security_aggregates(batch, event, limit)?;
-        tx.execute("INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![file_type_name])?;
-        tx.execute("INSERT INTO browsers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![browser_name])?;
-        tx.execute(
-            "INSERT INTO oses(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![operating_system_name],
+        record_client_aggregates(
+            batch,
+            event,
+            file_type_name,
+            browser_name,
+            operating_system_name,
+            robot_name,
+            limit,
         )?;
-        if let Some(robot) = robot_name {
-            tx.execute("INSERT INTO robots(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![robot])?;
-        }
-        if let Some(duration) = event
-            .duration_seconds
-            .filter(|value| value.is_finite() && *value >= 0.0)
-        {
-            tx.execute("INSERT INTO request_times(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![request_time_bucket(duration)])?;
-        }
-        if let Some(virtual_host) = &event.virtual_host {
-            let virtual_host = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "virtual_hosts",
-                "key",
-                virtual_host,
-                limit,
-            )?;
-            tx.execute("INSERT INTO virtual_hosts(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![virtual_host])?;
-        }
         tx.execute(
             "INSERT INTO hours(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
             params![hour],

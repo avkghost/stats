@@ -250,6 +250,60 @@ pub(super) fn record_security_aggregates(
     Ok(())
 }
 
+pub(super) fn record_client_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    file_type_name: String,
+    browser_name: &str,
+    operating_system_name: &str,
+    robot_name: Option<&str>,
+    limit: usize,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    tx.execute(
+        "INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![file_type_name],
+    )?;
+    tx.execute(
+        "INSERT INTO browsers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![browser_name],
+    )?;
+    tx.execute(
+        "INSERT INTO oses(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![operating_system_name],
+    )?;
+    if let Some(robot) = robot_name {
+        tx.execute(
+            "INSERT INTO robots(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![robot],
+        )?;
+    }
+    if let Some(duration) = event
+        .duration_seconds
+        .filter(|value| value.is_finite() && *value >= 0.0)
+    {
+        tx.execute(
+            "INSERT INTO request_times(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![super::request_time_bucket(duration)],
+        )?;
+    }
+    if let Some(virtual_host) = &event.virtual_host {
+        let virtual_host = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "virtual_hosts",
+            "key",
+            virtual_host,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO virtual_hosts(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![virtual_host],
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"
