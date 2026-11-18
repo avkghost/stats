@@ -1,18 +1,28 @@
 use std::{fs, path::PathBuf, process::Command};
 
 fn plugin_library() -> PathBuf {
-    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    // Cargo's artifact layout differs by version: deps/ may be absent, and the fixture build
+    // may sit only under target/<profile>/build. Search every candidate directory and take the
+    // library built with the test fixture, identified by the mode variable it reads.
+    let profile = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
         .join(if cfg!(debug_assertions) {
             "debug"
         } else {
             "release"
-        })
-        .join("deps");
-    fs::read_dir(directory)
-        .expect("target dependency directory")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
+        });
+    let mut directories = vec![profile.join("deps"), profile.clone()];
+    if let Ok(builds) = fs::read_dir(profile.join("build").join("stats-report-json")) {
+        directories.extend(
+            builds
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().join("out")),
+        );
+    }
+    directories
+        .iter()
+        .filter_map(|directory| fs::read_dir(directory).ok())
+        .flat_map(|entries| entries.filter_map(Result::ok).map(|entry| entry.path()))
         .find(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
@@ -20,8 +30,15 @@ fn plugin_library() -> PathBuf {
                 && path.extension().is_some_and(|extension| {
                     matches!(extension.to_str(), Some("so" | "dylib" | "dll"))
                 })
+                && fs::read(path)
+                    .map(|bytes| {
+                        bytes
+                            .windows(b"STATS_TEST_REPORT_PLUGIN_MODE_FILE".len())
+                            .any(|window| window == b"STATS_TEST_REPORT_PLUGIN_MODE_FILE")
+                    })
+                    .unwrap_or(false)
         })
-        .expect("test report plugin shared library")
+        .expect("test-fixture report plugin shared library")
 }
 
 fn setup() -> (PathBuf, PathBuf, PathBuf) {
