@@ -1,7 +1,12 @@
-use super::{InputCheckpoint, PrefixState, StatsStore, StoreError};
+use super::{Batch, InputCheckpoint, PrefixState, StatsStore, StoreError};
 use rusqlite::{params, Connection, OptionalExtension};
 
 impl StatsStore {
+    pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::set_input_checkpoint_on(&conn, checkpoint)
+    }
+
     pub fn input_checkpoint_by_identity(
         &self,
         identity: &str,
@@ -46,6 +51,23 @@ impl StatsStore {
                 checkpoint_row,
             )
             .optional()?)
+    }
+
+    fn set_input_checkpoint_on(
+        conn: &Connection,
+        checkpoint: &InputCheckpoint,
+    ) -> Result<(), StoreError> {
+        conn.execute(
+            "INSERT INTO input_checkpoints(identity,path,config_hash,content_hash,size,lines) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(identity) DO UPDATE SET path=excluded.path,config_hash=excluded.config_hash,content_hash=excluded.content_hash,size=excluded.size,lines=excluded.lines",
+            params![checkpoint.identity, checkpoint.path, checkpoint.config_hash, checkpoint.content_hash, checkpoint.size as i64, checkpoint.lines as i64],
+        )?;
+        Ok(())
+    }
+}
+
+impl Batch<'_, '_> {
+    pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
+        StatsStore::set_input_checkpoint_on(self.tx, checkpoint)
     }
 }
 
