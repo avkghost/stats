@@ -8,6 +8,102 @@ use thiserror::Error;
 const SCHEMA_VERSION: &str = "13";
 const ENTRY_EXIT_VERSION: &str = "1";
 
+/// Aggregate tables and their column definitions.
+///
+/// This is deliberately the single source of truth for the derived-data schema. Opening a
+/// database creates tables from this list, and aggregate clearing/replay iterate over the same
+/// names. Keeping the table names beside their columns prevents a new dimension from being
+/// created successfully but then surviving a rebuild or schema replay. `TOP_TABLES` remains a
+/// separate, checked subset because totals, session state, and other derived tables are not
+/// valid inputs to the dimension-ranking query.
+const AGGREGATE_SCHEMA: &[(&str, &str)] = &[
+    ("totals", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL"),
+    ("countries", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("regions", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("cities", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("asns", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("organizations", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("statuses", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("status_classes", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("errors", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("methods", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("method_anomalies", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("urls", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("url_bandwidth", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL"),
+    ("users", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("user_agents", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referers", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referrer_domains", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("search_engines", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("keyphrases", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("file_types", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("browsers", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("oses", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("robots", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("request_times", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("virtual_hosts", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("entry_pages", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("exit_pages", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("hours", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("dates", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("daily", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL"),
+    ("months", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("weekdays", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("visit_keys", "key TEXT PRIMARY KEY"),
+    ("session_state", "key TEXT PRIMARY KEY, last_seen INTEGER NOT NULL, last_url TEXT"),
+    ("diagnostics", "reason TEXT PRIMARY KEY, count INTEGER NOT NULL"),
+    ("hostnames", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referer_spam", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("scanners", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("not_found_urls", "url TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("not_found_referrers", "url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer)"),
+];
+
+fn aggregate_tables() -> impl Iterator<Item = &'static str> {
+    AGGREGATE_SCHEMA.iter().map(|(name, _)| *name)
+}
+
+/// Tables that hold state other than aggregates. Never cleared as aggregates; checkpoints,
+/// snapshots, and config meta keys are reset by their own paths.
+#[cfg(test)]
+const SERVICE_TABLES: &[&str] = &["meta", "input_checkpoints", "input_prefix_snapshots"];
+
+/// Dimension tables that `top()` may read. Each has `key` and `hits` columns.
+const TOP_TABLES: &[&str] = &[
+    "countries",
+    "regions",
+    "cities",
+    "asns",
+    "organizations",
+    "hostnames",
+    "referer_spam",
+    "scanners",
+    "statuses",
+    "status_classes",
+    "errors",
+    "methods",
+    "method_anomalies",
+    "urls",
+    "users",
+    "user_agents",
+    "referers",
+    "referrer_domains",
+    "search_engines",
+    "keyphrases",
+    "file_types",
+    "browsers",
+    "oses",
+    "robots",
+    "request_times",
+    "virtual_hosts",
+    "entry_pages",
+    "exit_pages",
+    "hours",
+    "dates",
+    "months",
+    "weekdays",
+];
+
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("sqlite error: {0}")]
@@ -89,7 +185,12 @@ impl StatsStore {
         let conn = Connection::open(path)?;
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.execute_batch("PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;")?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS totals(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS countries(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS regions(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cities(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS asns(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS organizations(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS statuses(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS status_classes(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS errors(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS methods(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS urls(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS url_bandwidth(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS user_agents(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referers(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referrer_domains(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS search_engines(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS keyphrases(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS file_types(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS browsers(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS oses(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS robots(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS request_times(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS virtual_hosts(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS entry_pages(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS exit_pages(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS hours(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS visit_keys(key TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS session_state(key TEXT PRIMARY KEY, last_seen INTEGER NOT NULL, last_url TEXT); CREATE TABLE IF NOT EXISTS diagnostics(reason TEXT PRIMARY KEY, count INTEGER NOT NULL);")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        )?;
+        for (name, columns) in AGGREGATE_SCHEMA {
+            conn.execute(&format!("CREATE TABLE IF NOT EXISTS {name}({columns})"), [])?;
+        }
         let has_last_url = conn
             .prepare("PRAGMA table_info(session_state)")?
             .query_map([], |row| row.get::<_, String>(1))?
@@ -99,12 +200,8 @@ impl StatsStore {
         if !has_last_url {
             conn.execute("ALTER TABLE session_state ADD COLUMN last_url TEXT", [])?;
         }
-        conn.execute_batch("CREATE TABLE IF NOT EXISTS dates(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS daily(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS months(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS weekdays(key TEXT PRIMARY KEY, hits INTEGER NOT NULL);")?;
         conn.execute_batch("CREATE TABLE IF NOT EXISTS input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS input_checkpoints_content ON input_checkpoints(content_hash, config_hash);")?;
         ensure_checkpoint_columns(&conn)?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS hostnames(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS referer_spam(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS scanners(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS method_anomalies(key TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_urls(url TEXT PRIMARY KEY, hits INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS not_found_referrers(url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer));",
-        )?;
         let previous_schema = conn
             .query_row(
                 "SELECT value FROM meta WHERE key='schema_version'",
@@ -130,11 +227,13 @@ impl StatsStore {
                 && entry_exit_marker.is_none()
                 && page_count > 0);
         if needs_replay {
-            conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM dates; DELETE FROM daily; DELETE FROM months; DELETE FROM weekdays; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM input_checkpoints; DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%';")?;
-        }
-        if needs_replay {
+            // A schema replay invalidates every value derived from input events. Prefix snapshots
+            // are service state rather than aggregates, but they describe the old interpretation
+            // of the input stream and must be removed with the checkpoints; retaining them could
+            // make the next replay skip records under the new schema.
+            Self::clear_aggregates_on(&conn)?;
             conn.execute_batch(
-                "DELETE FROM hostnames; DELETE FROM referer_spam; DELETE FROM scanners; DELETE FROM method_anomalies; DELETE FROM not_found_urls; DELETE FROM not_found_referrers;",
+                "DELETE FROM input_checkpoints; DELETE FROM input_prefix_snapshots; DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%';",
             )?;
         }
         conn.execute(
@@ -450,7 +549,7 @@ impl StatsStore {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
         Ok(conn
             .query_row("SELECT value FROM meta WHERE key=?1", [key], |r| r.get(0))
-            .ok())
+            .optional()?)
     }
     pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
@@ -567,18 +666,23 @@ impl StatsStore {
     }
 
     fn clear_aggregates_on(conn: &Connection) -> Result<(), StoreError> {
-        conn.execute_batch("DELETE FROM totals; DELETE FROM countries; DELETE FROM regions; DELETE FROM cities; DELETE FROM asns; DELETE FROM organizations; DELETE FROM statuses; DELETE FROM status_classes; DELETE FROM errors; DELETE FROM methods; DELETE FROM urls; DELETE FROM url_bandwidth; DELETE FROM users; DELETE FROM user_agents; DELETE FROM referers; DELETE FROM referrer_domains; DELETE FROM search_engines; DELETE FROM keyphrases; DELETE FROM file_types; DELETE FROM browsers; DELETE FROM oses; DELETE FROM robots; DELETE FROM request_times; DELETE FROM virtual_hosts; DELETE FROM entry_pages; DELETE FROM exit_pages; DELETE FROM hours; DELETE FROM visit_keys; DELETE FROM session_state; DELETE FROM diagnostics; DELETE FROM daily;")?;
-        conn.execute_batch("DELETE FROM hostnames; DELETE FROM method_anomalies; DELETE FROM not_found_urls; DELETE FROM not_found_referrers;")?;
-        conn.execute_batch("DELETE FROM referer_spam;")?;
-        conn.execute_batch("DELETE FROM dates; DELETE FROM months; DELETE FROM weekdays;")?;
+        // Table names come exclusively from the static schema list above, so this dynamic SQL
+        // cannot receive user input. Using one iterator here also makes clear-on-replay and
+        // clear-on-config-change cover exactly the same set of tables.
+        for table in aggregate_tables() {
+            conn.execute(&format!("DELETE FROM {table}"), [])?;
+        }
         Ok(())
     }
     pub fn totals(&self) -> Result<(u64, u64), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        // `optional()` distinguishes a missing aggregate row (a valid empty store) from a
+        // missing/corrupt table (an operational error that callers must see).
         Ok(conn
             .query_row("SELECT hits,bytes FROM totals WHERE key='all'", [], |r| {
                 Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64))
             })
+            .optional()?
             .unwrap_or((0, 0)))
     }
     pub fn metric(&self, key: &str) -> Result<(u64, u64), StoreError> {
@@ -587,15 +691,14 @@ impl StatsStore {
             .query_row("SELECT hits,bytes FROM totals WHERE key=?1", [key], |r| {
                 Ok((r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64))
             })
+            .optional()?
             .unwrap_or((0, 0)))
     }
     pub fn unique_visits(&self) -> Result<u64, StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
-        Ok(conn
-            .query_row("SELECT COUNT(*) FROM visit_keys", [], |r| {
-                r.get::<_, i64>(0)
-            })
-            .unwrap_or_default() as u64)
+        Ok(conn.query_row("SELECT COUNT(*) FROM visit_keys", [], |r| {
+            r.get::<_, i64>(0)
+        })? as u64)
     }
     pub fn diagnostics(&self, limit: usize) -> Result<Vec<(String, u64)>, StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
@@ -609,42 +712,7 @@ impl StatsStore {
         Ok(rows)
     }
     pub fn top(&self, table: &str, limit: usize) -> Result<Vec<(String, u64)>, StoreError> {
-        let allowed = [
-            "countries",
-            "regions",
-            "cities",
-            "asns",
-            "organizations",
-            "hostnames",
-            "referer_spam",
-            "scanners",
-            "statuses",
-            "status_classes",
-            "errors",
-            "methods",
-            "method_anomalies",
-            "not_found_urls",
-            "urls",
-            "users",
-            "user_agents",
-            "referers",
-            "referrer_domains",
-            "search_engines",
-            "keyphrases",
-            "file_types",
-            "browsers",
-            "oses",
-            "robots",
-            "request_times",
-            "virtual_hosts",
-            "entry_pages",
-            "exit_pages",
-            "hours",
-            "dates",
-            "months",
-            "weekdays",
-        ];
-        if !allowed.contains(&table) {
+        if !TOP_TABLES.contains(&table) {
             return Ok(Vec::new());
         }
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
@@ -1590,5 +1658,199 @@ mod tests {
         );
         assert_eq!(visitor_label("203.0.113.10", None), "203.0.113.10");
         assert_eq!(visitor_label("203.0.113.10", Some("-")), "203.0.113.10");
+    }
+}
+
+#[cfg(test)]
+mod table_category_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn temp_store(name: &str) -> std::path::PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "stats-core-store-categories-{}-{}",
+            std::process::id(),
+            name
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        directory.join("stats.sqlite3")
+    }
+
+    fn table_names(path: &std::path::Path) -> Vec<String> {
+        let conn = Connection::open(path).unwrap();
+        let mut statement = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
+            .unwrap();
+        let names = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        names
+    }
+
+    #[test]
+    fn every_table_is_exactly_one_of_aggregate_or_service() {
+        let path = temp_store("categories");
+        drop(StatsStore::open(&path).unwrap());
+        let names = table_names(&path);
+        for name in &names {
+            let aggregate = aggregate_tables().any(|table| table == name);
+            let service = SERVICE_TABLES.contains(&name.as_str());
+            assert!(
+                aggregate ^ service,
+                "table {name} must be in exactly one category"
+            );
+        }
+        for listed in aggregate_tables().chain(SERVICE_TABLES.iter().copied()) {
+            assert!(
+                names.iter().any(|name| name == listed),
+                "listed table {listed} must exist"
+            );
+        }
+    }
+
+    #[test]
+    fn top_tables_are_aggregates_with_key_and_hits_columns() {
+        let path = temp_store("top-tables");
+        drop(StatsStore::open(&path).unwrap());
+        let conn = Connection::open(&path).unwrap();
+        for table in TOP_TABLES {
+            assert!(
+                aggregate_tables().any(|aggregate| aggregate == *table),
+                "{table} must be an aggregate"
+            );
+            let columns: Vec<String> = conn
+                .prepare(&format!("PRAGMA table_info({table})"))
+                .unwrap()
+                .query_map([], |row| row.get::<_, String>(1))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert!(
+                columns.iter().any(|c| c == "key") && columns.iter().any(|c| c == "hits"),
+                "{table}"
+            );
+        }
+    }
+
+    #[test]
+    fn fresh_store_reads_default_without_error() {
+        let path = temp_store("fresh");
+        let store = StatsStore::open(&path).unwrap();
+        assert_eq!(store.totals().unwrap(), (0, 0));
+        assert_eq!(store.metric("pages").unwrap(), (0, 0));
+        assert_eq!(store.unique_visits().unwrap(), 0);
+        assert_eq!(store.meta("missing").unwrap(), None);
+    }
+
+    #[test]
+    fn missing_table_is_an_error_not_a_default() {
+        let path = temp_store("missing");
+        let store = StatsStore::open(&path).unwrap();
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("DROP TABLE totals; DROP TABLE visit_keys; DROP TABLE meta;")
+            .unwrap();
+        assert!(store.totals().is_err());
+        assert!(store.metric("pages").is_err());
+        assert!(store.unique_visits().is_err());
+        assert!(store.meta("schema_version").is_err());
+    }
+
+    #[test]
+    fn clear_aggregates_clears_scanners() {
+        let path = temp_store("scanners");
+        let store = StatsStore::open(&path).unwrap();
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("INSERT INTO scanners(key,hits) VALUES('probe',3)", [])
+            .unwrap();
+        store.clear_aggregates().unwrap();
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM scanners", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn schema_replay_clears_prefix_snapshots() {
+        let path = temp_store("replay-snapshots");
+        let store = StatsStore::open(&path).unwrap();
+        store
+            .snapshot_prefix(
+                &PrefixState {
+                    source_key: "src".into(),
+                    config_hash: "cfg".into(),
+                    identity: "1:10".into(),
+                    path: "/logs/access.log".into(),
+                    size: 100,
+                    lines: 10,
+                    sha256: "abc".into(),
+                },
+                1,
+            )
+            .unwrap();
+        assert_eq!(store.snapshot_states("src", "cfg").unwrap().len(), 1);
+        drop(store);
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("UPDATE meta SET value='3' WHERE key='schema_version'", [])
+            .unwrap();
+        drop(conn);
+        let reopened = StatsStore::open(&path).unwrap();
+        assert!(reopened.snapshot_states("src", "cfg").unwrap().is_empty());
+    }
+
+    #[test]
+    fn legacy_pre_prefix_schema_opens_into_the_same_table_set() {
+        let fresh_path = temp_store("legacy-fresh");
+        drop(StatsStore::open(&fresh_path).unwrap());
+        let fresh = table_names(&fresh_path);
+
+        let legacy_path = temp_store("legacy-old");
+        {
+            let conn = Connection::open(&legacy_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 CREATE TABLE totals(key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL);
+                 CREATE TABLE input_checkpoints(identity TEXT PRIMARY KEY, path TEXT NOT NULL, config_hash TEXT NOT NULL, content_hash TEXT NOT NULL, size INTEGER NOT NULL, lines INTEGER NOT NULL);
+                 INSERT INTO meta VALUES('schema_version','13'),('entry_exit_dimensions','1');
+                 INSERT INTO totals VALUES('all',5,500),('pages',5,500);
+                 INSERT INTO input_checkpoints VALUES('1:2','/logs/access.log','cfg','abc',100,10);",
+            )
+            .unwrap();
+        }
+
+        let store = StatsStore::open(&legacy_path).unwrap();
+        assert_eq!(
+            store.totals().unwrap(),
+            (5, 500),
+            "aggregates survive the upgrade"
+        );
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
+        assert_eq!(store.legacy_checkpoint_count("src", "cfg").unwrap(), 1);
+        drop(store);
+
+        let mut legacy = table_names(&legacy_path);
+        let mut expected = fresh.clone();
+        legacy.sort();
+        expected.sort();
+        assert_eq!(
+            legacy, expected,
+            "upgraded database must have the same tables as a fresh one"
+        );
+        let conn = Connection::open(&legacy_path).unwrap();
+        let columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(input_checkpoints)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(
+            columns.iter().any(|c| c == "prefix_sha256"),
+            "prefix columns added"
+        );
     }
 }

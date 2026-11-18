@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Report metadata now records the processed active log: `input_path`, `input_size`, and `input_lines` are populated for unpartitioned stores again.
+- Storage reads (`totals`, `metric`, `unique_visits`, `meta`) return errors on database failures instead of reporting zero or an absent value.
+- `clear_aggregates` now also clears scanner classifications, and a schema replay clears stored prefix snapshots.
+
 ## 0.1.5
 
 - Replaced unmaintained `chrono` and `chrono-tz` with maintained `jiff`, preserving fixed-offset and IANA timezone handling, including DST-aware conversion.

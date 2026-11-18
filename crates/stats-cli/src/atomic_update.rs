@@ -276,6 +276,16 @@ pub(crate) fn run(
                 &mut counters,
             )?;
         }
+        // Report metadata follows the active log, not the last archive visited by backfill. The
+        // scan records only complete lines, so the stored size and line count describe exactly
+        // the prefix represented by the checkpoint; an unterminated tail is intentionally not
+        // advertised as processed. When a command imports archives without the active file, the
+        // previous live-log metadata remains valid and is therefore left unchanged.
+        if let Some(live) = plans.iter().find(|plan| plan.bound.is_some()) {
+            batch.set_meta("input_path", &live.path_string)?;
+            batch.set_meta("input_size", &live.scan.complete_size.to_string())?;
+            batch.set_meta("input_lines", &live.scan.complete_lines.to_string())?;
+        }
         batch.set_meta("config_hash", &config_hash)?;
         batch.set_meta("config_path", &config_path.display().to_string())?;
         batch.set_meta("source_key", &source)?;
