@@ -24,7 +24,7 @@ use classify::{
 use schema::SERVICE_TABLES;
 use schema::{AGGREGATE_SCHEMA, CARDINALITY_TABLES, TOP_TABLES};
 
-const SCHEMA_VERSION: &str = "13";
+const SCHEMA_VERSION: &str = "14";
 const ENTRY_EXIT_VERSION: &str = "1";
 pub const DEFAULT_CARDINALITY_LIMIT: usize = 10_000;
 pub const PREPARED_STATEMENT_CACHE_CAPACITY: usize = if CARDINALITY_TABLES.len() * 2 > 128 {
@@ -1456,7 +1456,7 @@ mod tests {
         drop(conn);
 
         let store = StatsStore::open(&path).expect("migrate store");
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("14"));
         assert_eq!(store.meta("input_content_hash").unwrap(), None);
         assert_eq!(store.totals().unwrap(), (0, 0));
         drop(store);
@@ -1490,7 +1490,7 @@ mod tests {
         drop(store);
 
         let store = StatsStore::open(&path).expect("reopen current schema");
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("14"));
         assert_eq!(store.totals().unwrap(), (7, 8));
         assert_eq!(
             store
@@ -1555,7 +1555,7 @@ mod tests {
             .expect("seed aggregate");
         store.clear_aggregates().expect("clear aggregates");
         assert_eq!(store.totals().unwrap(), (0, 0));
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("14"));
         assert_eq!(
             store.meta("input_content_hash").unwrap().as_deref(),
             Some("checkpoint")
@@ -1757,11 +1757,11 @@ mod table_category_tests {
         let store = StatsStore::open(&legacy_path).unwrap();
         assert_eq!(
             store.totals().unwrap(),
-            (5, 500),
-            "aggregates survive the upgrade"
+            (0, 0),
+            "schema 13 aggregates are replayed"
         );
-        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
-        assert_eq!(store.legacy_checkpoint_count("src", "cfg").unwrap(), 1);
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("14"));
+        assert_eq!(store.legacy_checkpoint_count("src", "cfg").unwrap(), 0);
         drop(store);
 
         let mut legacy = table_names(&legacy_path);

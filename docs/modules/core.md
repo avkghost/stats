@@ -41,7 +41,7 @@ they are declared.
 | `report.rs` | Frontend-neutral `Report` and its builder | `ReportService::build` `report.rs:99-222`; label overlays `report.rs:238-279` |
 | `scanner.rs` | URL rules for scanner probes and an optional 404 heuristic | `ScannerMatcher::parse`, `apply`, `apply_heuristic` `scanner.rs:49-138` |
 | `source_key.rs` | Stable identity of one log family | `source_key` `source_key.rs:17-37` |
-| `store.rs` | SQLite schema, aggregates, checkpoints, batch transactions | `SCHEMA_VERSION = "13"` `store.rs:8`; `with_batch` `store.rs:853-868`; tables `store.rs:91-107` |
+| `store.rs` | SQLite schema, aggregates, checkpoints, batch transactions | `SCHEMA_VERSION = "14"` `store.rs:8`; `with_batch` `store.rs:853-868`; tables `store.rs:91-107` |
 
 ## Data path
 

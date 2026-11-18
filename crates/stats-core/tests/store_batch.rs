@@ -62,10 +62,10 @@ fn state(identity: &str, size: u64) -> PrefixState {
 // Phase 01
 
 #[test]
-fn legacy_database_gains_columns_without_replay() {
+fn schema_13_database_replays_for_new_aggregate_semantics() {
     let path = temp_database("legacy");
     {
-        // Schema as written before the prefix fields existed (schema version 13).
+        // Schema as written before the region key semantics changed (schema version 13).
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch(
             "CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -80,19 +80,22 @@ fn legacy_database_gains_columns_without_replay() {
     }
 
     let store = StatsStore::open(&path).unwrap();
-    assert_eq!(store.totals().unwrap(), (5, 500), "aggregates must be kept");
+    assert_eq!(
+        store.totals().unwrap(),
+        (0, 0),
+        "schema 13 aggregates are replayed"
+    );
     assert_eq!(
         store.meta("schema_version").unwrap().as_deref(),
-        Some("13"),
-        "schema version must not change"
+        Some("14"),
+        "schema version must advance"
     );
-    assert_eq!(store.legacy_checkpoint_count("src", "cfg").unwrap(), 1);
+    assert_eq!(store.legacy_checkpoint_count("src", "cfg").unwrap(), 0);
     assert!(store.prefix_states("src", "cfg").unwrap().is_empty());
-    let legacy = store
+    assert!(store
         .input_checkpoint_by_identity("1:2", "cfg")
         .unwrap()
-        .expect("legacy checkpoint kept");
-    assert_eq!(legacy.content_hash, "abc");
+        .is_none());
     drop(store);
     cleanup(&path);
 }
