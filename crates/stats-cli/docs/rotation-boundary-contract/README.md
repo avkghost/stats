@@ -2,7 +2,7 @@
 date: 2026-11-18
 feature: rotation-boundary-contract
 service: crates/stats-cli
-status: draft (revised after review; awaiting approval)
+status: complete (implemented in c119d87; documentation in Phase 3 done)
 research: ../../../../.thoughts/research/2026-11-18-rotation-unread-tail.md
 ---
 

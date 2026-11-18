@@ -3,7 +3,7 @@ date: 2026-11-18
 feature: rotation-boundary-contract
 service: crates/stats-cli
 design: ../README.md
-status: revised after review; approved for Phase 1 commit; Phase 2 implementation awaiting review
+status: complete. Phases 1-5 implemented and committed in c119d87 (fixture in accd8be). Phase 3 documentation done. Known pre-existing environmental failures: the three native_report_failure tests (see README "Findings").
 ---
 
 # Code Plan: Rotation Boundary Contract - Phase 2
