@@ -4,6 +4,7 @@ logs
 target
 tasks/*
 .rules/*
+.idea/*
 
 # Local credentials and generated databases
 .env
