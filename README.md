@@ -69,12 +69,13 @@ before treating any output as equivalent.
 
 ## Documentation
 
+- [Documentation index](docs/README.md) — map of architecture, modules, guides, and compatibility references.
 - [Getting started](docs/getting-started.md) — installation, build, fixtures, and frontend smoke tests.
 - [Configuration](docs/configuration.md) — directives, formats, timezone, GeoIP, and validation.
 - [Operations](docs/operations.md) — incremental updates, rotation, backfill, partitions, backups, and migration.
 - [Deployment](docs/deployment.md) — release bundles, `/opt/stats` installation, systemd, cron, logrotate, HTTP, and CGI.
 - [Plugins](docs/plugins.md) — ABI, renderers, worker protocol, failure isolation, and trust boundaries.
-- [Architecture](docs/architecture.md) — workspace boundaries, processing, storage, and reporting.
+- [Architecture](docs/architecture.md) — workspace boundaries, processing, storage, reporting, and diagrams.
 - [AWStats compatibility](docs/compatibility.md) — evidence-based compatibility matrix and limitations.
 - [Changelog](CHANGELOG.md) — release history and verified changes.
 

@@ -37,7 +37,8 @@ aggregation, including daylight-saving transitions for named IANA zones. If it
 is unset, the timestamp offset from each record is preserved.
 
 MaxMind Country, City, and ASN MMDB providers are optional. GeoIP lookup guards
-private, loopback, unspecified, multicast, and scope-suffixed IPv6 addresses.
+private, loopback, unspecified, multicast, link-local, unique-local, and
+scope-suffixed addresses before consulting an MMDB file.
 Configured GeoIP and plugin resource paths are deployment inputs and must be
 readable by the process account.
 

@@ -25,9 +25,17 @@ crates/stats-cli/tests/
     │   ├── T2  normal_update_after_rotation_adds_only_new_active
     │   ├── T3  repeated_backfill_changes_nothing
     │   ├── T4  compressed_rotation_before_backfill_counts_prefix_once   (gz, bz2, xz: three cases)
-    │   ├── T5  ambiguous_compressed_match_aborts_backfill_without_writes
-    │   ├── T5b unrelated_source_with_same_prefix_is_not_matched
-    │   └── T6  upgrade_from_legacy_checkpoints_replays_without_double_count
+    │   ├── T5  identical_archives_abort_without_writes_then_recover
+    │   ├── T5c contained_overlap_aborts_without_writes
+    │   ├── T6  legacy_upgrade_keeps_counts_and_recovers
+    │   ├── T7  copytruncate_archive_matches_snapshot_and_counts_once
+    │   ├── T8  backfill_refuses_partitioned_stores
+    │   ├── T9  concurrent_writer_is_refused_without_writes
+    │   ├── lock_is_released_after_a_successful_command
+    │   ├── T10 corrupt_archive_aborts_before_any_write
+    │   ├── T11 partial_trailing_line_is_counted_once
+    │   ├── T12 legacy_config_hash_is_migrated_without_replay
+    │   └── T12b changed_configuration_clears_and_replays_once
     └── #[cfg(not(unix))] #[test] skipped_on_non_unix_platforms
 ```
 
@@ -66,14 +74,14 @@ Equality is exact. Row order is taken from the store's own ordering; if an order
 ### Behaviour traced to tests
 | Behaviour | Source | Test |
 |---|---|---|
-| Checkpoint kept across plain rename | `main.rs:873` | T1 (outcome only) |
-| Prefix skipped by hash, uncompressed | `main.rs:938-943` | T1 |
-| Normal update ignores rotations | `main.rs:812` | T2 |
-| Backfill order oldest-first | `main.rs:544-581` | T1 |
-| Unchanged file no-op | `main.rs:931-937` | T3 |
-| Compressed file replay (current defect) | `main.rs:944-945` | T4 |
-| Compressed prefix match (Phase 2) | D-9 | T4 green, T5 |
-| Schema-change invalidation | `docs/operations.md:84-85` | T6 |
+| Checkpoint kept across plain rename | `stats-core` checkpoint state and `stats-cli` update path | T1 (outcome only) |
+| Prefix skipped by decoded content | `checkpoint_match.rs`, `prefix_hash.rs` | T1, T4 |
+| Normal update ignores rotations | `stats-cli` active-file selection | T2 |
+| Backfill order oldest-first | `stats-cli` rotation discovery | T1 |
+| Unchanged file no-op | checkpoint decision path | T3 |
+| Compressed prefix match | `checkpoint_match.rs`, `atomic_update.rs` | T4 |
+| Compressed prefix match | `stats-core/src/checkpoint_match.rs`, `atomic_update.rs` | T4 green, T5 |
+| Schema and legacy-state recovery | `stats-core/src/store.rs`, `atomic_update.rs` | T6, T12, T12b |
 
 ## Test Cases
 
@@ -99,7 +107,7 @@ Cases `T4-gz`, `T4-bz2`, `T4-xz`. For each:
 3. `backfill --log-dir`.
 4. Assert every aggregate equals the clean import (`P+T+N`, counted once).
 
-**Phase 1 status:** all three cases fail with a mismatch on hits, pages, and bytes. The failure message must show the actual and expected totals. These tests stay on the feature branch until Phase 2 is merged.
+**Completed status:** all three cases pass and compare the full aggregate surface against a clean import.
 
 ### T5 - ambiguous_compressed_match_aborts_backfill_without_writes
 1. Steps 1-4 of T1.
@@ -116,9 +124,11 @@ Cases `T4-gz`, `T4-bz2`, `T4-xz`. For each:
 Two different log families in separate config directories (different `source_key`) whose first records are identical. Backfill for one must not skip lines using the other's checkpoint. Assert that the aggregates equal the clean import for each family independently.
 
 ### T6 - upgrade_from_legacy_checkpoints_replays_without_double_count
-1. Build a store with the pre-change checkpoint schema (fixture: a copy of the current format).
-2. Run the upgraded binary `update`.
-3. Assert the schema change invalidates checkpoints and triggers a replay that clears aggregates first, so the result equals a clean import of the same log, not the sum.
+1. Build a store with legacy checkpoint rows and no stable prefix fields.
+2. Run the upgraded binary `update` and then exercise the documented recovery for
+   an unresolvable legacy compressed archive.
+3. Assert the result equals a clean import of the same log, not the sum, and
+   that recovery is required only for the legacy compressed case.
 
 ### T-non-unix - skipped_on_non_unix_platforms
 `#[cfg(not(unix))]` test that prints `rotation_boundary: skipped, inode identity unavailable on this platform` and passes. Exists so the skip is visible in test output.
@@ -131,10 +141,11 @@ Two different log families in separate config directories (different `source_key
 
 ## Test Count Summary
 
-| Module | Tests | Phase 1 status | Phase 2 status |
+| Module | Tests | Initial fixture | Current status |
 |---|---|---|---|
 | rotation_boundary.rs (unix) | T1, T2, T3 | pass | pass |
 | | T4-gz, T4-bz2, T4-xz | fail (pins defect) | pass |
-| | T5, T5b, T6 | not written (Phase 2) | pass |
+| | T5, T5c, T6, T7, T8, T9, lock-release, T10, T11, T12, T12b | added during implementation | pass |
+| stats-core unit tests | T5b source scoping and matching decisions | added during implementation | pass |
 | rotation_boundary.rs (non-unix) | skip notice | pass | pass |
-| **TOTAL** | **10** | | |
+| **TOTAL** | **17 Unix scenarios plus one non-Unix skip** | | |

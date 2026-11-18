@@ -26,13 +26,15 @@ The endpoint supports bounded line ranges, reads only a configured log beneath
 absent. CGI supports the equivalent `output=raw-log` request and checks
 `HTTP_AUTHORIZATION` against the same token.
 
-## Variant D: redacted plugin output
+## Variant D: renderer input
 
-An external renderer can receive structured events after redaction. The default
-redaction policy should hash or remove client IPs, identities, query strings,
-authorization-like headers, cookies, and token-shaped values. Raw values must
-never be passed to a renderer merely because it is configured.
+This project does not expose raw access-log lines to report renderers. External
+renderers receive the structured report model, not the raw event stream, and
+the raw-log redaction path is not a renderer extension point. Therefore Variant
+D is not an implemented raw-log export mode and must not be inferred from the
+presence of a report plugin.
 
-The implementation should begin with Variant A plus local Variant B. Variants C
-and D require an explicit authorization and redaction policy in configuration;
-they should not be inferred from the presence of a report plugin.
+The supported baseline is Variant A, with local Variant B and explicitly
+authenticated Variants C where configured. All raw-log paths use the shared
+bounded redaction implementation for client identity, query strings, and
+secret-shaped headers or parameters.

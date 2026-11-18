@@ -152,3 +152,30 @@ redacted records, limit requests to 10,000 lines, support optional line ranges,
 and read the configured log only when it is inside `DirData`.
 
 See [Operations](operations.md) for rotation, retention, backups, and migration.
+
+## Deployment topology
+
+```mermaid
+flowchart TB
+    bundle["Release bundle: stats, install.sh, units, logrotate template"] -->|deploy/install.sh| host
+    subgraph host["Server"]
+        timer["stats-update.timer: OnBootSec 2min, OnUnitActiveSec 5min, Persistent"]
+        service["stats-update.service: Type oneshot, User stats, ProtectSystem strict"]
+        cfg["/opt/stats/etc/awstats.example.test.conf"]
+        db[("/opt/stats/var/lib: SQLite store")]
+        site["HTML site, default /opt/stats/var/www"]
+        web["web server"]
+        log["access log: LogFile"]
+        logrotate["logrotate: /etc/logrotate.d/stats"]
+        frontends["stats-http or stats-cgi, read-only"]
+    end
+    timer -->|starts| service
+    service -->|reads| cfg
+    service -->|reads| log
+    service -->|writes| db
+    service -->|regenerates| site
+    web -->|writes| log
+    logrotate -->|prerotate and postrotate run update| service
+    logrotate -->|postrotate sends the reopen signal| web
+    frontends -->|reads| db
+```

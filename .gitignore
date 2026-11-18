@@ -5,6 +5,7 @@ target
 tasks/*
 .rules/*
 .idea/*
+.thoughts/*
 
 # Local credentials and generated databases
 .env

@@ -112,6 +112,29 @@ logrotate `postrotate` hook to send the server's reopen signal, before the updat
 runs (see the placeholder in `deploy/stats-logrotate`). Nginx, for example, reopens
 on `USR1`.
 
+The rotation hooks in the supplied template run in this order. Backfill is not
+part of the hooks; an operator runs it when the archive set is complete.
+
+```mermaid
+sequenceDiagram
+    participant LR as logrotate
+    participant Svc as stats-update.service
+    participant Web as web server
+    participant Log as access.log
+    participant Arc as access.log.1
+
+    LR->>Svc: prerotate: systemctl start --wait
+    Svc->>Svc: update reads the active log and commits
+    LR->>Log: rename to access.log.1
+    LR->>Log: create a new access.log
+    Note over Web,Arc: until the reopen signal, the server keeps writing to access.log.1
+    LR->>Web: postrotate: deployment-specific reopen signal
+    Web->>Log: reopen the new access.log
+    LR->>Svc: postrotate: systemctl start --wait
+    Svc->>Svc: update reads the new active log and commits
+    Note over LR,Arc: compress and delaycompress act on archives after rotation
+```
+
 ### Recovery for legacy compressed checkpoints
 
 Databases written before checkpoint matching was added have rows without the

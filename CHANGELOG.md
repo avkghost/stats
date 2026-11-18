@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
 
 - Rotations are counted correctly: a plain, gzip, bzip2, or xz archive that holds records already counted from the active log is no longer counted twice by `backfill`. Records written after the last update and before rotation (the unread tail) are counted once.
 - Unpartitioned `update` and `backfill` are atomic: a failure leaves the database as it was. `backfill` checks the whole set before writing and rejects a set with identical or contained overlapping files, with a non-zero exit.

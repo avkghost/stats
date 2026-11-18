@@ -80,12 +80,12 @@ flowchart TB
 
 | Component | Location | Role in the fixture |
 |---|---|---|
-| `update` / `update_inner` | `crates/stats-cli/src/main.rs:486`, `:784` | Normal update reads only the configured active path |
-| `backfill` / `discover_backfill_files` | `crates/stats-cli/src/main.rs:500`, `:544` | Reads rotations oldest-first, one `update_inner` per file |
-| Checkpoint lookups | `crates/stats-cli/src/main.rs:871-945`; `crates/stats-core/src/store.rs:440-516` | Identity, content, and prefix matching |
-| `file_identity` | `crates/stats-cli/src/main.rs:1170` | `dev:ino` on Unix |
+| `update` / atomic update path | `crates/stats-cli/src/main.rs`, `atomic_update.rs` | Normal update reads only the configured active path; unpartitioned writes are planned and applied atomically |
+| `backfill` / file discovery | `crates/stats-cli/src/main.rs`, `atomic_update.rs` | Discovers rotations oldest-first and applies the validated file set |
+| Checkpoint matching | `crates/stats-core/src/checkpoint_match.rs`, `prefix_hash.rs`, `source_key.rs` | Identity and decoded-prefix matching scoped to one source |
+| File identity | `crates/stats-cli/src/main.rs` | `dev:ino` on Unix; portable fallback elsewhere |
 | `StatsStore` read API | `../../crates/stats-core/src/store.rs` | Aggregate comparison only |
-| Checkpoint methods (`input_checkpoint_*`) | `crates/stats-core/src/store.rs:440-516` | Internal bookkeeping; used by the updater, not read by the fixture. Modified in Phase 2 |
+| Checkpoint and snapshot state | `../../crates/stats-core/src/store.rs` | Internal bookkeeping used by the updater, not read by the fixture |
 
 ## Module Dependency graph
 

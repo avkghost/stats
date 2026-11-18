@@ -3,10 +3,17 @@ date: 2026-11-18
 feature: rotation-boundary-contract
 service: crates/stats-cli
 design: ../README.md
-status: complete. Phases 1-5 implemented and committed in c119d87 (fixture in accd8be). Phase 3 documentation done. Known pre-existing environmental failures: the three native_report_failure tests (see README "Findings").
+status: historical implementation plan. Phases 1-5 are complete and merged on `master`; the rotation fix is `3be2492`, the fixture is `accd8be`, and the completion marker is `6b57c62`. The documentation relocation is `5ad095e`. Known pre-existing environmental failures were later fixed separately in `746ab2a`.
 ---
 
 # Code Plan: Rotation Boundary Contract - Phase 2
+
+This directory preserves the reviewed implementation plan and its phase gates.
+It is not the current API or operations reference. For current behaviour, use
+the [rotation contract](../README.md), [Operations](../../operations.md), and
+the [module guides](../../README.md#architecture-and-modules). File line
+references below describe the implementation at the time of the plan and may
+drift as the code evolves.
 
 ## Overview
 
@@ -107,13 +114,11 @@ Trade-off: each file is decoded twice (preflight and apply). Accepted for bounde
 Not applicable (anyhow messages). Message formats are specified in phase 04.
 
 ## Success criteria
-- [ ] Phases 01-05 implemented in order; each phase's unit tests pass
-- [ ] `cargo test -p stats-cli --test rotation_boundary` passes T1, T2, T3, T4-gz, T4-bz2, T4-xz, T5, T6, T7, T8, T9, T10, T11 (T5b is a stats-core unit test)
-- [ ] `cargo test --workspace` passes, including `migrates_old_schema_and_invalidates_checkpoint` (`store.rs:1072`)
-- [ ] Lock acquisition counted once per command (phase 03 test)
-- [ ] `migrate` still replays into partitions (regression test: existing `migration_backs_up_old_store_before_replaying_into_partitions`, `main.rs:2840`)
-- [ ] `cargo clippy --workspace` clean if CI runs it (check `../../../.github/workflows/ci.yml`)
-- [ ] `../../operations.md` corrected in design Phase 3 (decision K wording: additive, analyzer cannot remove events without event-level storage)
+- [x] Phases 01-05 implemented in order; each phase's unit tests pass
+- [x] Rotation boundary coverage includes T1-T12b and overlap, lock, and recovery cases; the current fixture has 17 scenarios.
+- [x] Workspace tests and the Rust 1.100 native-report fixture lookup pass after the separate harness fix in `746ab2a`.
+- [x] Lock acquisition is covered once per writing command and partitioned migration remains a separate path.
+- [x] `../../operations.md` documents additive replacement, complete-line ingestion, atomic unpartitioned writes, and recovery.
 
 ## Findings from planning
 
@@ -122,7 +127,7 @@ Not applicable (anyhow messages). Message formats are specified in phase 04.
 - **Limitation: legacy rows.** Rows written before checkpoint support (no stable prefix fields) cannot be matched against compressed archives. Such a backfill aborts with a message and needs the documented rebuild recovery (test T6). This is a permanent requirement for those databases, not a bug to fix.
 - **Limitation: lock cost.** The writer lock is held through preflight. Each archive is decoded twice (preflight and apply, plus one extra pass when a backfill has several files for overlap detection). Large archives block other writers for that time.
 - **Limitation: containment.** Overlap detection in one run covers both identical files and one file that begins with another. An archive that ends mid-line and is then continued by another file is not detected. Copy-without-truncate (decision G) is out of scope.
-- **F-3 (verified):** an in-place rewrite that keeps 100 records and appends 10 gives 110 (correct). Truncate-and-replace with 40 different records adds them on top (150). The docs claim a "safe aggregate replay" (`docs/operations.md:9-10`), which is incorrect. Decision K confirms the additive behaviour; the docs will be corrected.
+- **F-3 (verified and resolved):** an in-place rewrite that keeps 100 records and appends 10 gives 110. Truncate-and-replace with 40 different records adds them on top (150). The current operations documentation describes this as additive because the store keeps aggregates rather than event rows.
 - **F-4 (from code; not reproduced):** no writer lock existed. Addressed by decisions F and the dispatcher wiring.
 - **F-5 (verified by reading `store.rs:132-133`):** each event opens its own transaction; a multi-file backfill is not atomic. Addressed by phase 02 and 05.
 - **F-6 (verified by reading `store.rs:108-115`):** a schema bump clears aggregates and checkpoints on open. Phase 2 does not bump the schema.

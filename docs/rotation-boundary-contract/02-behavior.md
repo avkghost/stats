@@ -118,16 +118,16 @@ sequenceDiagram
     F->>DB: read totals
 ```
 
-Observed in the scratch run for `.gz` (research document): 280 pages and 34,590 bytes against 180 and 22,140 for the clean import, with `visits` unchanged at 180. `.bz2` and `.xz` use the same decode-then-match path (`main.rs:409-431`), so they are expected to show the same defect; T4-bz2 and T4-xz confirm this in Phase 1.
+Observed in the pre-fix scratch run for `.gz` (research document): 280 pages and 34,590 bytes against 180 and 22,140 for the clean import, with `visits` unchanged at 180. `.bz2` and `.xz` used the same decode-then-match path and showed the same defect. The current decoded-prefix matcher covers all three codecs, and T4-bz2 and T4-xz keep that behaviour under regression coverage.
 
-**Phase 2 target flow:** after the rotated file is decoded, its first `decoded_size` bytes are hashed and matched against the stored decoded-prefix checkpoint for the config hash. A unique match skips the stored line count and writes a checkpoint for the new identity. No match or an ambiguous match is diagnosed. See D-9 in `03-decisions.md`.
+**Current flow:** after the rotated file is decoded, its first `decoded_size` bytes are hashed and matched against stored decoded-prefix checkpoints for the same source. A unique match skips the stored line count and writes a checkpoint for the new identity. Ambiguous or unresolvable matches are diagnosed before any write. See D-9 in `03-decisions.md`.
 
 ## Additional Scenarios
 
 ### Repeated backfill
 - **Trigger:** backfill run twice with no file changes.
-- **Behaviour:** identity and content match; `skip_lines` equals the full line count (`crates/stats-cli/src/main.rs:931-937`). No change.
+- **Behaviour:** identity and content match; the full line count is already checkpointed, so the second backfill is a no-op. No change.
 
 ### Non-Unix platforms
 - **Trigger:** test run on a non-Unix target.
-- **Behaviour:** `file_identity` returns `"portable"` for every file (`main.rs:1170-1177`), so identity matching is not inode-based and the S1 expectations do not hold. The fixture is `#[cfg(unix)]` and is skipped elsewhere with a message.
+- **Behaviour:** identity matching is not inode-based on non-Unix platforms, so the inode-specific scenarios are skipped with an explicit test message.
