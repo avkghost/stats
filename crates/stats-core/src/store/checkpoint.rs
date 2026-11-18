@@ -1,5 +1,64 @@
-use super::{PrefixState, StoreError};
-use rusqlite::Connection;
+use super::{InputCheckpoint, PrefixState, StatsStore, StoreError};
+use rusqlite::{params, Connection, OptionalExtension};
+
+impl StatsStore {
+    pub fn input_checkpoint_by_identity(
+        &self,
+        identity: &str,
+        config_hash: &str,
+    ) -> Result<Option<InputCheckpoint>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(conn
+            .query_row(
+                "SELECT identity,path,config_hash,content_hash,size,lines FROM input_checkpoints WHERE identity=?1 AND config_hash=?2",
+                params![identity, config_hash],
+                checkpoint_row,
+            )
+            .optional()?)
+    }
+
+    pub fn input_checkpoint_by_content(
+        &self,
+        content_hash: &str,
+        config_hash: &str,
+    ) -> Result<Option<InputCheckpoint>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(conn
+            .query_row(
+                "SELECT identity,path,config_hash,content_hash,size,lines FROM input_checkpoints WHERE content_hash=?1 AND config_hash=?2 LIMIT 1",
+                params![content_hash, config_hash],
+                checkpoint_row,
+            )
+            .optional()?)
+    }
+
+    pub fn input_checkpoint_by_content_and_path(
+        &self,
+        content_hash: &str,
+        config_hash: &str,
+        path: &str,
+    ) -> Result<Option<InputCheckpoint>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(conn
+            .query_row(
+                "SELECT identity,path,config_hash,content_hash,size,lines FROM input_checkpoints WHERE content_hash=?1 AND config_hash=?2 AND path=?3 LIMIT 1",
+                params![content_hash, config_hash, path],
+                checkpoint_row,
+            )
+            .optional()?)
+    }
+}
+
+fn checkpoint_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<InputCheckpoint> {
+    Ok(InputCheckpoint {
+        identity: row.get(0)?,
+        path: row.get(1)?,
+        config_hash: row.get(2)?,
+        content_hash: row.get(3)?,
+        size: row.get::<_, i64>(4)? as u64,
+        lines: row.get::<_, i64>(5)? as u64,
+    })
+}
 
 pub(super) fn prefix_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrefixState> {
     Ok(PrefixState {
