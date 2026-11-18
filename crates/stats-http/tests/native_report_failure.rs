@@ -49,7 +49,50 @@ fn plugin_library() -> PathBuf {
         .expect("test-fixture report plugin shared library")
 }
 
+/// The native worker is a binary of `stats-render`, which cargo does not build for another
+/// package's tests. Build it here with the same profile as this test so the frontend can find it.
+fn ensure_report_worker() {
+    let mut command = std::process::Command::new(env!("CARGO"));
+    command.args([
+        "build",
+        "--quiet",
+        "-p",
+        "stats-render",
+        "--bin",
+        "stats-report-worker",
+    ]);
+    if !cfg!(debug_assertions) {
+        command.arg("--release");
+    }
+    let status = command
+        .status()
+        .expect("run cargo to build stats-report-worker");
+    assert!(status.success(), "building stats-report-worker failed");
+
+    // Integration-test executables live in target/<profile>/deps, while `cargo build --bin`
+    // places this worker in target/<profile>. Mirror the production “next to the frontend”
+    // layout beside the test executable so a clean CI workspace has the required binary.
+    let profile = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target")
+        .join(if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        });
+    let source = profile.join(format!(
+        "stats-report-worker{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    let destination = std::env::current_exe()
+        .expect("locate HTTP integration test executable")
+        .parent()
+        .expect("integration test executable directory")
+        .join(source.file_name().expect("worker file name"));
+    fs::copy(&source, &destination).expect("place stats-report-worker beside test executable");
+}
+
 fn setup() -> (PathBuf, PathBuf, PathBuf, u16) {
+    ensure_report_worker();
     let root =
         std::env::temp_dir().join(format!("stats-http-native-failure-{}", std::process::id()));
     let _ = fs::remove_dir_all(&root);

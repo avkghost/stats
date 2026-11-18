@@ -21,6 +21,7 @@ behaviour to the implementation.
 
 ## User and operator guides
 
+- [Development](development.md) — local hooks and pre-commit checks.
 - [Getting started](getting-started.md)
 - [Configuration](configuration.md)
 - [Operations](operations.md)
