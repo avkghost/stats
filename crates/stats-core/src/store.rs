@@ -10,6 +10,7 @@ mod aggregate;
 mod checkpoint;
 mod classify;
 mod maintenance;
+mod metadata;
 mod schema;
 mod session;
 use aggregate::{bump, decrement};
@@ -665,35 +666,6 @@ impl StatsStore {
         conn.execute("INSERT INTO diagnostics(reason,count) VALUES(?1,1) ON CONFLICT(reason) DO UPDATE SET count=count+1", params![key])?;
         Ok(())
     }
-    pub fn meta(&self, key: &str) -> Result<Option<String>, StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
-        Ok(conn
-            .query_row("SELECT value FROM meta WHERE key=?1", [key], |r| r.get(0))
-            .optional()?)
-    }
-    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
-        Self::set_meta_on(&conn, key, value)
-    }
-
-    fn set_meta_on(conn: &Connection, key: &str, value: &str) -> Result<(), StoreError> {
-        conn.execute("INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![key, value])?;
-        Ok(())
-    }
-    pub fn reset_checkpoint(&self) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
-        Self::reset_checkpoint_on(&conn)
-    }
-
-    fn reset_checkpoint_on(conn: &Connection) -> Result<(), StoreError> {
-        conn.execute(
-            "DELETE FROM meta WHERE key LIKE 'input_%' OR key LIKE 'config_%'",
-            [],
-        )?;
-        conn.execute("DELETE FROM input_checkpoints", [])?;
-        conn.execute("DELETE FROM input_prefix_snapshots", [])?;
-        Ok(())
-    }
     pub fn input_checkpoint_by_identity(
         &self,
         identity: &str,
@@ -1005,14 +977,6 @@ impl Batch<'_, '_> {
         Ok(())
     }
 
-    pub fn reset_checkpoint(&self) -> Result<(), StoreError> {
-        StatsStore::reset_checkpoint_on(self.tx)
-    }
-
-    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError> {
-        StatsStore::set_meta_on(self.tx, key, value)
-    }
-
     pub fn diagnostic(&self, reason: &str) -> Result<(), StoreError> {
         self.diagnostic_with_cardinality_limit(reason, DEFAULT_CARDINALITY_LIMIT)
     }
@@ -1032,10 +996,6 @@ impl Batch<'_, '_> {
         )?;
         self.tx.execute("INSERT INTO diagnostics(reason,count) VALUES(?1,1) ON CONFLICT(reason) DO UPDATE SET count=count+1", params![key])?;
         Ok(())
-    }
-
-    pub fn meta(&self, key: &str) -> Result<Option<String>, StoreError> {
-        StatsStore::meta_on(self.tx, key)
     }
 
     pub fn input_checkpoint_by_identity(
@@ -1205,14 +1165,6 @@ impl StatsStore {
             ],
         )?;
         Ok(())
-    }
-
-    fn meta_on(conn: &Connection, key: &str) -> Result<Option<String>, StoreError> {
-        Ok(conn
-            .query_row("SELECT value FROM meta WHERE key=?1", [key], |row| {
-                row.get(0)
-            })
-            .optional()?)
     }
 
     fn input_checkpoint_by_identity_on(
