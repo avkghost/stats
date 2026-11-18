@@ -304,6 +304,39 @@ pub(super) fn record_client_aggregates(
     Ok(())
 }
 
+pub(super) fn record_calendar_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    is_page: bool,
+    hour: String,
+    date: String,
+    month: String,
+    weekday: String,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    tx.execute(
+        "INSERT INTO hours(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![hour],
+    )?;
+    tx.execute(
+        "INSERT INTO dates(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![date],
+    )?;
+    tx.execute(
+        "INSERT INTO months(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![month],
+    )?;
+    tx.execute(
+        "INSERT INTO weekdays(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![weekday],
+    )?;
+    tx.execute(
+        "INSERT INTO daily(key,hits,bytes,pages,files,visits) VALUES(?1,1,?2,?3,?4,0) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes, pages=pages+excluded.pages, files=files+excluded.files",
+        params![date, event.bytes as i64, is_page as i64, (!is_page) as i64],
+    )?;
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"

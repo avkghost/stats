@@ -15,8 +15,8 @@ mod report;
 mod schema;
 mod session;
 use aggregate::{
-    bump, decrement, record_client_aggregates, record_http_aggregates, record_referer_aggregates,
-    record_security_aggregates, record_user_url_aggregates,
+    bump, decrement, record_calendar_aggregates, record_client_aggregates, record_http_aggregates,
+    record_referer_aggregates, record_security_aggregates, record_user_url_aggregates,
 };
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
@@ -305,23 +305,7 @@ impl StatsStore {
             robot_name,
             limit,
         )?;
-        tx.execute(
-            "INSERT INTO hours(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![hour],
-        )?;
-        tx.execute(
-            "INSERT INTO dates(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![date],
-        )?;
-        tx.execute(
-            "INSERT INTO months(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![month],
-        )?;
-        tx.execute("INSERT INTO weekdays(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![weekday])?;
-        tx.execute(
-            "INSERT INTO daily(key,hits,bytes,pages,files,visits) VALUES(?1,1,?2,?3,?4,0) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes, pages=pages+excluded.pages, files=files+excluded.files",
-            params![date, event.bytes as i64, is_page as i64, (!is_page) as i64],
-        )?;
+        record_calendar_aggregates(batch, event, is_page, hour, date.clone(), month, weekday)?;
         let visit_key = stable_key(&[
             &event.client_ip,
             &date,
