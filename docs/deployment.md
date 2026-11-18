@@ -84,13 +84,21 @@ aggregates and replays input rather than restoring the previous database state.
 
 ## Cron and logrotate
 
-A safe logrotate `postrotate` hook can run:
+The supplied logrotate template is systemd-backed. It runs the update service
+before rotation, then expects the web server to reopen its file, and runs the
+update service again after rotation. The effective order is:
 
 ```text
-/opt/stats/bin/stats update --config /opt/stats/etc/awstats.example.test.conf
+prerotate:
+    systemctl start --wait stats-update.service
+rotation happens here
+postrotate:
+    send the deployment-specific reopen signal to the web server
+    systemctl start --wait stats-update.service
 ```
 
-An equivalent timer-driven cron entry is:
+For a deployment that does not use the supplied systemd units, an equivalent
+cron entry is:
 
 ```text
 */5 * * * * stats /opt/stats/bin/stats update --config /opt/stats/etc/awstats.example.test.conf >/var/log/stats-update.log 2>&1
