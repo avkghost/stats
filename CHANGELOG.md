@@ -6,6 +6,7 @@
 - Filter validation errors identify the configuration line that contains the invalid pattern.
 - CSV exports preserve the literal `-` placeholder while neutralising other formula-like values.
 - Added a deterministic store characterization fixture covering aggregate projections.
+- Native worker tests now verify that the raw-log bearer token is not inherited by plugins.
 
 ## 0.1.11
 

@@ -53,6 +53,11 @@ fn fixed_fixture_has_stable_store_projection() {
         ]
     );
     assert_eq!(store.top("methods", 10).unwrap(), vec![("GET".into(), 3)]);
+    assert_eq!(store.top("statuses", 10).unwrap(), vec![("200".into(), 3)]);
+    assert_eq!(
+        store.top("status_classes", 10).unwrap(),
+        vec![("2xx".into(), 3)]
+    );
     assert_eq!(
         store.top("file_types", 10).unwrap(),
         vec![("(none)".into(), 2), (".css".into(), 1)]
@@ -60,6 +65,27 @@ fn fixed_fixture_has_stable_store_projection() {
     assert_eq!(
         store.top("virtual_hosts", 10).unwrap(),
         vec![("www.example.test".into(), 3)]
+    );
+    assert_eq!(
+        store.top("user_agents", 10).unwrap(),
+        vec![("golden-agent".into(), 3)]
+    );
+    assert_eq!(
+        store.top("referers", 10).unwrap(),
+        vec![("https://example.test/".into(), 3)]
+    );
+    assert_eq!(
+        store.top("referrer_domains", 10).unwrap(),
+        vec![("example.test".into(), 3)]
+    );
+    assert_eq!(
+        store.top("browsers", 10).unwrap(),
+        vec![("Other".into(), 3)]
+    );
+    assert_eq!(store.top("oses", 10).unwrap(), vec![("Other".into(), 3)]);
+    assert_eq!(
+        store.top("request_times", 10).unwrap(),
+        vec![("100-500ms".into(), 3)]
     );
 
     drop(store);
