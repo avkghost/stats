@@ -1,5 +1,4 @@
-use crate::{AccessEvent, FilterConfig};
-use regex::Regex;
+use crate::{AccessEvent, FilterConfig, FilterPattern};
 
 pub fn accepts(event: &AccessEvent, filters: &FilterConfig) -> bool {
     let host = &event.client_ip;
@@ -37,19 +36,8 @@ pub fn is_page(event: &AccessEvent, filters: &FilterConfig) -> bool {
     )
 }
 
-fn matches_any(value: &str, patterns: &[String]) -> bool {
-    patterns.iter().any(|pattern| {
-        if let Some(regex) = pattern
-            .strip_prefix("REGEX[")
-            .and_then(|v| v.strip_suffix(']'))
-        {
-            Regex::new(regex)
-                .map(|re| re.is_match(value))
-                .unwrap_or(false)
-        } else {
-            value.contains(pattern)
-        }
-    })
+fn matches_any(value: &str, patterns: &[FilterPattern]) -> bool {
+    patterns.iter().any(|pattern| pattern.is_match(value))
 }
 
 #[cfg(test)]
@@ -84,8 +72,8 @@ mod tests {
     #[test]
     fn applies_skip_and_only_filters() {
         let filters = FilterConfig {
-            skip_files: vec!["/private".into()],
-            only_user_agents: vec!["Mozilla".into()],
+            skip_files: vec![FilterPattern::new("/private").unwrap()],
+            only_user_agents: vec![FilterPattern::new("Mozilla").unwrap()],
             ..Default::default()
         };
         assert!(!accepts(&event("/private", "Mozilla"), &filters));
@@ -96,7 +84,7 @@ mod tests {
     #[test]
     fn regex_patterns_in_skip_and_only_filters_match_by_regex() {
         let skip = FilterConfig {
-            skip_files: vec![r"REGEX[\.(css|js)$]".into()],
+            skip_files: vec![FilterPattern::new(r"REGEX[\.(css|js)$]").unwrap()],
             ..Default::default()
         };
         assert!(!accepts(&event("/static/app.css", "Mozilla"), &skip));
@@ -104,7 +92,7 @@ mod tests {
         assert!(accepts(&event("/cssdocs/page", "Mozilla"), &skip));
 
         let only = FilterConfig {
-            only_user_agents: vec!["REGEX[^(Googlebot|bingbot)]".into()],
+            only_user_agents: vec![FilterPattern::new("REGEX[^(Googlebot|bingbot)]").unwrap()],
             ..Default::default()
         };
         assert!(accepts(&event("/", "Googlebot/2.1"), &only));
@@ -114,7 +102,7 @@ mod tests {
     #[test]
     fn regex_patterns_in_not_page_files_exclude_assets_from_pages() {
         let filters = FilterConfig {
-            not_page_files: vec![r"REGEX[\.(png|jpg)$]".into()],
+            not_page_files: vec![FilterPattern::new(r"REGEX[\.(png|jpg)$]").unwrap()],
             ..Default::default()
         };
         assert!(!is_page(&event("/images/logo.png", "Mozilla"), &filters));
@@ -124,7 +112,7 @@ mod tests {
     #[test]
     fn substring_patterns_are_not_treated_as_regex() {
         let filters = FilterConfig {
-            skip_files: vec!["a.b".into()],
+            skip_files: vec![FilterPattern::new("a.b").unwrap()],
             ..Default::default()
         };
         assert!(!accepts(&event("/a.b", "Mozilla"), &filters));
@@ -136,7 +124,10 @@ mod tests {
         let mut allowed = event("/public", "Mozilla");
         allowed.virtual_host = Some("www.example.test".into());
         let filters = FilterConfig {
-            allowed_virtual_hosts: vec!["example.test".into(), "www.example.test".into()],
+            allowed_virtual_hosts: vec![
+                FilterPattern::new("example.test").unwrap(),
+                FilterPattern::new("www.example.test").unwrap(),
+            ],
             ..Default::default()
         };
         assert!(accepts(&allowed, &filters));

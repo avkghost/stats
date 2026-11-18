@@ -68,7 +68,8 @@ fn scale_for_display(raw: f64, base: f64, max_unit: usize) -> (f64, usize, usize
 
 pub use checkpoint_match::{decide, AbortReason, Decision, StateKind, StateRef};
 pub use config::{
-    Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig, AWSTATS_PLUGIN_INVENTORY,
+    Config, ConfigError, DatabasePeriod, FilterConfig, FilterPattern, PluginConfig,
+    AWSTATS_PLUGIN_INVENTORY,
 };
 pub use filesystem::{FileSandbox, FileSandboxError};
 pub use filter::{accepts, is_page};

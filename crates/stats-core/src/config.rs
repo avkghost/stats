@@ -55,15 +55,50 @@ pub const AWSTATS_PLUGIN_INVENTORY: &[&str] = &[
 ];
 
 #[derive(Debug, Clone)]
+pub struct FilterPattern {
+    source: String,
+    regex: Option<Regex>,
+}
+
+impl FilterPattern {
+    pub fn new(source: impl Into<String>) -> Result<Self, regex::Error> {
+        let source = source.into();
+        let regex = source
+            .strip_prefix("REGEX[")
+            .and_then(|value| value.strip_suffix(']'))
+            .map(Regex::new)
+            .transpose()?;
+        Ok(Self { source, regex })
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.source
+    }
+
+    pub(crate) fn is_match(&self, value: &str) -> bool {
+        self.regex.as_ref().map_or_else(
+            || value.contains(&self.source),
+            |regex| regex.is_match(value),
+        )
+    }
+}
+
+impl PartialEq<str> for FilterPattern {
+    fn eq(&self, other: &str) -> bool {
+        self.source == other
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FilterConfig {
-    pub allowed_virtual_hosts: Vec<String>,
-    pub skip_hosts: Vec<String>,
-    pub only_hosts: Vec<String>,
-    pub skip_files: Vec<String>,
-    pub only_files: Vec<String>,
-    pub skip_user_agents: Vec<String>,
-    pub only_user_agents: Vec<String>,
-    pub not_page_files: Vec<String>,
+    pub allowed_virtual_hosts: Vec<FilterPattern>,
+    pub skip_hosts: Vec<FilterPattern>,
+    pub only_hosts: Vec<FilterPattern>,
+    pub skip_files: Vec<FilterPattern>,
+    pub only_files: Vec<FilterPattern>,
+    pub skip_user_agents: Vec<FilterPattern>,
+    pub only_user_agents: Vec<FilterPattern>,
+    pub not_page_files: Vec<FilterPattern>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +124,7 @@ impl Default for FilterConfig {
                 ".woff2", ".xml", ".zip",
             ]
             .into_iter()
-            .map(str::to_owned)
+            .map(|value| FilterPattern::new(value).expect("default filter pattern is valid"))
             .collect(),
         }
     }
@@ -211,11 +246,22 @@ impl Config {
                     message: format!("missing {key}"),
                 })
         };
-        let list = |key: &str| -> Vec<String> {
+        let list = |key: &str| -> Result<Vec<FilterPattern>, ConfigError> {
             values
                 .get(key)
-                .map(|v| v.split_whitespace().map(str::to_owned).collect())
-                .unwrap_or_default()
+                .map(|value| {
+                    value
+                        .split_whitespace()
+                        .map(|pattern| {
+                            FilterPattern::new(pattern).map_err(|error| ConfigError::Invalid {
+                                line: 0,
+                                message: format!("invalid {key} pattern {pattern:?}: {error}"),
+                            })
+                        })
+                        .collect()
+                })
+                .transpose()
+                .map(|patterns| patterns.unwrap_or_default())
         };
         let log_format = required("LogFormat")?;
         let known = [
@@ -384,16 +430,20 @@ impl Config {
                 .unwrap_or_default(),
             plugins,
             filters: FilterConfig {
-                allowed_virtual_hosts,
-                skip_hosts: list("SkipHosts"),
-                only_hosts: list("OnlyHosts"),
-                skip_files: list("SkipFiles"),
-                only_files: list("OnlyFiles"),
-                skip_user_agents: list("SkipUserAgents"),
-                only_user_agents: list("OnlyUserAgents"),
+                allowed_virtual_hosts: allowed_virtual_hosts
+                    .into_iter()
+                    .map(|pattern| FilterPattern::new(pattern).expect("host alias is valid"))
+                    .collect(),
+                skip_hosts: list("SkipHosts")?,
+                only_hosts: list("OnlyHosts")?,
+                skip_files: list("SkipFiles")?,
+                only_files: list("OnlyFiles")?,
+                skip_user_agents: list("SkipUserAgents")?,
+                only_user_agents: list("OnlyUserAgents")?,
                 not_page_files: values
                     .get("NotPageList")
                     .map(|_| list("NotPageList"))
+                    .transpose()?
                     .unwrap_or_else(|| FilterConfig::default().not_page_files),
             },
             cardinality_limit,

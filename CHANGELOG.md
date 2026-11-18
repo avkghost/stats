@@ -3,6 +3,7 @@
 ## Unreleased
 
 - HTTP and CGI return 400 for an unsupported output format, whether or not a configuration is present, and 404 for an unknown HTML section.
+- Filter regexes are compiled once while loading the configuration instead of being recompiled for every access event.
 - The HTML Performance page lists request-time buckets from fastest to slowest, hours from 00 to 23, and status codes by hit count, with numeric-code order as the tie-breaker. Other pages keep their order.
 
 ## 0.1.13
