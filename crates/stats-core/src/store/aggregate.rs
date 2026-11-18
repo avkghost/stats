@@ -99,6 +99,62 @@ pub(super) fn record_http_aggregates(
     Ok(())
 }
 
+pub(super) fn record_user_url_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    limit: usize,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    if let Some(user) = event
+        .user
+        .as_deref()
+        .filter(|user| !user.is_empty() && *user != "-")
+    {
+        let user = super::capped_key(tx, &batch.cardinality_counts, "users", "key", user, limit)?;
+        tx.execute(
+            "INSERT INTO users(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![user],
+        )?;
+    }
+    let url_key = super::capped_key(
+        tx,
+        &batch.cardinality_counts,
+        "urls",
+        "key",
+        event.url.as_deref().unwrap_or("UNKNOWN"),
+        limit,
+    )?;
+    tx.execute(
+        "INSERT INTO urls(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![url_key],
+    )?;
+    let bandwidth_key = super::capped_key(
+        tx,
+        &batch.cardinality_counts,
+        "url_bandwidth",
+        "key",
+        event.url.as_deref().unwrap_or("UNKNOWN"),
+        limit,
+    )?;
+    tx.execute(
+        "INSERT INTO url_bandwidth(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes",
+        params![bandwidth_key, event.bytes as i64],
+    )?;
+    let user_agent_key = super::capped_key(
+        tx,
+        &batch.cardinality_counts,
+        "user_agents",
+        "key",
+        event.user_agent.as_deref().unwrap_or("UNKNOWN"),
+        limit,
+    )?;
+    tx.execute(
+        "INSERT INTO user_agents(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![user_agent_key],
+    )?;
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"

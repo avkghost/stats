@@ -14,7 +14,7 @@ mod metadata;
 mod report;
 mod schema;
 mod session;
-use aggregate::{bump, decrement, record_http_aggregates};
+use aggregate::{bump, decrement, record_http_aggregates, record_user_url_aggregates};
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
 use classify::decode_query;
@@ -290,50 +290,7 @@ impl StatsStore {
         let month = event.timestamp.format("%Y-%m").to_string();
         let weekday = event.timestamp.format("%A").to_string();
         record_http_aggregates(batch, event, is_page, limit)?;
-        if let Some(user) = event
-            .user
-            .as_deref()
-            .filter(|user| !user.is_empty() && *user != "-")
-        {
-            let user = capped_key(tx, &batch.cardinality_counts, "users", "key", user, limit)?;
-            tx.execute(
-                "INSERT INTO users(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-                params![user],
-            )?;
-        }
-        let url_key = capped_key(
-            tx,
-            &batch.cardinality_counts,
-            "urls",
-            "key",
-            event.url.as_deref().unwrap_or("UNKNOWN"),
-            limit,
-        )?;
-        tx.execute(
-            "INSERT INTO urls(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![url_key],
-        )?;
-        let bandwidth_key = capped_key(
-            tx,
-            &batch.cardinality_counts,
-            "url_bandwidth",
-            "key",
-            event.url.as_deref().unwrap_or("UNKNOWN"),
-            limit,
-        )?;
-        tx.execute(
-            "INSERT INTO url_bandwidth(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes",
-            params![bandwidth_key, event.bytes as i64],
-        )?;
-        let user_agent_key = capped_key(
-            tx,
-            &batch.cardinality_counts,
-            "user_agents",
-            "key",
-            event.user_agent.as_deref().unwrap_or("UNKNOWN"),
-            limit,
-        )?;
-        tx.execute("INSERT INTO user_agents(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![user_agent_key])?;
+        record_user_url_aggregates(batch, event, limit)?;
         if !event.referer_excluded {
             let referer_key = capped_key(
                 tx,
