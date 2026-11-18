@@ -250,3 +250,93 @@ fn render_rows(
         .collect::<Vec<_>>();
     frame.render_widget(List::new(items).block(Block::bordered().title(title)), area);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{draw, View};
+    use ratatui::{backend::TestBackend, Terminal};
+    use stats_core::{Report, ReportMetadata};
+    use std::{path::Path, time::Duration};
+
+    fn empty_report() -> Report {
+        Report {
+            metadata: ReportMetadata {
+                schema_version: Some("13".into()),
+                input_path: None,
+                input_size: None,
+                input_lines: None,
+                config_path: None,
+                config_hash: None,
+                approximations: Vec::new(),
+            },
+            hits: 1,
+            bytes: 1024,
+            pages: 1,
+            files: 0,
+            visits: 1,
+            unique_visits: 1,
+            countries: Vec::new(),
+            regions: Vec::new(),
+            cities: Vec::new(),
+            asns: Vec::new(),
+            organizations: Vec::new(),
+            hostnames: Vec::new(),
+            statuses: Vec::new(),
+            status_classes: Vec::new(),
+            errors: Vec::new(),
+            methods: Vec::new(),
+            method_anomalies: Vec::new(),
+            urls: Vec::new(),
+            not_found: Vec::new(),
+            bandwidth_urls: Vec::new(),
+            daily: Vec::new(),
+            users: Vec::new(),
+            user_agents: Vec::new(),
+            referers: Vec::new(),
+            referrer_domains: Vec::new(),
+            referer_spam: Vec::new(),
+            scanners: Vec::new(),
+            file_types: Vec::new(),
+            browsers: Vec::new(),
+            oses: Vec::new(),
+            robots: Vec::new(),
+            request_times: Vec::new(),
+            virtual_hosts: Vec::new(),
+            entry_pages: Vec::new(),
+            exit_pages: Vec::new(),
+            search_engines: Vec::new(),
+            keyphrases: Vec::new(),
+            hours: Vec::new(),
+            dates: Vec::new(),
+            months: Vec::new(),
+            weekdays: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn renders_overview_with_test_backend() {
+        let backend = TestBackend::new(100, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let report = empty_report();
+        terminal
+            .draw(|frame| {
+                draw(
+                    frame,
+                    &report,
+                    Path::new("access.log"),
+                    Duration::from_secs(5),
+                    View::Overview,
+                )
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rendered = buffer
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(rendered.contains("Stats"));
+        assert!(rendered.contains("Top URLs"));
+    }
+}
