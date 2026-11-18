@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- The Geography page omits the Virtual hosts section when the log format records no virtual host (`%virtualname`).
+## 0.1.15
+
+- Completed the `stats-core` store extraction: aggregate recording, report queries, checkpoints, metadata, and maintenance operations are separated into focused modules without changing the storage contract.
+- Added golden coverage across all store dimensions and retained the full rotation, frontend, plugin, and GeoIP error-path test coverage.
+
 ## 0.1.14
 
 - HTTP and CGI return 400 for an unsupported output format, whether or not a configuration is present, and 404 for an unknown HTML section.

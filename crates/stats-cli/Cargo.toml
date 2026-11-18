@@ -1,6 +1,6 @@
 [package]
 name = "stats-cli"
-version = "0.1.14"
+version = "0.1.15"
 description = "AWStats-style Rust web log analyzer CLI"
 edition.workspace = true
 license.workspace = true
