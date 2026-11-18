@@ -71,7 +71,10 @@ for bundle_dir in "${core_dir}" "${http_dir}" "${cgi_dir}" "${plugins_dir}"; do
     bundle_name=$(basename "${bundle_dir}")
     archive="${output_dir}/${bundle_name}.tar.gz"
     tar -C "${staging_dir}" -czf "${archive}" "${bundle_name}"
-    sha256sum "${archive}" >"${archive}.sha256"
+    # Keep the checksum file relocatable: CI, release uploads, and users verify
+    # it from the directory containing the archive rather than from this
+    # checkout's absolute path.
+    (cd "${output_dir}" && sha256sum "$(basename "${archive}")") >"${archive}.sha256"
     echo "created ${archive}"
     echo "created ${archive}.sha256"
 done
