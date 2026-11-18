@@ -69,6 +69,86 @@ impl Batch<'_, '_> {
     pub fn set_input_checkpoint(&self, checkpoint: &InputCheckpoint) -> Result<(), StoreError> {
         StatsStore::set_input_checkpoint_on(self.tx, checkpoint)
     }
+
+    pub fn set_prefix_state(&self, state: &PrefixState) -> Result<(), StoreError> {
+        StatsStore::set_prefix_state_on(self.tx, state)
+    }
+
+    pub fn snapshot_prefix(&self, state: &PrefixState, captured_at: i64) -> Result<(), StoreError> {
+        StatsStore::snapshot_prefix_on(self.tx, state, captured_at)
+    }
+
+    pub fn delete_checkpoint(&self, identity: &str) -> Result<(), StoreError> {
+        StatsStore::delete_checkpoint_on(self.tx, identity)
+    }
+
+    pub fn prefix_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        StatsStore::prefix_states_on(self.tx, source_key, config_hash)
+    }
+
+    pub fn snapshot_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        StatsStore::snapshot_states_on(self.tx, source_key, config_hash)
+    }
+
+    pub fn legacy_checkpoint_count(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<u64, StoreError> {
+        StatsStore::legacy_checkpoint_count_on(self.tx, source_key, config_hash)
+    }
+}
+
+impl StatsStore {
+    pub fn set_prefix_state(&self, state: &PrefixState) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::set_prefix_state_on(&conn, state)
+    }
+
+    pub fn prefix_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::prefix_states_on(&conn, source_key, config_hash)
+    }
+
+    pub fn snapshot_states(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<Vec<PrefixState>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::snapshot_states_on(&conn, source_key, config_hash)
+    }
+
+    pub fn legacy_checkpoint_count(
+        &self,
+        source_key: &str,
+        config_hash: &str,
+    ) -> Result<u64, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::legacy_checkpoint_count_on(&conn, source_key, config_hash)
+    }
+
+    pub fn snapshot_prefix(&self, state: &PrefixState, captured_at: i64) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::snapshot_prefix_on(&conn, state, captured_at)
+    }
+
+    pub fn delete_checkpoint(&self, identity: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
+        Self::delete_checkpoint_on(&conn, identity)
+    }
 }
 
 fn checkpoint_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<InputCheckpoint> {
