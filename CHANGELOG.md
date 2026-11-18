@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No changes yet.
+- Added a repeatable manual benchmark for `CardinalityLimit` and documented its overhead, reserved `other` bucket, and behavior for existing data.
 
 ## 0.1.12
 

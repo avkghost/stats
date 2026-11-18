@@ -1,14 +1,17 @@
 use stats_core::{AccessEvent, AccessTimestamp, GeoInfo, StatsStore};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+static NEXT_DATABASE: AtomicU64 = AtomicU64::new(0);
 
 fn database() -> PathBuf {
     let directory = std::env::temp_dir().join(format!(
         "stats-core-store-golden-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        NEXT_DATABASE.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = fs::remove_dir_all(&directory);
     fs::create_dir_all(&directory).unwrap();
