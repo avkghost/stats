@@ -2010,7 +2010,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stats-cgi"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "stats-core",
@@ -2020,14 +2020,13 @@ dependencies = [
 
 [[package]]
 name = "stats-cli"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "bzip2",
  "clap",
  "flate2",
  "hickory-resolver",
- "jiff",
  "libc",
  "notify",
  "rusqlite",
@@ -2045,7 +2044,7 @@ dependencies = [
 
 [[package]]
 name = "stats-core"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "bzip2",
@@ -2063,36 +2062,32 @@ dependencies = [
 
 [[package]]
 name = "stats-http"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "axum",
- "bzip2",
  "clap",
- "flate2",
- "regex",
  "serde",
  "stats-core",
  "stats-render",
  "stats-report-json",
  "tokio",
- "xz2",
 ]
 
 [[package]]
 name = "stats-plugin-api"
-version = "0.1.10"
+version = "0.1.11"
 
 [[package]]
 name = "stats-plugin-example"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "stats-plugin-api",
 ]
 
 [[package]]
 name = "stats-plugin-host"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "libc",
  "libloading",
@@ -2103,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "stats-render"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -2114,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "stats-report-csv"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "serde_json",
  "stats-plugin-api",
@@ -2122,7 +2117,7 @@ dependencies = [
 
 [[package]]
 name = "stats-report-html"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "serde_json",
  "stats-core",
@@ -2132,14 +2127,14 @@ dependencies = [
 
 [[package]]
 name = "stats-report-json"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "stats-plugin-api",
 ]
 
 [[package]]
 name = "stats-tui"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "anyhow",
  "ratatui",

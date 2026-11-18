@@ -5,6 +5,11 @@
 - Relative `DirOutput` paths are resolved from the configuration file directory.
 - Installer smoke tests now run from the core release archive, and release validation reuses the CI workflow.
 - Logrotate renders the configured `STATS_GROUP` instead of assuming the `stats` group.
+- HTTP and CGI frontends return client, unsupported-feature, and server failures with distinct status codes while keeping response bodies generic.
+- CSV exports neutralize spreadsheet formula prefixes and include host and referer-spam dimensions.
+- Filter regular expressions are validated when configuration is loaded.
+- Store internals now separate schema, classification, aggregate, checkpoint, and session concerns; aggregate updates reuse cached SQLite statements.
+- Added regression coverage for TUI rendering through ratatui's test backend and retained full rotation-boundary coverage.
 
 ## 0.1.10
 

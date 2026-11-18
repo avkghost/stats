@@ -1,6 +1,6 @@
 [package]
 name = "stats-report-csv"
-version = "0.1.10"
+version = "0.1.11"
 description = "External CSV report renderer for the stats analyzer"
 edition.workspace = true
 license.workspace = true

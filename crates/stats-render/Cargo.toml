@@ -1,6 +1,6 @@
 [package]
 name = "stats-render"
-version = "0.1.10"
+version = "0.1.11"
 description = "Reusable AWStats-style report renderers"
 edition.workspace = true
 license.workspace = true
