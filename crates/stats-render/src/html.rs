@@ -170,6 +170,49 @@ fn metric_text(label: &str, value: String) -> String {
     )
 }
 
+/// Copies rows into the requested order. The store returns rows by hits, so the performance page
+/// reorders them here; other pages keep the store order.
+fn ordered_rows(
+    rows: &[ReportRow],
+    compare: impl Fn(&ReportRow, &ReportRow) -> std::cmp::Ordering,
+) -> Vec<ReportRow> {
+    let mut ordered: Vec<ReportRow> = rows
+        .iter()
+        .map(|row| ReportRow {
+            key: row.key.clone(),
+            hits: row.hits,
+        })
+        .collect();
+    ordered.sort_by(compare);
+    ordered
+}
+
+/// Compares two keys numerically, ascending or descending. Keys that are not numbers always sort
+/// after the numeric ones, so a label such as "unknown" never lands between hours or codes.
+fn compare_numeric(a: &str, b: &str, descending: bool) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (a.parse::<u64>().ok(), b.parse::<u64>().ok()) {
+        (Some(x), Some(y)) => {
+            if descending {
+                y.cmp(&x)
+            } else {
+                x.cmp(&y)
+            }
+        }
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+/// Request-time buckets from the fastest to the slowest. Unknown labels sort last.
+fn request_time_rank(key: &str) -> usize {
+    ["<10ms", "10-100ms", "100-500ms", "500ms-1s", "1-5s", ">=5s"]
+        .iter()
+        .position(|bucket| *bucket == key)
+        .unwrap_or(usize::MAX)
+}
+
 fn table_limited(rows: &[ReportRow], limit: usize) -> String {
     table(&rows[..rows.len().min(limit)])
 }
@@ -265,9 +308,26 @@ fn detail_body(report: &Report, page: &str) -> String {
         ),
         "performance" => format!(
             "{}{}{}{}{}",
-            section("Request times", table(&report.request_times)),
-            section("Hours", table(&report.hours)),
-            section("Status codes", table(&report.statuses)),
+            section(
+                "Request times",
+                table(&ordered_rows(&report.request_times, |a, b| {
+                    request_time_rank(&a.key)
+                        .cmp(&request_time_rank(&b.key))
+                        .then_with(|| a.key.cmp(&b.key))
+                })),
+            ),
+            section(
+                "Hours",
+                table(&ordered_rows(&report.hours, |a, b| {
+                    compare_numeric(&a.key, &b.key, false).then_with(|| a.key.cmp(&b.key))
+                })),
+            ),
+            section(
+                "Status codes",
+                table(&ordered_rows(&report.statuses, |a, b| {
+                    compare_numeric(&a.key, &b.key, true).then_with(|| a.key.cmp(&b.key))
+                })),
+            ),
             section(
                 "Bandwidth by URL",
                 format!(
@@ -613,6 +673,117 @@ mod tests {
         let html = detail_body(&report, "pages");
         assert!(html.contains("<h2>HTTP errors</h2>"));
         assert!(html.contains(">500</td><td>1</td>"));
+    }
+
+    #[test]
+    fn performance_page_orders_request_times_hours_and_status_codes() {
+        let report = Report {
+            metadata: ReportMetadata {
+                schema_version: None,
+                input_path: None,
+                input_size: None,
+                input_lines: None,
+                config_path: None,
+                config_hash: None,
+                approximations: Vec::new(),
+            },
+            hits: 1,
+            bytes: 0,
+            pages: 0,
+            files: 0,
+            visits: 0,
+            unique_visits: 0,
+            countries: Vec::new(),
+            regions: Vec::new(),
+            cities: Vec::new(),
+            asns: Vec::new(),
+            organizations: Vec::new(),
+            hostnames: Vec::new(),
+            statuses: ["404", "200", "500", "301", "x"]
+                .iter()
+                .map(|key| ReportRow {
+                    key: (*key).into(),
+                    hits: 1,
+                })
+                .collect(),
+            status_classes: Vec::new(),
+            errors: vec![ReportRow {
+                key: "500".into(),
+                hits: 1,
+            }],
+            methods: Vec::new(),
+            method_anomalies: Vec::new(),
+            urls: Vec::new(),
+            not_found: Vec::new(),
+            bandwidth_urls: Vec::new(),
+            daily: Vec::new(),
+            users: Vec::new(),
+            user_agents: Vec::new(),
+            referers: Vec::new(),
+            referrer_domains: Vec::new(),
+            referer_spam: Vec::new(),
+            scanners: Vec::new(),
+            file_types: Vec::new(),
+            browsers: Vec::new(),
+            oses: Vec::new(),
+            robots: Vec::new(),
+            request_times: ["10-100ms", ">=5s", "<10ms", "1-5s", "500ms-1s", "100-500ms"]
+                .iter()
+                .map(|key| ReportRow {
+                    key: (*key).into(),
+                    hits: 1,
+                })
+                .collect(),
+            virtual_hosts: Vec::new(),
+            entry_pages: Vec::new(),
+            exit_pages: Vec::new(),
+            search_engines: Vec::new(),
+            keyphrases: Vec::new(),
+            hours: ["10", "23", "01", "00"]
+                .iter()
+                .map(|key| ReportRow {
+                    key: (*key).into(),
+                    hits: 1,
+                })
+                .collect(),
+            dates: Vec::new(),
+            months: Vec::new(),
+            weekdays: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        // Parallel tests share one process ID, so the directory also needs a unique counter.
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let directory = std::env::temp_dir().join(format!(
+            "stats-performance-order-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        write_html_site(&report, &directory.join("index.html")).unwrap();
+        let page = fs::read_to_string(directory.join("performance.html")).unwrap();
+        let cells = |keys: &[&str]| -> Vec<usize> {
+            keys.iter()
+                .map(|key| {
+                    let cell = format!("<td>{}</td>", html_escape(key));
+                    page.find(&cell)
+                        .unwrap_or_else(|| panic!("missing cell {key}"))
+                })
+                .collect()
+        };
+        let in_order = |positions: Vec<usize>| positions.windows(2).all(|pair| pair[0] < pair[1]);
+
+        assert!(in_order(cells(&[
+            "<10ms",
+            "10-100ms",
+            "100-500ms",
+            "500ms-1s",
+            "1-5s",
+            ">=5s"
+        ])));
+        assert!(in_order(cells(&["00", "01", "10", "23"])));
+        assert!(in_order(cells(&["500", "404", "301", "200", "x"])));
+        let _ = fs::remove_dir_all(&directory);
     }
 
     #[test]

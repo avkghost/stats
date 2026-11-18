@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-No changes yet.
+- The HTML Performance page lists request-time buckets from fastest to slowest, hours from 00 to 23, and status codes from highest to lowest. Other pages keep their order.
 
 ## 0.1.13
 
