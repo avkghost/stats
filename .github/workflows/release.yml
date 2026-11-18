@@ -23,6 +23,7 @@ jobs:
           cargo check --workspace --all-targets
           cargo test --workspace --all-targets
           cargo clippy --workspace --all-targets -- -D warnings
+          cargo package --workspace --locked --no-verify
       - name: Build release bundle
         env:
           STATS_VERSION: ${{ github.ref_name }}
@@ -31,6 +32,8 @@ jobs:
       - name: Verify checksum
         working-directory: target/release-artifacts
         run: sha256sum -c *.sha256
+      - name: Verify release archive contents
+        run: bash deploy/verify-release-artifacts.sh target/release-artifacts
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:

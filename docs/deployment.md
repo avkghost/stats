@@ -5,6 +5,7 @@
 The supplied installer keeps application-owned files under `/opt/stats/`:
 
 - `/opt/stats/bin/stats` — analyzer executable
+- `/opt/stats/bin/stats-report-worker` — isolated native report-plugin worker
 - `/opt/stats/etc/awstats.example.test.conf` — expected configuration path
 - `/opt/stats/var/lib` — SQLite data
 - `/opt/stats/var/www` — generated reports
@@ -118,21 +119,21 @@ bash deploy/package-release.sh
 
 The package script derives the version from `crates/stats-cli/Cargo.toml` unless
 `STATS_VERSION` is supplied. A tag value such as `v0.1.2` is normalized to
-`0.1.2`. `STATS_PLATFORM` and `STATS_RELEASE_DIR` are also supported. The Linux
-archive contains exactly:
+`0.1.2`. `STATS_PLATFORM` and `STATS_RELEASE_DIR` are also supported. It refuses
+to package when an explicitly supplied version differs from the crate version.
+The script creates four archives, each with a `.sha256` sidecar:
 
-- `stats` — the optimized CLI binary;
-- `awstats.example.test.conf` — the example configuration;
-- `deploy/install.sh`, `deploy/stats-update.service`,
-  `deploy/stats-update.timer`, and `deploy/stats-logrotate`;
-- `README.md` and `CHANGELOG.md`.
+- `stats-<version>-<platform>` — `stats`, `stats-report-worker`, the installer,
+  systemd/logrotate files, example configuration, README, and changelog;
+- `stats-http-<version>-<platform>` — `stats-http` and `stats-report-worker`;
+- `stats-cgi-<version>-<platform>` — `stats-cgi` and `stats-report-worker`;
+- `stats-plugins-<version>-<platform>` — the HTML, JSON, and CSV native report
+  libraries.
 
-The archive does not include source code, the full documentation tree, a
-database, generated reports, or native plugin libraries. The optional
-`stats-report-html`, `stats-report-json`, and `stats-report-csv` renderer
-libraries must be built and installed separately in a trusted directory such as
-`/opt/stats/lib/`. The separate `.tar.gz.sha256` sidecar is written beside the
-archive, and its path is valid when checked from the artifact directory.
+The archives do not include source code, the full documentation tree, a database,
+or generated reports. `stats-report-worker` must remain beside every frontend
+that renders native reports. Run `bash deploy/verify-release-artifacts.sh
+<artifact-dir>` to verify checksums and required archive contents.
 
 ## HTTP and CGI boundaries
 
@@ -157,7 +158,7 @@ See [Operations](operations.md) for rotation, retention, backups, and migration.
 
 ```mermaid
 flowchart TB
-    bundle["Release bundle: stats, install.sh, units, logrotate template"] -->|deploy/install.sh| host
+    bundle["Core archive: stats, worker, installer, units"] -->|deploy/install.sh| host
     subgraph host["Server"]
         timer["stats-update.timer: OnBootSec 2min, OnUnitActiveSec 5min, Persistent"]
         service["stats-update.service: Type oneshot, User stats, ProtectSystem strict"]

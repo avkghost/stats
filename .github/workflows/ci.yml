@@ -24,6 +24,8 @@ jobs:
         run: cargo test --workspace --all-targets
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Check packages
+        run: cargo package --workspace --locked --no-verify
       - name: Audit dependencies
         run: |
           cargo install cargo-audit --locked
@@ -37,6 +39,8 @@ jobs:
       - name: Verify release bundle checksum
         working-directory: target/release-artifacts
         run: sha256sum -c *.sha256
+      - name: Verify release archive contents
+        run: bash deploy/verify-release-artifacts.sh target/release-artifacts
       - name: Upload release bundle
         uses: actions/upload-artifact@v6
         with:
