@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No changes yet.
+
+## 0.1.12
+
 - HTTP and CGI status selection now uses typed request errors instead of matching error text.
 - Filter validation errors identify the configuration line that contains the invalid pattern.
 - CSV exports preserve the literal `-` placeholder while neutralising other formula-like values.

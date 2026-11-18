@@ -1,6 +1,6 @@
 [package]
 name = "stats-plugin-host"
-version = "0.1.11"
+version = "0.1.12"
 description = "Native plugin loading and supervision for the stats web log analyzer"
 edition.workspace = true
 license.workspace = true
