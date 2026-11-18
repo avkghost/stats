@@ -7,6 +7,7 @@
 - CSV exports preserve the literal `-` placeholder while neutralising other formula-like values.
 - Added a deterministic store characterization fixture covering aggregate projections.
 - Native worker tests now verify that the raw-log bearer token is not inherited by plugins.
+- Added native plugin load-error coverage and expanded the store characterization dimensions.
 
 ## 0.1.11
 
