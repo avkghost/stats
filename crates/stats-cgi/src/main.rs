@@ -18,13 +18,14 @@ use std::{
 #[derive(Debug)]
 enum CgiError {
     BadRequest(String),
+    NotFound(String),
     NotImplemented(String),
 }
 
 impl fmt::Display for CgiError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BadRequest(message) | Self::NotImplemented(message) => {
+            Self::BadRequest(message) | Self::NotFound(message) | Self::NotImplemented(message) => {
                 formatter.write_str(message)
             }
         }
@@ -246,10 +247,11 @@ fn render_cgi(
     }
     let body = match request.section.as_deref() {
         Some(section) if external_html => {
-            stats_render::render_report_section_stream(&registry, &report, "html", section)?
+            stats_render::render_report_section_stream(&registry, &report, "html", section)
+                .map_err(|error| anyhow::Error::new(CgiError::NotFound(error.to_string())))?
         }
         Some(section) => render_html_section(&report, section)
-            .map_err(|error| anyhow::anyhow!("render CGI HTML section: {error}"))?,
+            .map_err(|error| anyhow::Error::new(CgiError::NotFound(error)))?,
         None => render_report_stream(&registry, &report, request.output.renderer_name())?,
     };
     let media_type = match request.output {
@@ -279,6 +281,7 @@ fn main() {
 fn cgi_error_status(error: &anyhow::Error) -> &'static str {
     match error.downcast_ref::<CgiError>() {
         Some(CgiError::BadRequest(_)) => "400 Bad Request",
+        Some(CgiError::NotFound(_)) => "404 Not Found",
         Some(CgiError::NotImplemented(_)) => "501 Not Implemented",
         None => "500 Internal Server Error",
     }
@@ -382,6 +385,12 @@ mod tests {
                 "output csv requires STATS_CONFIG".into(),
             ))),
             "501 Not Implemented"
+        );
+        assert_eq!(
+            cgi_error_status(&anyhow::Error::new(CgiError::NotFound(
+                "unsupported HTML report section".into(),
+            ))),
+            "404 Not Found"
         );
     }
 }

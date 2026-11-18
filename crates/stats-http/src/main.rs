@@ -22,13 +22,14 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 #[derive(Debug)]
 enum RequestError {
     BadRequest(String),
+    NotFound(String),
     NotImplemented(String),
 }
 
 impl fmt::Display for RequestError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BadRequest(message) | Self::NotImplemented(message) => {
+            Self::BadRequest(message) | Self::NotFound(message) | Self::NotImplemented(message) => {
                 formatter.write_str(message)
             }
         }
@@ -246,6 +247,13 @@ fn render_report(
     limit: usize,
     section: Option<String>,
 ) -> Result<Response> {
+    // Reject unknown formats before any configuration or database check, so the answer does not
+    // depend on whether a plugin happens to be configured.
+    if !matches!(output, "html" | "json" | "csv") {
+        return Err(anyhow::Error::new(RequestError::BadRequest(format!(
+            "unsupported output format {output:?}; use html, json, or csv"
+        ))));
+    }
     let database = state
         .sandbox
         .check_existing(&state.data_dir.join("stats.sqlite3"))?;
@@ -304,10 +312,11 @@ fn render_report(
     }
     let body = match (output, section.as_deref(), external) {
         ("html", Some(section), true) => {
-            render_report_section_stream(&registry, &report, "html", section)?
+            render_report_section_stream(&registry, &report, "html", section)
+                .map_err(|error| anyhow::Error::new(RequestError::NotFound(error.to_string())))?
         }
         ("html", Some(section), false) => stats_render::render_html_section(&report, section)
-            .map_err(|error| anyhow::anyhow!("render HTML section: {error}"))?,
+            .map_err(|error| anyhow::Error::new(RequestError::NotFound(error)))?,
         ("html", None, false) => render_html_report(&report),
         (_, Some(_), _) => {
             return Err(anyhow::Error::new(RequestError::BadRequest(
@@ -341,6 +350,7 @@ fn error_response(error: anyhow::Error) -> Response {
     eprintln!("HTTP report request failed: {error:#}");
     let status = match error.downcast_ref::<RequestError>() {
         Some(RequestError::BadRequest(_)) => StatusCode::BAD_REQUEST,
+        Some(RequestError::NotFound(_)) => StatusCode::NOT_FOUND,
         Some(RequestError::NotImplemented(_)) => StatusCode::NOT_IMPLEMENTED,
         None => StatusCode::INTERNAL_SERVER_ERROR,
     };
@@ -464,6 +474,32 @@ mod tests {
             response.headers()[axum::http::header::CONTENT_TYPE],
             "text/html; charset=utf-8"
         );
+    }
+
+    #[tokio::test]
+    async fn unsupported_report_format_is_a_bad_request_even_without_configuration() {
+        let state = test_state();
+        database_for(&state);
+        let response = get(state, "/report?output=xml").await;
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn unknown_section_is_not_found() {
+        let state = test_state();
+        database_for(&state);
+        let response = get(state, "/section/unknown").await;
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn not_found_errors_map_to_404_without_details() {
+        let response = error_response(anyhow::Error::new(RequestError::NotFound(
+            "unsupported HTML report section \"secret\"".into(),
+        )));
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], b"report request failed\n");
     }
 
     #[tokio::test]
