@@ -1,0 +1,88 @@
+/// Aggregate tables and their column definitions.
+///
+/// This is deliberately the single source of truth for the derived-data schema. Opening a
+/// database creates tables from this list, and aggregate clearing/replay iterate over the same
+/// names. `TOP_TABLES` remains a separate, checked subset because totals, session state, and
+/// other derived tables are not valid inputs to the dimension-ranking query.
+pub(super) const AGGREGATE_SCHEMA: &[(&str, &str)] = &[
+    ("totals", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL"),
+    ("countries", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("regions", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("cities", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("asns", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("organizations", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("statuses", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("status_classes", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("errors", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("methods", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("method_anomalies", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("urls", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("url_bandwidth", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL"),
+    ("users", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("user_agents", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referers", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referrer_domains", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("search_engines", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("keyphrases", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("file_types", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("browsers", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("oses", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("robots", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("request_times", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("virtual_hosts", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("entry_pages", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("exit_pages", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("hours", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("dates", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("daily", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL, bytes INTEGER NOT NULL, pages INTEGER NOT NULL, files INTEGER NOT NULL, visits INTEGER NOT NULL"),
+    ("months", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("weekdays", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("visit_keys", "key TEXT PRIMARY KEY"),
+    ("session_state", "key TEXT PRIMARY KEY, last_seen INTEGER NOT NULL, last_url TEXT"),
+    ("diagnostics", "reason TEXT PRIMARY KEY, count INTEGER NOT NULL"),
+    ("hostnames", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("referer_spam", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("scanners", "key TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("not_found_urls", "url TEXT PRIMARY KEY, hits INTEGER NOT NULL"),
+    ("not_found_referrers", "url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer)"),
+];
+
+/// Tables that hold state other than aggregates.
+#[cfg(test)]
+pub(super) const SERVICE_TABLES: &[&str] = &["meta", "input_checkpoints", "input_prefix_snapshots"];
+
+/// Dimension tables that `top()` may read. Each has `key` and `hits` columns.
+pub(super) const TOP_TABLES: &[&str] = &[
+    "countries",
+    "regions",
+    "cities",
+    "asns",
+    "organizations",
+    "hostnames",
+    "referer_spam",
+    "scanners",
+    "statuses",
+    "status_classes",
+    "errors",
+    "methods",
+    "method_anomalies",
+    "urls",
+    "users",
+    "user_agents",
+    "referers",
+    "referrer_domains",
+    "search_engines",
+    "keyphrases",
+    "file_types",
+    "browsers",
+    "oses",
+    "robots",
+    "request_times",
+    "virtual_hosts",
+    "entry_pages",
+    "exit_pages",
+    "hours",
+    "dates",
+    "months",
+    "weekdays",
+];
