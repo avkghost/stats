@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- HTTP and CGI status selection now uses typed request errors instead of matching error text.
+- Filter validation errors identify the configuration line that contains the invalid pattern.
+- CSV exports preserve the literal `-` placeholder while neutralising other formula-like values.
+- Added a deterministic store characterization fixture covering aggregate projections.
+
+## 0.1.11
+
 - Relative `DirOutput` paths are resolved from the configuration file directory.
 - Installer smoke tests now run from the core release archive, and release validation reuses the CI workflow.
 - Logrotate renders the configured `STATS_GROUP` instead of assuming the `stats` group.

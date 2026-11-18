@@ -163,6 +163,28 @@ impl Config {
             // `" /var/lib/stats "` cannot become a relative path containing
             // a leading space. Whitespace inside the value remains intact.
             let value = value.trim().trim_matches('"').trim().to_string();
+            if matches!(
+                key,
+                "SkipHosts"
+                    | "OnlyHosts"
+                    | "SkipFiles"
+                    | "OnlyFiles"
+                    | "SkipUserAgents"
+                    | "OnlyUserAgents"
+                    | "NotPageList"
+            ) {
+                for pattern in value.split_whitespace() {
+                    if let Some(regex) = pattern
+                        .strip_prefix("REGEX[")
+                        .and_then(|value| value.strip_suffix(']'))
+                    {
+                        Regex::new(regex).map_err(|error| ConfigError::Invalid {
+                            line: line_no,
+                            message: format!("invalid {key} pattern {pattern:?}: {error}"),
+                        })?;
+                    }
+                }
+            }
             match key {
                 "LoadPlugin" => {
                     let mut parts = value.split_whitespace();
@@ -194,31 +216,6 @@ impl Config {
                 .map(|v| v.split_whitespace().map(str::to_owned).collect())
                 .unwrap_or_default()
         };
-        let validate_patterns = |values: &[String], key: &str| -> Result<(), ConfigError> {
-            for pattern in values {
-                if let Some(regex) = pattern
-                    .strip_prefix("REGEX[")
-                    .and_then(|value| value.strip_suffix(']'))
-                {
-                    Regex::new(regex).map_err(|error| ConfigError::Invalid {
-                        line: 0,
-                        message: format!("invalid {key} pattern {pattern:?}: {error}"),
-                    })?;
-                }
-            }
-            Ok(())
-        };
-        for key in [
-            "SkipHosts",
-            "OnlyHosts",
-            "SkipFiles",
-            "OnlyFiles",
-            "SkipUserAgents",
-            "OnlyUserAgents",
-            "NotPageList",
-        ] {
-            validate_patterns(&list(key), key)?;
-        }
         let log_format = required("LogFormat")?;
         let known = [
             "LogFile",
@@ -559,7 +556,9 @@ mod tests {
             "LogFile=access.log\nLogFormat=\"%host %time1\"\nSkipFiles=\"REGEX[(]\"\n",
         )
         .unwrap_err();
-        assert!(error.to_string().contains("invalid SkipFiles pattern"));
+        assert!(error
+            .to_string()
+            .contains("line 3: invalid SkipFiles pattern"));
     }
 
     #[test]

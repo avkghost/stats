@@ -16,7 +16,26 @@ use stats_render::{
     builtin_renderer_registry, register_configured_renderer, render_html_report,
     render_report_section_stream, render_report_stream,
 };
+use std::{error::Error, fmt};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+
+#[derive(Debug)]
+enum RequestError {
+    BadRequest(String),
+    NotImplemented(String),
+}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadRequest(message) | Self::NotImplemented(message) => {
+                formatter.write_str(message)
+            }
+        }
+    }
+}
+
+impl Error for RequestError {}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -286,10 +305,16 @@ fn render_report(
         ("html", Some(section), false) => stats_render::render_html_section(&report, section)
             .map_err(|error| anyhow::anyhow!("render HTML section: {error}"))?,
         ("html", None, false) => render_html_report(&report),
-        (_, Some(_), _) => anyhow::bail!("sections are supported only for HTML output"),
+        (_, Some(_), _) => {
+            return Err(anyhow::Error::new(RequestError::BadRequest(
+                "sections are supported only for HTML output".into(),
+            )))
+        }
         (output, None, _) => {
             let config = state.config.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("output {output} requires --config with LoadPlugin=report_{output}")
+                anyhow::Error::new(RequestError::NotImplemented(format!(
+                    "output {output} requires --config with LoadPlugin=report_{output}"
+                )))
             })?;
             register_configured_renderer(&mut registry, config, output)?;
             render_report_stream(&registry, &report, output)?
@@ -299,41 +324,42 @@ fn render_report(
         "html" => "text/html; charset=utf-8",
         "json" => "application/json; charset=utf-8",
         "csv" => "text/csv; charset=utf-8",
-        _ => anyhow::bail!("unsupported output format {output:?}; use html, json, or csv"),
+        _ => {
+            return Err(anyhow::Error::new(RequestError::BadRequest(format!(
+                "unsupported output format {output:?}; use html, json, or csv"
+            ))))
+        }
     };
     Ok((StatusCode::OK, [(header::CONTENT_TYPE, media_type)], body).into_response())
 }
 
 fn error_response(error: anyhow::Error) -> Response {
     eprintln!("HTTP report request failed: {error:#}");
-    let message = error.to_string();
-    let status = if message.contains("sections are supported")
-        || message.contains("unsupported output format")
-    {
-        StatusCode::BAD_REQUEST
-    } else if message.contains("requires --config") || message.contains("LoadPlugin=report_") {
-        StatusCode::NOT_IMPLEMENTED
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
+    let status = match error.downcast_ref::<RequestError>() {
+        Some(RequestError::BadRequest(_)) => StatusCode::BAD_REQUEST,
+        Some(RequestError::NotImplemented(_)) => StatusCode::NOT_IMPLEMENTED,
+        None => StatusCode::INTERNAL_SERVER_ERROR,
     };
     (status, "report request failed\n").into_response()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::error_response;
+    use super::{error_response, RequestError};
     use axum::body::to_bytes;
 
     #[tokio::test]
     async fn maps_client_and_missing_plugin_errors_without_leaking_details() {
-        let response = error_response(anyhow::anyhow!(
-            "sections are supported only for HTML output"
-        ));
+        let response = error_response(anyhow::Error::new(RequestError::BadRequest(
+            "sections are supported only for HTML output".into(),
+        )));
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         assert_eq!(&body[..], b"report request failed\n");
 
-        let response = error_response(anyhow::anyhow!("output csv requires --config"));
+        let response = error_response(anyhow::Error::new(RequestError::NotImplemented(
+            "output csv requires --config".into(),
+        )));
         assert_eq!(response.status(), axum::http::StatusCode::NOT_IMPLEMENTED);
     }
 }

@@ -170,10 +170,11 @@ fn number(value: &Value, key: &str) -> u64 {
 }
 
 fn csv_field(value: &str) -> String {
-    let value = if value
-        .chars()
-        .next()
-        .is_some_and(|character| matches!(character, '=' | '+' | '-' | '@' | '\t' | '\r'))
+    let value = if value != "-"
+        && value
+            .chars()
+            .next()
+            .is_some_and(|character| matches!(character, '=' | '+' | '-' | '@' | '\t' | '\r'))
     {
         format!("'{value}")
     } else {
@@ -269,6 +270,13 @@ mod tests {
         for value in ["'=1+1", "'+cmd", "'-cmd", "'@cmd", "'\tcmd", "'\rcmd"] {
             assert!(csv.contains(value), "missing neutralized value {value:?}");
         }
+    }
+
+    #[test]
+    fn preserves_dash_placeholder_values() {
+        let report = json!({"urls": [{"key": "-", "hits": 1}]});
+        assert!(render_csv(&report).contains(",-,1,"));
+        assert!(!render_csv(&report).contains(",'-"));
     }
 
     #[test]

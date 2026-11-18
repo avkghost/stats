@@ -9,9 +9,29 @@ use stats_render::{
 };
 use std::{
     env,
+    error::Error,
+    fmt,
     io::{self, Write},
     path::PathBuf,
 };
+
+#[derive(Debug)]
+enum CgiError {
+    BadRequest(String),
+    NotImplemented(String),
+}
+
+impl fmt::Display for CgiError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadRequest(message) | Self::NotImplemented(message) => {
+                formatter.write_str(message)
+            }
+        }
+    }
+}
+
+impl Error for CgiError {}
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 10_000;
@@ -141,9 +161,15 @@ fn render_cgi(
             bail!("raw-log authorization required");
         }
         eprintln!("raw-log access granted lines={}", request.limit);
-        let config = config.ok_or_else(|| anyhow::anyhow!("raw-log requires STATS_CONFIG"))?;
+        let config = config.ok_or_else(|| {
+            anyhow::Error::new(CgiError::NotImplemented(
+                "raw-log requires STATS_CONFIG".into(),
+            ))
+        })?;
         if !config.plugin_enabled("rawlog") {
-            bail!("raw-log requires LoadPlugin=rawlog in STATS_CONFIG");
+            return Err(anyhow::Error::new(CgiError::NotImplemented(
+                "raw-log requires LoadPlugin=rawlog in STATS_CONFIG".into(),
+            )));
         }
         let config = config.clone().with_overrides(None, Some(data_dir));
         let path = sandbox.check_existing(&config.log_file)?;
@@ -205,18 +231,18 @@ fn render_cgi(
     });
     if request.output != OutputFormat::Html || external_html {
         let config = config.ok_or_else(|| {
-            anyhow::anyhow!(
+            anyhow::Error::new(CgiError::NotImplemented(format!(
                 "CGI output {} is an external plugin; set STATS_CONFIG to a configuration with LoadPlugin=report_{} <library>",
                 request.output.renderer_name(),
                 request.output.renderer_name()
-            )
+            )))
         })?;
         register_configured_renderer(&mut registry, config, request.output.renderer_name())?;
     }
     if request.section.is_none() && !external_html && request.output == OutputFormat::Html {
-        bail!(
-            "CGI HTML rendering is an external plugin; set STATS_CONFIG with LoadPlugin=report_html <library>"
-        );
+        return Err(anyhow::Error::new(CgiError::NotImplemented(
+            "CGI HTML rendering is an external plugin; set STATS_CONFIG with LoadPlugin=report_html <library>".into(),
+        )));
     }
     let body = match request.section.as_deref() {
         Some(section) if external_html => {
@@ -251,24 +277,16 @@ fn main() {
 }
 
 fn cgi_error_status(error: &anyhow::Error) -> &'static str {
-    let message = error.to_string();
-    if message.contains("invalid CGI")
-        || message.contains("unsupported CGI")
-        || message.contains("supported only for HTML")
-    {
-        "400 Bad Request"
-    } else if message.contains("requires STATS_CONFIG")
-        || message.contains("requires LoadPlugin")
-        || message.contains("external plugin")
-    {
-        "501 Not Implemented"
-    } else {
-        "500 Internal Server Error"
+    match error.downcast_ref::<CgiError>() {
+        Some(CgiError::BadRequest(_)) => "400 Bad Request",
+        Some(CgiError::NotImplemented(_)) => "501 Not Implemented",
+        None => "500 Internal Server Error",
     }
 }
 
 fn run_cgi() -> anyhow::Result<()> {
-    let request = parse_query(&env::var("QUERY_STRING").unwrap_or_default())?;
+    let request = parse_query(&env::var("QUERY_STRING").unwrap_or_default())
+        .map_err(|error| anyhow::Error::new(CgiError::BadRequest(error.to_string())))?;
     let data_dir = PathBuf::from(env::var("STATS_DATA_DIR").unwrap_or_else(|_| "stats".into()));
     let config = env::var_os("STATS_CONFIG")
         .map(Config::from_path)
@@ -354,11 +372,15 @@ mod tests {
     #[test]
     fn maps_cgi_request_errors_to_client_statuses() {
         assert_eq!(
-            cgi_error_status(&anyhow::anyhow!("invalid CGI limit")),
+            cgi_error_status(&anyhow::Error::new(CgiError::BadRequest(
+                "invalid CGI limit".into(),
+            ))),
             "400 Bad Request"
         );
         assert_eq!(
-            cgi_error_status(&anyhow::anyhow!("output csv requires STATS_CONFIG")),
+            cgi_error_status(&anyhow::Error::new(CgiError::NotImplemented(
+                "output csv requires STATS_CONFIG".into(),
+            ))),
             "501 Not Implemented"
         );
     }
