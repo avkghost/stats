@@ -11,6 +11,12 @@ fn main() {
         "valid" => print_response(
             r#"{"protocol_version":1,"ok":true,"name":"fixture","version":"1","media_type":"application/json","extension":"json","body":"{}"}"#,
         ),
+        "env-token" => {
+            let visible = std::env::var_os("STATS_RAW_LOG_AUTH_TOKEN").is_some();
+            print_response(&format!(
+                r#"{{"protocol_version":1,"ok":true,"name":"fixture","version":"1","media_type":"application/json","extension":"json","body":"{{\"token_visible\":{visible}}}"}}"#
+            ));
+        }
         "empty" => {}
         "truncated" => print_raw("{\"protocol_version\":1,"),
         "extra" => print_raw(r#"{"protocol_version":1,"ok":true} trailing"#),

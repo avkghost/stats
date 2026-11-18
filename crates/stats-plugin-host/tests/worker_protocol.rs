@@ -26,6 +26,14 @@ fn valid_response_is_accepted_and_following_request_succeeds() {
 }
 
 #[test]
+fn raw_log_token_is_not_inherited_by_worker() {
+    std::env::set_var("STATS_RAW_LOG_AUTH_TOKEN", "test-secret");
+    let response = run("env-token", Duration::from_secs(2)).expect("worker response");
+    std::env::remove_var("STATS_RAW_LOG_AUTH_TOKEN");
+    assert_eq!(response["body"], r#"{"token_visible":false}"#);
+}
+
+#[test]
 fn malformed_responses_are_rejected() {
     for mode in [
         "empty",
