@@ -151,8 +151,7 @@ impl Rule {
 #[cfg(test)]
 mod tests {
     use super::ScannerMatcher;
-    use crate::{AccessEvent, GeoInfo};
-    use chrono::{DateTime, FixedOffset};
+    use crate::{AccessEvent, AccessTimestamp, GeoInfo};
 
     fn event(url: &str) -> AccessEvent {
         AccessEvent {
@@ -164,8 +163,7 @@ mod tests {
             method_anomaly: None,
             identity: None,
             user: None,
-            timestamp: DateTime::<FixedOffset>::parse_from_rfc3339("2026-01-01T00:00:00+00:00")
-                .unwrap(),
+            timestamp: AccessTimestamp::parse_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
             request: format!("GET {url} HTTP/1.1"),
             method: Some("GET".into()),
             url: Some(url.into()),

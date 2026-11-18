@@ -129,8 +129,7 @@ impl Rule {
 #[cfg(test)]
 mod tests {
     use super::RefererSpamMatcher;
-    use crate::{AccessEvent, GeoInfo};
-    use chrono::{DateTime, FixedOffset};
+    use crate::{AccessEvent, AccessTimestamp, GeoInfo};
 
     fn event(referer: &str) -> AccessEvent {
         AccessEvent {
@@ -138,8 +137,7 @@ mod tests {
             client_hostname: None,
             identity: None,
             user: None,
-            timestamp: DateTime::<FixedOffset>::parse_from_rfc3339("2026-01-01T00:00:00+00:00")
-                .unwrap(),
+            timestamp: AccessTimestamp::parse_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
             request: "GET / HTTP/1.1".into(),
             method: Some("GET".into()),
             url: Some("/".into()),

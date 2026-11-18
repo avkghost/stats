@@ -2694,7 +2694,7 @@ mod tests {
         retention, reverse_dns_enabled, update_summary, StoreRouter,
     };
     use super::{decode_log_bytes, discover_backfill_files, validate_raw_log_output};
-    use chrono::DateTime;
+    use stats_core::AccessTimestamp;
     use stats_core::{AccessEvent, Config, DatabasePeriod, GeoInfo, StatsStore};
     use std::fs;
     use std::io::Write;
@@ -2887,7 +2887,7 @@ mod tests {
                 method_anomaly: None,
                 identity: None,
                 user: None,
-                timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
+                timestamp: AccessTimestamp::parse_rfc3339(timestamp).unwrap(),
                 request: "GET / HTTP/1.1".into(),
                 method: Some("GET".into()),
                 url: Some("/".into()),
@@ -3027,7 +3027,7 @@ mod tests {
             method_anomaly: None,
             identity: None,
             user: None,
-            timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
+            timestamp: AccessTimestamp::parse_rfc3339("2026-01-01T00:00:00+00:00").unwrap(),
             request: "GET /old HTTP/1.1".into(),
             method: Some("GET".into()),
             url: Some("/old".into()),
@@ -3092,7 +3092,7 @@ mod tests {
                 method_anomaly: None,
                 identity: None,
                 user: None,
-                timestamp: DateTime::parse_from_rfc3339(timestamp).unwrap(),
+                timestamp: AccessTimestamp::parse_rfc3339(timestamp).unwrap(),
                 request: "GET / HTTP/1.1".into(),
                 method: Some("GET".into()),
                 url: Some("/".into()),

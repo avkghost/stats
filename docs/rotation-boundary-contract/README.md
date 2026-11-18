@@ -33,7 +33,7 @@ Out of scope: whether the web server keeps writing to the renamed file through i
 1. After `update`, a plain rename, creation of a new active file, a normal `update`, and `backfill --log-dir` produce aggregates identical to a clean import, with the prefix counted once.
 2. Between the rename and `backfill`, a normal `update` adds only the new active file's records. The unread tail is absent and the prefix is not counted again.
 3. A second `backfill` over unchanged files changes no aggregate.
-4. After a gzip, bzip2, or xz rotation and backfill, aggregates equal a clean import (P+T+N, counted once). Fails in Phase 1, passes after Phase 2.
+4. After a gzip, bzip2, or xz rotation and backfill, aggregates equal a clean import (P+T+N, counted once).
 5. An ambiguous compressed match is diagnosed and does not import silently.
 6. Upgrading from pre-change checkpoints does not double count.
 7. Unix runs the scenarios. A `cfg(not(unix))` test prints an explicit skip notice, because file identity is not inode-based there (`crates/stats-cli/src/main.rs:1170-1177`).

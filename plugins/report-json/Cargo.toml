@@ -1,9 +1,11 @@
 [package]
 name = "stats-report-json"
-version = "0.1.4"
+version = "0.1.5"
 description = "External JSON report renderer for the stats analyzer"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+documentation.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,4 +14,4 @@ crate-type = ["cdylib"]
 test-fixture = []
 
 [dependencies]
-stats-plugin-api = { version = "0.1.4", path = "../../crates/stats-plugin-api" }
+stats-plugin-api = { version = "0.1.5", path = "../../crates/stats-plugin-api" }

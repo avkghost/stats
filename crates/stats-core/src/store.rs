@@ -1276,8 +1276,7 @@ fn request_time_bucket(seconds: f64) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::GeoInfo;
-    use chrono::DateTime;
+    use crate::{AccessTimestamp, GeoInfo};
 
     #[test]
     fn decodes_valid_utf8_query_keys_and_preserves_invalid_values() {
@@ -1346,7 +1345,7 @@ mod tests {
             method_anomaly: None,
             identity: None,
             user: Some("alice".into()),
-            timestamp: DateTime::parse_from_rfc3339(timestamp).expect("timestamp"),
+            timestamp: AccessTimestamp::parse_rfc3339(timestamp).expect("timestamp"),
             request: format!("GET {url} HTTP/1.1"),
             method: Some("GET".into()),
             url: Some(url.into()),
@@ -1460,6 +1459,47 @@ mod tests {
         assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
         assert_eq!(store.meta("input_content_hash").unwrap(), None);
         assert_eq!(store.totals().unwrap(), (0, 0));
+        drop(store);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn preserves_current_schema_database_and_checkpoints() {
+        let path = std::env::temp_dir().join(format!(
+            "stats-schema-current-{}-{}.sqlite3",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let store = StatsStore::open(&path).expect("open store");
+        store
+            .conn
+            .lock()
+            .expect("lock store")
+            .execute("INSERT INTO totals(key,hits,bytes) VALUES('all',7,8)", [])
+            .expect("seed aggregate");
+        store
+            .set_input_checkpoint(&InputCheckpoint {
+                identity: "dev:ino".into(),
+                path: "access.log".into(),
+                config_hash: "config".into(),
+                content_hash: "content".into(),
+                size: 10,
+                lines: 1,
+            })
+            .expect("set checkpoint");
+        drop(store);
+
+        let store = StatsStore::open(&path).expect("reopen current schema");
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("13"));
+        assert_eq!(store.totals().unwrap(), (7, 8));
+        assert_eq!(
+            store
+                .input_checkpoint_by_identity("dev:ino", "config")
+                .unwrap()
+                .unwrap()
+                .lines,
+            1
+        );
         drop(store);
         let _ = std::fs::remove_file(path);
     }

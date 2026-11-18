@@ -41,6 +41,18 @@ keep all data (see [Checkpoint hashes](#checkpoint-hashes)).
 Use `rebuild` only when intentionally clearing derived aggregates and replaying a
 selected source. It is not the multi-file backfill operation.
 
+### Database compatibility across releases
+
+Release 0.1.5 keeps SQLite schema version 13 and does not change the on-disk
+representation of aggregates, checkpoints, or session timestamps. Existing
+schema-13 databases with the `entry_exit_dimensions` marker retain their data
+and checkpoints when opened by the new binary.
+
+Older databases follow the existing recovery behavior: opening them upgrades the
+schema but clears derived aggregates and input checkpoints so the configured logs
+can be replayed safely. Keep a backup and run the documented rebuild/backfill
+sequence before treating such a database as upgraded.
+
 ## Rotation and backfill
 
 For a conventional rotation directory, `backfill` discovers the configured active
@@ -108,9 +120,10 @@ Existing aggregates are not deleted during normal rotation handling.
 After the log is renamed, the web server must reopen its log file before the next
 update. Otherwise it keeps writing to the renamed file, and the new active file
 never receives those records. The analyzer cannot detect this. Configure the
-logrotate `postrotate` hook to send the server's reopen signal, before the update
-runs (see the placeholder in `deploy/stats-logrotate`). Nginx, for example, reopens
-on `USR1`.
+logrotate `postrotate` hook to send the server's reopen signal before the update
+runs. The supplied nginx template sends `USR1` to the pid in `/run/nginx.pid`;
+deployments using another server must replace that command with its reopen
+operation.
 
 The rotation hooks in the supplied template run in this order. Backfill is not
 part of the hooks; an operator runs it when the archive set is complete.

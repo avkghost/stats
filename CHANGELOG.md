@@ -1,9 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Replaced unmaintained `chrono` and `chrono-tz` with maintained `jiff`, preserving fixed-offset and IANA timezone handling, including DST-aware conversion.
+- Existing schema 13 databases keep their aggregates and checkpoints; older schemas retain the existing replay-on-open behavior.
+
 ## 0.1.4
 
 - Updated bundled SQLite through `rusqlite` to the patched `libsqlite3-sys` release, addressing RUSTSEC-2026-0459.
-- Known follow-up: `chrono` and `chrono-tz` are unmaintained and require a separate migration review.
 
 ## 0.1.3
 

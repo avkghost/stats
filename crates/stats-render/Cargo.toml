@@ -1,13 +1,15 @@
 [package]
 name = "stats-render"
-version = "0.1.4"
+version = "0.1.5"
 description = "Reusable AWStats-style report renderers"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+documentation.workspace = true
 
 [dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
-stats-core = { version = "0.1.4", path = "../stats-core" }
-stats-plugin-api = { version = "0.1.4", path = "../stats-plugin-api" }
-stats-plugin-host = { version = "0.1.4", path = "../stats-plugin-host" }
+stats-core = { version = "0.1.5", path = "../stats-core" }
+stats-plugin-api = { version = "0.1.5", path = "../stats-plugin-api" }
+stats-plugin-host = { version = "0.1.5", path = "../stats-plugin-host" }

@@ -1,5 +1,4 @@
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, TimeZone, Utc};
-use chrono_tz::Tz;
+use jiff::{fmt::strtime, tz::Offset, Timestamp, Zoned};
 use regex::Regex;
 use thiserror::Error;
 
@@ -15,7 +14,7 @@ pub struct AccessEvent {
     pub method_anomaly: Option<String>,
     pub identity: Option<String>,
     pub user: Option<String>,
-    pub timestamp: DateTime<FixedOffset>,
+    pub timestamp: AccessTimestamp,
     pub request: String,
     pub method: Option<String>,
     pub url: Option<String>,
@@ -28,12 +27,73 @@ pub struct AccessEvent {
     pub geo: crate::GeoInfo,
 }
 
+#[derive(Debug, Clone)]
+pub struct AccessTimestamp {
+    instant: Timestamp,
+    offset: Offset,
+}
+
+impl AccessTimestamp {
+    fn new(instant: Timestamp, offset: Offset) -> Self {
+        Self { instant, offset }
+    }
+
+    pub fn parse_rfc3339(value: &str) -> Option<Self> {
+        let instant = value.parse::<Timestamp>().ok()?;
+        let offset = parse_numeric_offset(value).unwrap_or(Offset::UTC);
+        Some(Self::new(instant, offset))
+    }
+
+    fn as_zoned(&self) -> Zoned {
+        Zoned::new(self.instant, self.offset.to_time_zone())
+    }
+
+    pub fn timestamp(&self) -> i64 {
+        self.instant.as_second()
+    }
+
+    pub fn timestamp_subsec_millis(&self) -> u32 {
+        self.instant.subsec_millisecond().unsigned_abs()
+    }
+
+    pub fn timestamp_subsec_micros(&self) -> u32 {
+        self.instant.subsec_nanosecond().unsigned_abs() / 1_000
+    }
+
+    pub fn to_rfc3339(&self) -> String {
+        self.instant.display_with_offset(self.offset).to_string()
+    }
+
+    pub fn format(&self, pattern: &str) -> impl std::fmt::Display {
+        self.as_zoned().strftime(pattern).to_string()
+    }
+}
+
+fn parse_numeric_offset(value: &str) -> Option<Offset> {
+    if value.ends_with('Z') || value.ends_with('z') {
+        return Some(Offset::UTC);
+    }
+    let suffix = value.get(value.len().checked_sub(6)?..)?;
+    let sign = match suffix.as_bytes()[0] {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let hours = suffix[1..3].parse::<i32>().ok()?;
+    let minutes = suffix[4..6].parse::<i32>().ok()?;
+    Offset::from_seconds(sign * (hours * 3600 + minutes * 60)).ok()
+}
+
 impl AccessEvent {
     pub fn apply_timezone_offset(&mut self, hours: i32) -> bool {
-        let Some(offset) = FixedOffset::east_opt(hours.saturating_mul(60 * 60)) else {
+        let seconds = hours.saturating_mul(60 * 60);
+        if !(-24 * 60 * 60..=24 * 60 * 60).contains(&seconds) {
+            return false;
+        }
+        let Ok(offset) = Offset::from_seconds(seconds) else {
             return false;
         };
-        self.timestamp = self.timestamp.with_timezone(&offset);
+        self.timestamp.offset = offset;
         true
     }
 
@@ -41,10 +101,10 @@ impl AccessEvent {
         if let Ok(hours) = value.parse::<i32>() {
             return self.apply_timezone_offset(hours);
         }
-        let Ok(time_zone) = value.parse::<Tz>() else {
+        let Ok(time_zone) = jiff::tz::TimeZone::get(value) else {
             return false;
         };
-        self.timestamp = self.timestamp.with_timezone(&time_zone).fixed_offset();
+        self.timestamp.offset = self.timestamp.as_zoned().with_time_zone(time_zone).offset();
         true
     }
 }
@@ -248,8 +308,8 @@ impl LogParser {
                 timestamp_value
                     .as_ref()
                     .and_then(|value| value.as_i64())
-                    .and_then(|seconds| DateTime::<Utc>::from_timestamp(seconds, 0))
-                    .map(|timestamp| timestamp.fixed_offset())
+                    .and_then(|seconds| Timestamp::from_second(seconds).ok())
+                    .map(|timestamp| AccessTimestamp::new(timestamp, Offset::UTC))
             });
         let timestamp = match timestamp {
             Some(value) => value,
@@ -306,36 +366,33 @@ impl LogParser {
     }
 }
 
-fn json_timestamp(value: &serde_json::Value) -> Option<DateTime<FixedOffset>> {
+fn json_timestamp(value: &serde_json::Value) -> Option<AccessTimestamp> {
     let value = value.as_str()?;
-    DateTime::parse_from_rfc3339(value)
-        .ok()
+    AccessTimestamp::parse_rfc3339(value)
         .or_else(|| parse_timestamp(value, TimeFormat::Time1))
         .or_else(|| naive_fixed(value, "%Y-%m-%d %H:%M:%S"))
 }
 
-fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffset>> {
+fn parse_timestamp(value: &str, format: TimeFormat) -> Option<AccessTimestamp> {
     match format {
-        TimeFormat::Time1 => DateTime::parse_from_str(
+        TimeFormat::Time1 => parse_strtime(
             value.trim().trim_matches(['[', ']']),
             "%d/%b/%Y:%H:%M:%S %z",
-        )
-        .ok(),
+        ),
         TimeFormat::Time1b => {
             naive_fixed(value.trim().trim_matches(['[', ']']), "%d/%b/%Y:%H:%M:%S")
         }
         TimeFormat::Time2 => naive_fixed(value, "%Y-%m-%d %H:%M:%S"),
         TimeFormat::Time3 => {
-            let year = Utc::now().year();
+            let year = jiff::Zoned::now().year();
             naive_fixed(&format!("{year} {value}"), "%Y %b %d %H:%M:%S")
         }
         TimeFormat::Time4 => value
             .parse::<i64>()
             .ok()
-            .and_then(|seconds| DateTime::<Utc>::from_timestamp(seconds, 0))
-            .map(|timestamp| timestamp.fixed_offset()),
-        TimeFormat::Time5 => DateTime::parse_from_rfc3339(value)
-            .ok()
+            .and_then(|seconds| Timestamp::from_second(seconds).ok())
+            .map(|timestamp| AccessTimestamp::new(timestamp, Offset::UTC)),
+        TimeFormat::Time5 => AccessTimestamp::parse_rfc3339(value)
             .or_else(|| naive_fixed(value, "%Y-%m-%dT%H:%M:%S")),
         TimeFormat::Time6 => naive_fixed(value, "%d/%m/%Y, %H:%M:%S"),
         TimeFormat::Time7 => epoch_fractional(value, 1_000),
@@ -343,19 +400,28 @@ fn parse_timestamp(value: &str, format: TimeFormat) -> Option<DateTime<FixedOffs
     }
 }
 
-fn epoch_fractional(value: &str, units_per_second: i64) -> Option<DateTime<FixedOffset>> {
+fn epoch_fractional(value: &str, units_per_second: i64) -> Option<AccessTimestamp> {
     let value = value.parse::<i64>().ok()?;
     let seconds = value.div_euclid(units_per_second);
     let remainder = value.rem_euclid(units_per_second);
     let nanos = remainder * (1_000_000_000 / units_per_second);
-    DateTime::<Utc>::from_timestamp(seconds, nanos as u32).map(|timestamp| timestamp.fixed_offset())
+    Timestamp::new(seconds, nanos as i32)
+        .ok()
+        .map(|timestamp| AccessTimestamp::new(timestamp, Offset::UTC))
 }
 
-fn naive_fixed(value: &str, format: &str) -> Option<DateTime<FixedOffset>> {
-    let naive = NaiveDateTime::parse_from_str(value, format).ok()?;
-    FixedOffset::east_opt(0)?
-        .from_local_datetime(&naive)
-        .single()
+fn parse_strtime(value: &str, format: &str) -> Option<AccessTimestamp> {
+    let parsed = strtime::parse(format, value).ok()?;
+    let offset = parsed.offset()?;
+    let timestamp = parsed.to_timestamp().ok()?;
+    Some(AccessTimestamp::new(timestamp, offset))
+}
+
+fn naive_fixed(value: &str, format: &str) -> Option<AccessTimestamp> {
+    let mut parsed = strtime::parse(format, value).ok()?;
+    parsed.set_offset(Some(Offset::UTC));
+    let timestamp = parsed.to_timestamp().ok()?;
+    Some(AccessTimestamp::new(timestamp, Offset::UTC))
 }
 
 fn none_dash(value: Option<String>) -> Option<String> {

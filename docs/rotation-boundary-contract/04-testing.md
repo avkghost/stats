@@ -64,7 +64,7 @@ Equality is exact. Row order is taken from the store's own ordering; if an order
 | 1. Plain rename + backfill equals clean import; prefix counted once | T1 |
 | 2. Normal update after rotation adds only new-active records; tail absent | T2 |
 | 3. Second backfill changes nothing | T3 |
-| 4. gz, bz2, xz rotations before backfill equal clean import | T4 (three cases; failing in Phase 1, green after Phase 2) |
+| 4. gz, bz2, xz rotations before backfill equal clean import | T4 (three cases) |
 | 5. Ambiguous compressed match: non-zero exit, diagnostic, no aggregate or checkpoint change | T5 |
 | 5b. Same-prefix sources with different source_key never match each other | T5b |
 | 6. Upgrade from pre-change checkpoints does not double count | T6 |

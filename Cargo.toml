@@ -18,6 +18,8 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "GPL-3.0-or-later"
+repository = "https://github.com/avkghost/stats"
+documentation = "https://github.com/avkghost/stats#readme"
 
 [workspace.dependencies]
 anyhow = "1"
@@ -26,8 +28,7 @@ flate2 = "1"
 hickory-resolver = { version = "0.26.3", default-features = false, features = ["tokio", "system-config"] }
 bzip2 = "0.6"
 xz2 = "0.1"
-chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.10.4"
+jiff = "0.2.39"
 clap = { version = "4", features = ["derive"] }
 maxminddb = "0.27"
 regex = "1"

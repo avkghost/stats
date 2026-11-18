@@ -258,7 +258,7 @@ impl Config {
                         .parse::<i32>()
                         .map(|offset| (-24..=24).contains(&offset))
                         .unwrap_or(false);
-                    let valid_named_zone = value.parse::<chrono_tz::Tz>().is_ok();
+                    let valid_named_zone = jiff::tz::TimeZone::get(value).is_ok();
                     if !valid_fixed_offset && !valid_named_zone {
                         return Err(ConfigError::Invalid {
                             line: 0,

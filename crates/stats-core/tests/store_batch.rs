@@ -1,8 +1,9 @@
 //! Store foundation (plan phase 01) and batch transactions (plan phase 02).
 
-use chrono::DateTime;
 use rusqlite::Connection;
-use stats_core::{AccessEvent, GeoInfo, InputCheckpoint, PrefixState, StatsStore, StoreError};
+use stats_core::{
+    AccessEvent, AccessTimestamp, GeoInfo, InputCheckpoint, PrefixState, StatsStore, StoreError,
+};
 use std::{fs, path::PathBuf};
 
 fn temp_database(name: &str) -> PathBuf {
@@ -32,7 +33,7 @@ fn event(url: &str, timestamp: &str) -> AccessEvent {
         method_anomaly: None,
         identity: None,
         user: None,
-        timestamp: DateTime::parse_from_rfc3339(timestamp).expect("timestamp"),
+        timestamp: AccessTimestamp::parse_rfc3339(timestamp).expect("timestamp"),
         request: format!("GET {url} HTTP/1.1"),
         method: Some("GET".into()),
         url: Some(url.into()),

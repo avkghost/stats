@@ -42,8 +42,7 @@ impl MethodAnomalyMatcher {
 #[cfg(test)]
 mod tests {
     use super::MethodAnomalyMatcher;
-    use crate::{AccessEvent, GeoInfo};
-    use chrono::{DateTime, FixedOffset};
+    use crate::{AccessEvent, AccessTimestamp, GeoInfo};
 
     fn event(method: Option<&str>) -> AccessEvent {
         AccessEvent {
@@ -55,8 +54,7 @@ mod tests {
             method_anomaly: None,
             identity: None,
             user: None,
-            timestamp: DateTime::<FixedOffset>::parse_from_rfc3339("1970-01-01T00:00:00+00:00")
-                .unwrap(),
+            timestamp: AccessTimestamp::parse_rfc3339("1970-01-01T00:00:00+00:00").unwrap(),
             request: String::new(),
             method: method.map(str::to_owned),
             url: Some("/".into()),

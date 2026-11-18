@@ -4,8 +4,8 @@
 //! or xz archive and the documented backfill runs, aggregates equal a clean
 //! import of the same records, with the prefix counted exactly once.
 //!
-//! Phase 1: T1-T3 pass; T4-* fail and pin the current defect for compressed
-//! rotations (see docs/rotation-boundary-contract/03-decisions.md).
+//! The fixture covers plain and compressed rotations, unread tails, and the
+//! documented backfill recovery contract.
 
 #[cfg(unix)]
 mod unix {
@@ -354,7 +354,7 @@ mod unix {
         );
     }
 
-    // T4 (Phase 1: expected to FAIL until Phase 2 matching fix)
+    // T4: compressed rotations recover the unread tail without replaying the prefix.
     #[test]
     fn t4_gz_rotation_before_backfill_counts_prefix_once() {
         let run = Run::execute("t4-gz", Some(Codec::Gz));

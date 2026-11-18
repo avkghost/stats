@@ -55,7 +55,7 @@ fn matches_any(value: &str, patterns: &[String]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::DateTime;
+    use crate::AccessTimestamp;
 
     fn event(url: &str, agent: &str) -> AccessEvent {
         AccessEvent {
@@ -67,7 +67,7 @@ mod tests {
             method_anomaly: None,
             identity: None,
             user: None,
-            timestamp: DateTime::parse_from_rfc3339("2026-10-28T00:00:00+00:00").unwrap(),
+            timestamp: AccessTimestamp::parse_rfc3339("2026-10-28T00:00:00+00:00").unwrap(),
             request: format!("GET {url} HTTP/1.1"),
             method: Some("GET".into()),
             url: Some(url.into()),
