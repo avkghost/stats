@@ -138,3 +138,61 @@ mod tests {
         assert!(geoip.lookup("::1").country.is_none());
     }
 }
+
+#[cfg(test)]
+mod open_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEST_FILE: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_file(name: &str, contents: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "stats-geoip-open-{}-{}-{name}",
+            std::process::id(),
+            NEXT_TEST_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::write(&path, contents).unwrap();
+        path
+    }
+
+    #[test]
+    fn missing_country_database_is_reported_with_its_path() {
+        let missing = std::env::temp_dir().join(format!(
+            "stats-geoip-missing-country-{}-{}.mmdb",
+            std::process::id(),
+            NEXT_TEST_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_file(&missing);
+        let error = match MaxMindGeoIp::open(Some(&missing), None, None) {
+            Ok(_) => panic!("missing database must not open"),
+            Err(error) => error,
+        };
+        let message = format!("{error:#}");
+        assert!(message.contains("open GeoIP Country database"), "{message}");
+        assert!(
+            message.contains("stats-geoip-missing-country-"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn file_that_is_not_a_maxmind_database_is_rejected() {
+        let path = temp_file("not-a-database.mmdb", b"plain text, not MaxMind");
+        let error = match MaxMindGeoIp::open(None, Some(&path), None) {
+            Ok(_) => panic!("plain text must not open as a MaxMind database"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("open GeoIP City database"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn no_configured_databases_give_empty_lookups() {
+        let geoip = MaxMindGeoIp::open(None, None, None).unwrap();
+        let info = geoip.lookup("203.0.113.10");
+        assert!(info.country.is_none());
+        assert!(info.city.is_none());
+        assert!(info.asn.is_none());
+    }
+}
