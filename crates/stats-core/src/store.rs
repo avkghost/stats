@@ -14,11 +14,6 @@ mod metadata;
 mod report;
 mod schema;
 mod session;
-use aggregate::{
-    record_calendar_aggregates, record_client_aggregates, record_geo_aggregates,
-    record_http_aggregates, record_referer_aggregates, record_security_aggregates,
-    record_user_url_aggregates, record_visit_session,
-};
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
 use classify::decode_query;
@@ -274,43 +269,6 @@ impl StatsStore {
             conn: Mutex::new(conn),
         })
     }
-    fn record_in(
-        batch: &Batch<'_, '_>,
-        event: &AccessEvent,
-        is_page: bool,
-        limit: usize,
-    ) -> Result<(), StoreError> {
-        // Resolve values reused by several dimensions once per event. This keeps
-        // the hot path deterministic while avoiding repeated formatting and UA
-        // classification work for every aggregate insert.
-        let user_agent = event.user_agent.as_deref().unwrap_or("UNKNOWN");
-        let browser_name = browser(user_agent);
-        let operating_system_name = operating_system(user_agent);
-        let robot_name = robot(user_agent);
-        let file_type_name = file_type(event.url.as_deref());
-        let hour = event.timestamp.format("%H").to_string();
-        let date = event.timestamp.format("%Y-%m-%d").to_string();
-        let month = event.timestamp.format("%Y-%m").to_string();
-        let weekday = event.timestamp.format("%A").to_string();
-        record_http_aggregates(batch, event, is_page, limit)?;
-        record_user_url_aggregates(batch, event, limit)?;
-        record_referer_aggregates(batch, event, limit)?;
-        record_security_aggregates(batch, event, limit)?;
-        record_client_aggregates(
-            batch,
-            event,
-            file_type_name,
-            browser_name,
-            operating_system_name,
-            robot_name,
-            limit,
-        )?;
-        record_calendar_aggregates(batch, event, is_page, hour, date.clone(), month, weekday)?;
-        record_visit_session(batch, event, is_page, date)?;
-        record_geo_aggregates(batch, event, limit)?;
-        Ok(())
-    }
-
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Poisoned)?;
         Self::clear_aggregates_on(&conn)
