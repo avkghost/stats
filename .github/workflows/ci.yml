@@ -63,3 +63,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run cardinality benchmark
         run: cargo test -p stats-core --test store_golden benchmark_cardinality_limit -- --ignored --nocapture
+      - name: Run wide cardinality benchmark
+        run: cargo test -p stats-core --test store_golden benchmark_cardinality_limit_wide_events -- --ignored --nocapture

@@ -92,7 +92,7 @@ pub use scanner::{ScannerMatcher, ScannerRuleError};
 pub use source_key::source_key;
 pub use store::{
     Batch, DailyAggregate, InputCheckpoint, NotFoundAggregate, PrefixState, StatsStore, StoreError,
-    UpdateStats, DEFAULT_CARDINALITY_LIMIT,
+    UpdateStats, DEFAULT_CARDINALITY_LIMIT, PREPARED_STATEMENT_CACHE_CAPACITY,
 };
 
 #[cfg(test)]

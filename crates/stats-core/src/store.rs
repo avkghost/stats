@@ -27,6 +27,8 @@ use schema::{AGGREGATE_SCHEMA, TOP_TABLES};
 const SCHEMA_VERSION: &str = "13";
 const ENTRY_EXIT_VERSION: &str = "1";
 pub const DEFAULT_CARDINALITY_LIMIT: usize = 10_000;
+pub const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 128;
+const _: () = assert!(PREPARED_STATEMENT_CACHE_CAPACITY >= 36);
 
 fn aggregate_tables() -> impl Iterator<Item = &'static str> {
     AGGREGATE_SCHEMA.iter().map(|(name, _)| *name)
@@ -44,7 +46,10 @@ fn capped_key(
         return Ok(key.to_owned());
     }
     let exists_sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)");
-    if tx.query_row(&exists_sql, [key], |row| row.get::<_, bool>(0))? {
+    if tx
+        .prepare_cached(&exists_sql)?
+        .query_row([key], |row| row.get::<_, bool>(0))?
+    {
         return Ok(key.to_owned());
     }
     let cached_count = { counts.borrow().get(table).copied() };
@@ -52,7 +57,9 @@ fn capped_key(
         Some(count) => count,
         None => {
             let count_sql = format!("SELECT COUNT(*) FROM {table}");
-            let count = tx.query_row(&count_sql, [], |row| row.get::<_, i64>(0))? as usize;
+            let count = tx
+                .prepare_cached(&count_sql)?
+                .query_row([], |row| row.get::<_, i64>(0))? as usize;
             counts.borrow_mut().insert(table.to_owned(), count);
             count
         }
@@ -81,7 +88,10 @@ fn capped_key_connection(
         return Ok(key.to_owned());
     }
     let exists_sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)");
-    if conn.query_row(&exists_sql, [key], |row| row.get::<_, bool>(0))? {
+    if conn
+        .prepare_cached(&exists_sql)?
+        .query_row([key], |row| row.get::<_, bool>(0))?
+    {
         return Ok(key.to_owned());
     }
     let count_sql = format!("SELECT COUNT(*) FROM {table}");
@@ -183,6 +193,9 @@ impl StatsStore {
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
+        // Capped dimensions use one existence and one count statement each, so the cache must hold
+        // all of them plus the batch statements; the rusqlite default is too small for that.
+        conn.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
         conn.busy_timeout(Duration::from_secs(5))?;
         conn.execute_batch("PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY;")?;
         conn.execute_batch(

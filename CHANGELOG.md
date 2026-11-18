@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added a repeatable manual benchmark for `CardinalityLimit` and documented its overhead, reserved `other` bucket, and behavior for existing data.
+- Cardinality existence and count statements now use the prepared-statement cache, with capacity sized for the capped-dimension working set; the wide benchmark now runs in scheduled CI.
 
 ## 0.1.12
 

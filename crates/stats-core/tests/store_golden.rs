@@ -191,3 +191,53 @@ fn benchmark_cardinality_limit() {
         "cardinality benchmark: {EVENTS} events; unique capped={capped:?}, unique uncapped={uncapped:?}, repeated capped={repeated_capped:?}, repeated uncapped={repeated_uncapped:?}"
     );
 }
+
+fn wide_event(index: usize) -> AccessEvent {
+    let mut item = event(&format!("/wide/{index}"), 1);
+    item.client_hostname = Some(format!("host-{index}.example.test"));
+    item.referer_spam = Some(format!("spam-{index}.example"));
+    item.scanner = Some(format!("scanner-{index}"));
+    item.user = Some(format!("user-{index}"));
+    item.user_agent = Some(format!("agent-{index}"));
+    item.referer = Some(format!("https://ref-{index}.example/"));
+    item.virtual_host = Some(format!("vhost-{index}.example.test"));
+    item.geo = GeoInfo {
+        country: Some(format!("C{}", index % 50)),
+        region: Some(format!("R{index}")),
+        city: Some(format!("City{index}")),
+        latitude: None,
+        longitude: None,
+        asn: Some(index as u32),
+        organization: Some(format!("Org{index}")),
+    };
+    item.status = 404;
+    item
+}
+
+#[test]
+#[ignore = "manual performance measurement; run with --ignored --nocapture"]
+fn benchmark_cardinality_limit_wide_events() {
+    use std::time::Instant;
+
+    const EVENTS: usize = 10_500;
+    let run = |limit: usize| {
+        let path = database();
+        let store = StatsStore::open(&path).unwrap();
+        let started = Instant::now();
+        store
+            .with_batch(|batch| {
+                for index in 0..EVENTS {
+                    batch.record_with_cardinality_limit(&wide_event(index), true, limit)?;
+                }
+                Ok::<_, stats_core::StoreError>(())
+            })
+            .unwrap();
+        let elapsed = started.elapsed();
+        drop(store);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        elapsed
+    };
+    let capped = run(10_000);
+    let uncapped = run(usize::MAX);
+    println!("wide cardinality benchmark: {EVENTS} unique events; capped={capped:?}, uncapped={uncapped:?}");
+}
