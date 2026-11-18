@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::{
     collections::HashMap,
     fs,
@@ -187,12 +188,37 @@ impl Config {
                     message: format!("missing {key}"),
                 })
         };
-        let list = |key: &str| {
+        let list = |key: &str| -> Vec<String> {
             values
                 .get(key)
                 .map(|v| v.split_whitespace().map(str::to_owned).collect())
                 .unwrap_or_default()
         };
+        let validate_patterns = |values: &[String], key: &str| -> Result<(), ConfigError> {
+            for pattern in values {
+                if let Some(regex) = pattern
+                    .strip_prefix("REGEX[")
+                    .and_then(|value| value.strip_suffix(']'))
+                {
+                    Regex::new(regex).map_err(|error| ConfigError::Invalid {
+                        line: 0,
+                        message: format!("invalid {key} pattern {pattern:?}: {error}"),
+                    })?;
+                }
+            }
+            Ok(())
+        };
+        for key in [
+            "SkipHosts",
+            "OnlyHosts",
+            "SkipFiles",
+            "OnlyFiles",
+            "SkipUserAgents",
+            "OnlyUserAgents",
+            "NotPageList",
+        ] {
+            validate_patterns(&list(key), key)?;
+        }
         let log_format = required("LogFormat")?;
         let known = [
             "LogFile",
@@ -525,6 +551,15 @@ mod tests {
         assert_eq!(config.site_domain, "example.test");
         assert_eq!(config.plugins[0].name, "geoip2_city");
         assert!(config.filters.not_page_files.iter().any(|v| v == ".css"));
+    }
+
+    #[test]
+    fn rejects_invalid_filter_regex_at_config_load() {
+        let error = Config::parse(
+            "LogFile=access.log\nLogFormat=\"%host %time1\"\nSkipFiles=\"REGEX[(]\"\n",
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("invalid SkipFiles pattern"));
     }
 
     #[test]
