@@ -32,6 +32,9 @@ if [[ ! -f ${source_worker} ]]; then
     exit 1
 fi
 source_config=${STATS_CONFIG_SOURCE:-${project_dir}/awstats.example.test.conf}
+if [[ ! -f ${source_config} && -f ${project_dir}/examples/awstats.example.test.conf ]]; then
+    source_config=${project_dir}/examples/awstats.example.test.conf
+fi
 if [[ ! -f ${source_config} ]]; then
     echo "could not find configuration source ${source_config}" >&2
     exit 1
@@ -54,12 +57,24 @@ if [[ ! -e ${config_path} && ! -L ${config_path} ]]; then
     echo "installed example configuration ${config_path}"
 fi
 install -d "${systemd_dir}" "${logrotate_dir}"
-install -m 0644 "${project_dir}/deploy/stats-update.service" "${systemd_dir}/stats-update.service"
+service_tmp=$(mktemp)
+trap 'rm -f "${service_tmp}"' EXIT
+sed \
+    -e "s|@STATS_BINARY_PATH@|${binary_path}|g" \
+    -e "s|@STATS_CONFIG_PATH@|${config_path}|g" \
+    -e "s|@STATS_DATA_DIR@|${data_dir}|g" \
+    -e "s|@STATS_OUTPUT_DIR@|${output_dir}|g" \
+    "${project_dir}/deploy/stats-update.service" >"${service_tmp}"
+install -m 0644 "${service_tmp}" "${systemd_dir}/stats-update.service"
 install -m 0644 "${project_dir}/deploy/stats-update.timer" "${systemd_dir}/stats-update.timer"
 install -m 0644 "${project_dir}/deploy/stats-logrotate" "${logrotate_dir}/stats"
 
 "${systemctl_bin}" daemon-reload
-"${systemctl_bin}" enable --now stats-update.timer
+if [[ ${STATS_ENABLE_TIMER:-0} == 1 ]]; then
+    "${systemctl_bin}" enable --now stats-update.timer
+else
+    echo "timer left disabled; enable it with: systemctl enable --now stats-update.timer"
+fi
 
 echo "installed ${binary_path}"
 echo "configuration path: ${config_path}"

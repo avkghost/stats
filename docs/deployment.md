@@ -29,8 +29,9 @@ systemctl start --wait stats-update.service
 `deploy/install.sh` creates the `stats` system account and data/output
 directories, installs the binary and `stats-update.service`/`stats-update.timer`,
 installs `STATS_CONFIG_SOURCE` (or the bundled example configuration) when the target path is absent,
-reloads systemd, and enables the timer. It never overwrites an existing
-configuration. Review and adapt the example before starting the service.
+reloads systemd, and leaves the timer disabled unless `STATS_ENABLE_TIMER=1`
+is supplied. It never overwrites an existing configuration. Review and adapt
+the configuration before enabling the timer.
 
 The service is restricted with `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
 `ProtectSystem=strict`, and explicit writable paths. The service account still
