@@ -51,11 +51,16 @@ fn capped_key(
     if limit == usize::MAX {
         return Ok(key.to_owned());
     }
+    let known_key = format!("{table}\0{key}");
+    if counts.borrow().get(&known_key) == Some(&usize::MAX) {
+        return Ok(key.to_owned());
+    }
     let exists_sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)");
     if tx
         .prepare_cached(&exists_sql)?
         .query_row([key], |row| row.get::<_, bool>(0))?
     {
+        counts.borrow_mut().insert(known_key, usize::MAX);
         return Ok(key.to_owned());
     }
     let cached_count = { counts.borrow().get(table).copied() };
@@ -71,10 +76,11 @@ fn capped_key(
         }
     };
     if count < limit.max(1) {
+        let mut counts = counts.borrow_mut();
         counts
-            .borrow_mut()
             .entry(table.to_owned())
             .and_modify(|count| *count += 1);
+        counts.insert(known_key, usize::MAX);
     }
     Ok(if count >= limit.max(1) {
         "other".to_owned()
@@ -331,6 +337,8 @@ pub struct Batch<'t, 'c> {
 impl Batch<'_, '_> {
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         StatsStore::clear_aggregates_on(self.tx)?;
+        // This map also contains batch-local known keys, not only row counts.
+        // Clearing both prevents a post-clear record from bypassing SQLite.
         self.cardinality_counts.borrow_mut().clear();
         Ok(())
     }

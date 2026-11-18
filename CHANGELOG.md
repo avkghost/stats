@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Repeated cardinality keys are reused within a write batch, reducing the
+  existence-query overhead of capped dimensions without changing the reported
+  aggregates.
+
 ## 0.1.16
 
 - Moved the private `stats-core` store unit tests into `store/tests.rs`, reducing the production module to its storage types and implementation while preserving private access and test coverage.
