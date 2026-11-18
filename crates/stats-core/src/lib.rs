@@ -15,6 +15,7 @@ mod scanner;
 mod source_key;
 mod store;
 
+pub use checkpoint_match::{decide, AbortReason, Decision, StateKind, StateRef};
 pub use config::{
     Config, ConfigError, DatabasePeriod, FilterConfig, PluginConfig, AWSTATS_PLUGIN_INVENTORY,
 };
@@ -28,9 +29,7 @@ pub use plugin::{
     Enricher, GeoIpEnricher, PluginDescriptor, PluginRegistry, RenderedReport,
     RendererRegistryError, ReportRenderer,
 };
-pub use checkpoint_match::{decide, AbortReason, Decision, StateKind, StateRef};
 pub use prefix_hash::{prefix_sha256, PrefixDigest};
-pub use source_key::source_key;
 pub use raw_log::{
     bearer_token_matches, render_redacted as render_redacted_raw_log, MAX_RAW_LOG_LINES,
 };
@@ -39,6 +38,7 @@ pub use report::{
     BandwidthRow, DailyRow, NotFoundRow, Report, ReportMetadata, ReportRow, ReportService,
 };
 pub use scanner::{ScannerMatcher, ScannerRuleError};
+pub use source_key::source_key;
 pub use store::{
     Batch, DailyAggregate, InputCheckpoint, NotFoundAggregate, PrefixState, StatsStore, StoreError,
     UpdateStats,

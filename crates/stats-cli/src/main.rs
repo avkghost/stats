@@ -28,9 +28,9 @@ use std::{
 use tokio::time::{self, Duration};
 use xz2::read::XzDecoder;
 
-mod reverse_dns;
 mod atomic_update;
 mod legacy_hash;
+mod reverse_dns;
 mod writer_lock;
 
 #[derive(Parser)]
@@ -254,32 +254,38 @@ async fn main() -> anyhow::Result<()> {
             config,
             log_file,
             data_dir,
-        } => tokio::task::spawn_blocking(move || {
-            with_writer_lock(&config, data_dir.clone(), || {
-                update(config.clone(), log_file, data_dir)
+        } => {
+            tokio::task::spawn_blocking(move || {
+                with_writer_lock(&config, data_dir.clone(), || {
+                    update(config.clone(), log_file, data_dir)
+                })
             })
-        })
-        .await??,
+            .await??
+        }
         Command::Rebuild {
             config,
             log_file,
             data_dir,
-        } => tokio::task::spawn_blocking(move || {
-            with_writer_lock(&config, data_dir.clone(), || {
-                rebuild(config.clone(), log_file, data_dir)
+        } => {
+            tokio::task::spawn_blocking(move || {
+                with_writer_lock(&config, data_dir.clone(), || {
+                    rebuild(config.clone(), log_file, data_dir)
+                })
             })
-        })
-        .await??,
+            .await??
+        }
         Command::Backfill {
             config,
             log_dir,
             data_dir,
-        } => tokio::task::spawn_blocking(move || {
-            with_writer_lock(&config, data_dir.clone(), || {
-                backfill(config.clone(), log_dir, data_dir)
+        } => {
+            tokio::task::spawn_blocking(move || {
+                with_writer_lock(&config, data_dir.clone(), || {
+                    backfill(config.clone(), log_dir, data_dir)
+                })
             })
-        })
-        .await??,
+            .await??
+        }
         Command::RawLog {
             config,
             log_file,
@@ -303,10 +309,12 @@ async fn main() -> anyhow::Result<()> {
             })
             .await??
         }
-        Command::Optimize { data_dir, vacuum } => tokio::task::spawn_blocking(move || {
-            with_data_lock(&data_dir, || optimize(data_dir.clone(), vacuum))
-        })
-        .await??,
+        Command::Optimize { data_dir, vacuum } => {
+            tokio::task::spawn_blocking(move || {
+                with_data_lock(&data_dir, || optimize(data_dir.clone(), vacuum))
+            })
+            .await??
+        }
         Command::Storage { data_dir } => {
             tokio::task::spawn_blocking(move || storage(data_dir)).await??
         }
@@ -337,12 +345,14 @@ async fn main() -> anyhow::Result<()> {
             log_dir,
             data_dir,
             backup_dir,
-        } => tokio::task::spawn_blocking(move || {
-            with_writer_lock(&config, data_dir.clone(), || {
-                migrate(config.clone(), log_dir, data_dir, backup_dir)
+        } => {
+            tokio::task::spawn_blocking(move || {
+                with_writer_lock(&config, data_dir.clone(), || {
+                    migrate(config.clone(), log_dir, data_dir, backup_dir)
+                })
             })
-        })
-        .await??,
+            .await??
+        }
         Command::Summary {
             data_dir,
             limit,
@@ -432,7 +442,11 @@ async fn watch(
         let data_override = data_override.clone();
         move || {
             with_writer_lock(&config_path, data_override.clone(), || {
-                update(config_path.clone(), log_override.clone(), data_override.clone())
+                update(
+                    config_path.clone(),
+                    log_override.clone(),
+                    data_override.clone(),
+                )
             })
         }
     })
@@ -2297,7 +2311,11 @@ async fn live(
         let update_data = data_override.clone();
         tokio::task::spawn_blocking(move || {
             with_writer_lock(&update_config, update_data.clone(), || {
-                update(update_config.clone(), update_log.clone(), update_data.clone())
+                update(
+                    update_config.clone(),
+                    update_log.clone(),
+                    update_data.clone(),
+                )
             })
         })
         .await??;
