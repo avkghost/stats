@@ -31,8 +31,10 @@ directive causes the normal configuration-fingerprint replay.
 The repository includes a manual benchmark for this path. Run
 `cargo test -p stats-core --test store_golden benchmark_cardinality_limit
 -- --ignored --nocapture` to compare the capped path with the internal
-uncapped control on 10,500 unique events. The benchmark is intentionally
-ignored by the normal suite because timings are machine-dependent.
+uncapped control on 10,500 unique and repeated events. The unique-key result
+isolates the cost of admitting new keys; the repeated-key result primarily
+shows the existence-check overhead. The benchmark is intentionally ignored by
+the normal suite because timings are machine-dependent.
 
 ## Log formats
 

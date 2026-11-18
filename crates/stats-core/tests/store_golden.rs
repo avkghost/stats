@@ -157,16 +157,21 @@ fn benchmark_cardinality_limit() {
     use std::time::Instant;
 
     const EVENTS: usize = 10_500;
-    let run = |limit| {
+    let run = |limit: usize, unique: bool| {
         let path = database();
         let store = StatsStore::open(&path).unwrap();
         let started = Instant::now();
         store
             .with_batch(|batch| {
                 for index in 0..EVENTS {
-                    let mut item = event(&format!("/bench/{index}"), 1);
-                    item.user_agent = Some(format!("agent-{index}"));
-                    item.referer = Some(format!("https://ref-{index}.example/"));
+                    let suffix = if unique {
+                        index.to_string()
+                    } else {
+                        String::new()
+                    };
+                    let mut item = event(&format!("/bench/{suffix}"), 1);
+                    item.user_agent = Some(format!("agent-{suffix}"));
+                    item.referer = Some(format!("https://ref-{suffix}.example/"));
                     batch.record_with_cardinality_limit(&item, true, limit)?;
                 }
                 Ok::<_, stats_core::StoreError>(())
@@ -178,9 +183,11 @@ fn benchmark_cardinality_limit() {
         elapsed
     };
 
-    let capped = run(10_000);
-    let uncapped = run(usize::MAX);
+    let capped = run(10_000, true);
+    let uncapped = run(usize::MAX, true);
+    let repeated_capped = run(10_000, false);
+    let repeated_uncapped = run(usize::MAX, false);
     println!(
-        "cardinality benchmark: {EVENTS} unique events: capped={capped:?}, uncapped={uncapped:?}"
+        "cardinality benchmark: {EVENTS} events; unique capped={capped:?}, unique uncapped={uncapped:?}, repeated capped={repeated_capped:?}, repeated uncapped={repeated_uncapped:?}"
     );
 }
