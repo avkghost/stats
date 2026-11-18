@@ -589,12 +589,17 @@ impl StatsStore {
             tx.execute("INSERT INTO countries(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![country])?;
         }
         if let Some(region) = &event.geo.region {
+            let region = event
+                .geo
+                .country
+                .as_deref()
+                .map_or_else(|| region.clone(), |country| format!("{region}, {country}"));
             let region = capped_key(
                 tx,
                 &batch.cardinality_counts,
                 "regions",
                 "key",
-                region,
+                &region,
                 limit,
             )?;
             tx.execute("INSERT INTO regions(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![region])?;

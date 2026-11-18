@@ -305,7 +305,7 @@ fn wide_fixture_projects_every_dimension_as_recorded() {
     ));
     let expected = r#"
 countries: [("C0", 1), ("C1", 1), ("C2", 1), ("C3", 1)]
-regions: [("R0", 1), ("R1", 1), ("R2", 1), ("R3", 1)]
+regions: [("R0, C0", 1), ("R1, C1", 1), ("R2, C2", 1), ("R3, C3", 1)]
 cities: [("City0", 1), ("City1", 1), ("City2", 1), ("City3", 1)]
 asns: [("0", 1), ("1", 1), ("2", 1), ("3", 1)]
 organizations: [("Org0", 1), ("Org1", 1), ("Org2", 1), ("Org3", 1)]
