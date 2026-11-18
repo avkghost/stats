@@ -39,9 +39,9 @@ needs read access to the active log and GeoIP databases and write access to the
 data and output directories.
 
 The supplied logrotate template creates the active log as `root:stats` with
-mode `0640`, so the `stats` service can read it after rotation. If the web
-server has a different file-creation requirement, preserve read access for the
-`stats` group when adapting the template to the host.
+mode `0640`, so the `stats` service can read it after rotation. The installer
+renders the configured `STATS_GROUP` into the template; if the web server has a
+different file-creation requirement, preserve read access for that group.
 
 If a configuration points at production paths such as
 `/var/log/nginx/access.log` or `/var/lib/awstats`, run as the service account

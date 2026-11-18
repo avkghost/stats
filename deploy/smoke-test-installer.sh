@@ -45,6 +45,6 @@ bash "${bundle_dir}/deploy/install.sh"
 [[ -f ${install_root}/systemd/stats-update.timer ]]
 [[ -f ${install_root}/logrotate/stats ]]
 grep -q 'TimeoutStartSec=' "${install_root}/systemd/stats-update.service"
-grep -q 'create 0640 root stats' "${install_root}/logrotate/stats"
+grep -q "create 0640 root $(id -gn)" "${install_root}/logrotate/stats"
 
 echo "installer smoke test passed"

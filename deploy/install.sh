@@ -67,7 +67,11 @@ sed \
     "${project_dir}/deploy/stats-update.service" >"${service_tmp}"
 install -m 0644 "${service_tmp}" "${systemd_dir}/stats-update.service"
 install -m 0644 "${project_dir}/deploy/stats-update.timer" "${systemd_dir}/stats-update.timer"
-install -m 0644 "${project_dir}/deploy/stats-logrotate" "${logrotate_dir}/stats"
+logrotate_tmp=$(mktemp)
+trap 'rm -f "${service_tmp}" "${logrotate_tmp}"' EXIT
+sed -e "s|@STATS_GROUP@|${stats_group}|g" \
+    "${project_dir}/deploy/stats-logrotate" >"${logrotate_tmp}"
+install -m 0644 "${logrotate_tmp}" "${logrotate_dir}/stats"
 
 "${systemctl_bin}" daemon-reload
 if [[ ${STATS_ENABLE_TIMER:-0} == 1 ]]; then

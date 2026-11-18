@@ -9,7 +9,13 @@ permissions:
   contents: write
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: ci
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -17,13 +23,6 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2.9.1
-      - name: Validate workspace
-        run: |
-          cargo fmt --all -- --check
-          cargo check --workspace --all-targets
-          cargo test --workspace --all-targets
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo package --workspace --locked --no-verify
       - name: Build release bundle
         env:
           STATS_VERSION: ${{ github.ref_name }}

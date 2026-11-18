@@ -4,7 +4,9 @@
 
 `update` is cumulative by default. It appends unseen events to the existing
 database and regenerates the complete HTML site at the default
-`output/index.html` sibling of the configured data directory. Use
+`output/index.html` sibling of the configured data directory. Set
+`DirOutput` to choose a custom report directory; relative values are resolved
+relative to the configuration file. Use
 `report --output <path>` when a custom report location is required.
 
 Each update is one all-or-nothing transaction for unpartitioned stores

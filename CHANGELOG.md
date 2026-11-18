@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Relative `DirOutput` paths are resolved from the configuration file directory.
+- Installer smoke tests now run from the core release archive, and release validation reuses the CI workflow.
+- Logrotate renders the configured `STATS_GROUP` instead of assuming the `stats` group.
+
 ## 0.1.10
 
 - Human-facing HTML and TUI reports now use compact, readable byte and count units while CLI, CSV, and JSON values remain exact.
