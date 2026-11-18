@@ -197,28 +197,43 @@ mod open_tests {
     }
 
     #[test]
-    #[ignore = "requires local MaxMind MMDB files"]
     fn configured_databases_return_positive_lookup_data() {
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/geoip");
         let directory = std::env::var_os("STATS_GEOIP_TEST_DIR")
             .map(PathBuf::from)
+            .or_else(|| bundled.is_dir().then_some(bundled))
             .or_else(|| {
                 std::env::var_os("HOME")
                     .map(PathBuf::from)
                     .map(|home| home.join(".local/share/GeoIP"))
             })
             .expect("set STATS_GEOIP_TEST_DIR or HOME");
-        let country = directory.join("GeoLite2-Country.mmdb");
-        let city = directory.join("GeoLite2-City.mmdb");
-        let asn = directory.join("GeoLite2-ASN.mmdb");
-        let ip = std::env::var("STATS_GEOIP_TEST_IP").unwrap_or_else(|_| "1.1.1.1".into());
+        let database_path = |name: &str| {
+            let fixture = directory.join(format!("{name}-Test.mmdb"));
+            if fixture.is_file() {
+                fixture
+            } else {
+                directory.join(format!("{name}.mmdb"))
+            }
+        };
+        let country = database_path("GeoLite2-Country");
+        let city = database_path("GeoLite2-City");
+        let asn = database_path("GeoLite2-ASN");
         let geoip = MaxMindGeoIp::open(Some(&country), Some(&city), Some(&asn)).unwrap();
-        let info = geoip.lookup(&ip);
-        assert!(
-            info.country.is_some()
+        let candidates = std::env::var("STATS_GEOIP_TEST_IP")
+            .map(|ip| vec![ip])
+            .unwrap_or_else(|_| vec!["1.1.1.1".into(), "81.2.69.192".into(), "2001:220::".into()]);
+        let result = candidates.iter().find_map(|ip| {
+            let info = geoip.lookup(ip);
+            (info.country.is_some()
                 || info.city.is_some()
                 || info.asn.is_some()
-                || info.organization.is_some(),
-            "no GeoIP data returned for {ip} from {}",
+                || info.organization.is_some())
+            .then_some((ip, info))
+        });
+        assert!(
+            result.is_some(),
+            "no GeoIP data returned from {}",
             directory.display()
         );
     }
