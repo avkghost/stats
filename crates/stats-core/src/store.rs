@@ -14,7 +14,9 @@ mod metadata;
 mod report;
 mod schema;
 mod session;
-use aggregate::{bump, decrement, record_http_aggregates, record_user_url_aggregates};
+use aggregate::{
+    bump, decrement, record_http_aggregates, record_referer_aggregates, record_user_url_aggregates,
+};
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
 use classify::decode_query;
@@ -291,42 +293,7 @@ impl StatsStore {
         let weekday = event.timestamp.format("%A").to_string();
         record_http_aggregates(batch, event, is_page, limit)?;
         record_user_url_aggregates(batch, event, limit)?;
-        if !event.referer_excluded {
-            let referer_key = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "referers",
-                "key",
-                event.referer.as_deref().unwrap_or("UNKNOWN"),
-                limit,
-            )?;
-            tx.execute("INSERT INTO referers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![referer_key])?;
-            if let Some(domain) = referrer_domain(event.referer.as_deref()) {
-                let domain = capped_key(
-                    tx,
-                    &batch.cardinality_counts,
-                    "referrer_domains",
-                    "key",
-                    &domain,
-                    limit,
-                )?;
-                tx.execute("INSERT INTO referrer_domains(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![domain])?;
-            }
-            if let Some((engine, phrase)) = search_referrer(event.referer.as_deref()) {
-                tx.execute("INSERT INTO search_engines(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![engine])?;
-                if !phrase.is_empty() {
-                    let phrase = capped_key(
-                        tx,
-                        &batch.cardinality_counts,
-                        "keyphrases",
-                        "key",
-                        &phrase,
-                        limit,
-                    )?;
-                    tx.execute("INSERT INTO keyphrases(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![phrase])?;
-                }
-            }
-        }
+        record_referer_aggregates(batch, event, limit)?;
         if let Some(label) = &event.referer_spam {
             let label = capped_key(
                 tx,

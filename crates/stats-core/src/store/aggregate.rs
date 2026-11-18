@@ -155,6 +155,64 @@ pub(super) fn record_user_url_aggregates(
     Ok(())
 }
 
+pub(super) fn record_referer_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    limit: usize,
+) -> Result<(), StoreError> {
+    if event.referer_excluded {
+        return Ok(());
+    }
+    let tx = batch.tx;
+    let referer_key = super::capped_key(
+        tx,
+        &batch.cardinality_counts,
+        "referers",
+        "key",
+        event.referer.as_deref().unwrap_or("UNKNOWN"),
+        limit,
+    )?;
+    tx.execute(
+        "INSERT INTO referers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![referer_key],
+    )?;
+    if let Some(domain) = super::referrer_domain(event.referer.as_deref()) {
+        let domain = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "referrer_domains",
+            "key",
+            &domain,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO referrer_domains(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![domain],
+        )?;
+    }
+    if let Some((engine, phrase)) = super::search_referrer(event.referer.as_deref()) {
+        tx.execute(
+            "INSERT INTO search_engines(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![engine],
+        )?;
+        if !phrase.is_empty() {
+            let phrase = super::capped_key(
+                tx,
+                &batch.cardinality_counts,
+                "keyphrases",
+                "key",
+                &phrase,
+                limit,
+            )?;
+            tx.execute(
+                "INSERT INTO keyphrases(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+                params![phrase],
+            )?;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"
