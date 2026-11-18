@@ -27,6 +27,10 @@ dimension values. The limit applies to new records only: existing rows are not
 pruned or merged when the setting is lowered. The fingerprint is computed from
 the raw configuration-file bytes, so changing a comment, whitespace, or any
 directive causes the normal configuration-fingerprint replay.
+This conservative behavior is intentional: hashing parsed settings would need
+canonicalization rules for aliases, unknown directives, and plugin arguments,
+and could otherwise preserve aggregates under a configuration change that the
+parser does not currently interpret.
 
 The repository includes a manual benchmark for this path. Run
 `cargo test -p stats-core --test store_golden benchmark_cardinality_limit
