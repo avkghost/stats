@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.1.18
+
+- Updated GitHub Actions to use the supported macOS 15 arm64 and Intel runner
+  labels for release and CI packaging.
+- Release packaging now detects the host platform when `STATS_PLATFORM` is not
+  supplied, so a native macOS package uses `.dylib` plugins automatically.
+
 ## 0.1.17
 
 - Added macOS release bundles for arm64 and x86_64, including the native
@@ -9,13 +16,6 @@
 - Repeated cardinality keys are reused within a write batch, reducing the
   existence-query overhead of capped dimensions without changing the reported
   aggregates.
-
-## 0.1.18
-
-- Updated GitHub Actions to use the supported macOS 15 arm64 and Intel runner
-  labels for release and CI packaging.
-- Release packaging now detects the host platform when `STATS_PLATFORM` is not
-  supplied, so a native macOS package uses `.dylib` plugins automatically.
 
 ## 0.1.16
 
