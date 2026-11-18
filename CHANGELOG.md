@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.8
+
+- Release bundles now include the native `stats-report-worker` beside every frontend that can render native plugins.
+- Packaging produces separate core, HTTP, CGI, and plugin archives with SHA-256 sidecars and content verification.
+- The installer deploys the worker together with the main `stats` binary, and CI validates release archive contents before publishing.
+- Native worker integration tests locate the built worker reliably in clean workspace builds.
+- Added a tracked pre-commit hook covering formatting, compilation, Clippy, and the complete workspace test suite.
+
 ## 0.1.7
 
 - Native report plugins run in a separate `stats-report-worker` binary, which must be installed next to `stats-cgi`, `stats-http`, and `stats-cli`. Frontends no longer re-enter their own argument parsing as a worker, so a CGI request cannot reach worker mode through arguments.
