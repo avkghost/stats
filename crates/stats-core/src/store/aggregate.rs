@@ -1,5 +1,5 @@
 use super::{AccessEvent, Batch, StatsStore, StoreError, DEFAULT_CARDINALITY_LIMIT};
-use rusqlite::{params, Transaction};
+use rusqlite::{params, OptionalExtension, Transaction};
 
 impl StatsStore {
     pub fn record(&self, event: &AccessEvent, is_page: bool) -> Result<(), StoreError> {
@@ -334,6 +334,103 @@ pub(super) fn record_calendar_aggregates(
         "INSERT INTO daily(key,hits,bytes,pages,files,visits) VALUES(?1,1,?2,?3,?4,0) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes, pages=pages+excluded.pages, files=files+excluded.files",
         params![date, event.bytes as i64, is_page as i64, (!is_page) as i64],
     )?;
+    Ok(())
+}
+
+pub(super) fn record_visit_session(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    is_page: bool,
+    date: String,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    let visit_key = super::stable_key(&[
+        &event.client_ip,
+        &date,
+        event.user_agent.as_deref().unwrap_or(""),
+    ]);
+    tx.execute(
+        "INSERT OR IGNORE INTO visit_keys(key) VALUES(?1)",
+        params![visit_key],
+    )?;
+    let session_key =
+        super::stable_key(&[&event.client_ip, event.user_agent.as_deref().unwrap_or("")]);
+    let timestamp = event.timestamp.timestamp();
+    let previous = tx
+        .query_row(
+            "SELECT last_seen,last_url FROM session_state WHERE key=?1",
+            params![session_key],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .optional()?;
+    let new_session = previous
+        .as_ref()
+        .is_none_or(|(last_seen, _)| timestamp > *last_seen + 1800);
+    if new_session {
+        tx.execute("INSERT INTO totals(key,hits,bytes) VALUES('visits',1,0) ON CONFLICT(key) DO UPDATE SET hits=hits+1", [])?;
+        tx.execute(
+            "UPDATE daily SET visits=visits+1 WHERE key=?1",
+            params![date],
+        )?;
+    }
+    if is_page {
+        let current_url = event.url.as_deref().unwrap_or("UNKNOWN");
+        let previous_url = previous.as_ref().and_then(|(_, url)| url.as_deref());
+        let should_update_page = previous
+            .as_ref()
+            .is_none_or(|(last_seen, _)| timestamp >= *last_seen);
+        if new_session || previous_url.is_none() {
+            bump(tx, "entry_pages", current_url)?;
+        }
+        if new_session || previous_url.is_none() {
+            bump(tx, "exit_pages", current_url)?;
+        } else if should_update_page && previous_url != Some(current_url) {
+            if let Some(previous_url) = previous_url {
+                decrement(tx, "exit_pages", previous_url)?;
+            }
+            bump(tx, "exit_pages", current_url)?;
+        }
+    }
+    match previous {
+        None => {
+            tx.execute(
+                "INSERT INTO session_state(key,last_seen,last_url) VALUES(?1,?2,?3)",
+                params![
+                    session_key,
+                    timestamp,
+                    is_page.then(|| event.url.as_deref().unwrap_or("UNKNOWN"))
+                ],
+            )?;
+        }
+        Some((_, _)) if new_session => {
+            tx.execute(
+                "UPDATE session_state SET last_seen=?2,last_url=?3 WHERE key=?1",
+                params![
+                    session_key,
+                    timestamp,
+                    is_page.then(|| event.url.as_deref().unwrap_or("UNKNOWN"))
+                ],
+            )?;
+        }
+        Some((last_seen, _)) if timestamp >= last_seen => {
+            if is_page {
+                tx.execute(
+                    "UPDATE session_state SET last_seen=?2,last_url=?3 WHERE key=?1",
+                    params![
+                        session_key,
+                        timestamp,
+                        event.url.as_deref().unwrap_or("UNKNOWN")
+                    ],
+                )?;
+            } else {
+                tx.execute(
+                    "UPDATE session_state SET last_seen=?2 WHERE key=?1",
+                    params![session_key, timestamp],
+                )?;
+            }
+        }
+        Some(_) => {}
+    }
     Ok(())
 }
 
