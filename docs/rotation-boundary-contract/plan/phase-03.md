@@ -16,7 +16,7 @@ plan: ./README.md
 - `resolve_log_file(config_path, configured)` resolves a relative `LogFile` against the config directory (`main.rs:1404`). Reuse it.
 - Config changes already clear all checkpoints (`main.rs:52-59`, the `config_hash` comparison). A changed `LogFile` changes the config file bytes and therefore `config_hash`, so within a single database a source change already clears state today. `source_key` is defense in depth, and the design says so; it does not change the current behaviour for a single config.
 
-## Source key derivation (`crates/stats-core/src/source_key.rs`, new)
+## Source key derivation (`../../../crates/stats-core/src/source_key.rs`, new)
 
 ```text
 pub fn source_key(configured_log_file: &Path) -> Result<String, SourceKeyError>
@@ -30,10 +30,10 @@ Pure-path tests use temp directories: relative and absolute configured paths giv
 
 Stored in `input_checkpoints.source_key` (phase 01) and in `input_prefix_snapshots.source_key`. Not hashed, so diagnostics can show it. Length is bounded by path length.
 
-## Writer lock (`crates/stats-cli/src/main.rs`)
+## Writer lock (`../../../crates/stats-cli/src/main.rs`)
 
 - Path: `config.data_dir.join("stats.lock")`. Created if missing; the data directory is created before the lock is taken.
-- Acquire with `flock(fd, LOCK_EX | LOCK_NB)` through `libc` (already a dependency of `stats-cli`, `Cargo.toml`). Hold the `File` for the whole command.
+- Acquire with `flock(fd, LOCK_EX | LOCK_NB)` through `libc` (already a dependency of `stats-cli`, `../../../Cargo.toml`). Hold the `File` for the whole command.
 - On `EWOULDBLOCK`, return an error: `"another stats process holds {path}; wait for it to finish and retry"`, non-zero exit, no writes.
 - **Single acquisition in the dispatcher** (decision F). `main()` (`main.rs:237`) acquires the lock before dispatching `update`, `backfill`, `rebuild`, `migrate`, and `retention --remove-source`. Acquisition happens before any store is opened, so a refused run cannot open or migrate the store.
 - **`watch` is the exception:** it acquires the lock per iteration, around one `update_unlocked()` call, and releases it before waiting for the next change. A process-lifetime lock would block manual `update`, `backfill`, and `retention` indefinitely.
@@ -48,8 +48,8 @@ Stored in `input_checkpoints.source_key` (phase 01) and in `input_prefix_snapsho
 Note: `flock` is advisory and Unix-only. On non-Unix the lock is a no-op and the non-Unix build keeps the existing unlocked behaviour; say so in the code comment and in the skip test (T-non-unix).
 
 ## Files to Modify
-- `crates/stats-core/src/source_key.rs` (new), `crates/stats-core/src/lib.rs` (export)
-- `crates/stats-cli/src/main.rs`: `update`, `backfill`, `rebuild`, `migrate` take the lock; `update_inner` receives the source key as a parameter computed from the base config.
+- `../../../crates/stats-core/src/source_key.rs` (new), `crates/stats-core/src/lib.rs` (export)
+- `../../../crates/stats-cli/src/main.rs`: `update`, `backfill`, `rebuild`, `migrate` take the lock; `update_inner` receives the source key as a parameter computed from the base config.
 
 ## Tests
 

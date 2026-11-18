@@ -16,8 +16,8 @@ The current code violates this for compressed archives (`02-behavior.md`, S2). T
 | Phase | Content | Production code | Exit condition |
 |---|---|---|---|
 | 1 | Fixture T1-T3 green. T4-gz, T4-bz2, T4-xz added and **failing**, pinning the current defect. Kept on a feature branch, not merged to master while red. | None | T1-T3 pass; T4-* fail with the expected aggregate mismatch |
-| 2 | Source-scoped compressed-prefix matching with preflight-then-apply backfill (D-9). T5 and T6 added. | `crates/stats-cli/src/main.rs` (checkpoint lookup, backfill orchestration), `crates/stats-core/src/store.rs` (checkpoint schema) | T4-* pass; T5, T6 pass |
-| 3 | Merge. Document the contract and the reopen requirement in `docs/operations.md` and a placeholder in `deploy/stats-logrotate` (D-10). | Documentation and template comments | Full `cargo test` green on master |
+| 2 | Source-scoped compressed-prefix matching with preflight-then-apply backfill (D-9). T5 and T6 added. | `../../crates/stats-cli/src/main.rs` (checkpoint lookup, backfill orchestration), `crates/stats-core/src/store.rs` (checkpoint schema) | T4-* pass; T5, T6 pass |
+| 3 | Merge. Document the contract and the reopen requirement in `../operations.md` and a placeholder in `deploy/stats-logrotate` (D-10). | Documentation and template comments | Full `cargo test` green on master |
 
 Phase 2 has its own code plan and approval gate before implementation.
 
@@ -25,16 +25,16 @@ Phase 2 has its own code plan and approval gate before implementation.
 
 | # | Decision | Choice | Alternatives considered | Rationale |
 |---|---|---|---|---|
-| D-1 | Test location | `crates/stats-cli/tests/rotation_boundary.rs` | Unit test in `main.rs`; `stats-core` test | Matches `crates/stats-cli/tests/native_report_failure.rs`. Orchestration lives in `main.rs` and is not reachable from `stats-core`. |
+| D-1 | Test location | `../../crates/stats-cli/tests/rotation_boundary.rs` | Unit test in `main.rs`; `stats-core` test | Matches `../../crates/stats-cli/tests/native_report_failure.rs`. Orchestration lives in `main.rs` and is not reachable from `stats-core`. |
 | D-2 | Driver | Subprocess invocation of `CARGO_BIN_EXE_stats-cli` | Call `update_inner` directly | `update_inner` and `backfill` are private (`main.rs:784`, `:500`). The subprocess also covers config loading and report regeneration. |
 | D-3 | Comparison surface | Observable aggregates only (`04-testing.md`, "Comparison surface") | Rendered HTML; whole SQLite file; checkpoint rows | HTML is not deterministic across regeneration. Checkpoint rows are internal and legitimately differ. Identity is exercised indirectly through the aggregate outcome. |
 | D-4 | Compressed rotation before backfill | **Normative:** P+T+N, counted once, for gz, bz2, xz | Assert the defect (rejected); `#[ignore]` (rejected); omit (rejected) | Operators need the documented procedure to be correct regardless of compression. |
 | D-5 | Production change | **Phase 2 changes checkpoint matching and backfill orchestration.** The fixture alone is not the fix. | No production change (rejected) | The fixture is the regression guard; the fix is a separate, reviewed change. |
 | D-6 | Fixture data | Deterministic generator, fixed timestamps, `LogFormat=1` | Captured real logs; random data | Reproducibility. The scratch run used this format and confirmed the expected counts. |
 | D-7 | Platform gating | `#[cfg(unix)]` module for T1-T6; `#[cfg(not(unix))] #[test]` prints a skip notice | One `cfg(unix)` gate only (rejected: silent) | `file_identity` on non-Unix is a constant (`main.rs:1170-1177`), so inode-based scenarios do not apply. |
-| D-8 | Documentation | `docs/operations.md` updated in Phase 3, once T4-* are green | Edit docs now (rejected: publishes an unverified claim) | Publishing the contract before it holds would be unverified. |
+| D-8 | Documentation | `../operations.md` updated in Phase 3, once T4-* are green | Edit docs now (rejected: publishes an unverified claim) | Publishing the contract before it holds would be unverified. |
 | D-9 | Compressed-prefix matching (Phase 2) | Source-scoped decoded-prefix matching; preflight-then-apply backfill. See "Matching algorithm" and "Backfill atomicity" below. | Config-scoped matching (rejected: false matches across sources); partial import with per-file commit (rejected: leaves partial state) | Required for the contract; the two refinements were requested in review. |
-| D-10 | logrotate reopen | **Documentation requirement, not enforced by the analyzer.** `docs/operations.md` requires that the web server reopens its log after rotation and before the next update. `deploy/stats-logrotate` gets a deployment-specific placeholder comment, not a hard-coded `systemctl` reload. No real web-server test. | Hard-coded `systemctl reload nginx` (rejected: template is not nginx-specific); real web-server test (deferred until a concrete supported deployment exists) | The analyzer cannot observe which descriptor the web server writes to. The requirement belongs in the operator contract. |
+| D-10 | logrotate reopen | **Documentation requirement, not enforced by the analyzer.** `../operations.md` requires that the web server reopens its log after rotation and before the next update. `deploy/stats-logrotate` gets a deployment-specific placeholder comment, not a hard-coded `systemctl` reload. No real web-server test. | Hard-coded `systemctl reload nginx` (rejected: template is not nginx-specific); real web-server test (deferred until a concrete supported deployment exists) | The analyzer cannot observe which descriptor the web server writes to. The requirement belongs in the operator contract. |
 
 ## Matching algorithm (D-9, Phase 2)
 

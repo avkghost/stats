@@ -51,7 +51,7 @@ Compressed candidates never reach a prefix match, so `skip_lines` is 0 (the T4 d
 - Candidates in one backfill must not overlap each other. Two candidates overlap if one's full decoded content is a prefix of the other's, using the same `sha256` comparison. Overlap means the same stream appears twice (for example `access.log.1.gz` and `access.log.2.gz` are copies). Outcome: `Abort(AmbiguousWithinRun)`.
 - Candidates are processed oldest to newest. Preflight evaluates every candidate against the **pre-run** state only. Because overlap within the run aborts, no decision depends on another file's outcome in the same run.
 
-### Pure function (`crates/stats-core/src/checkpoint_match.rs`, new)
+### Pure function (`../../../crates/stats-core/src/checkpoint_match.rs`, new)
 
 ```text
 pub struct StateRef { pub identity: String, pub size: u64, pub lines: u64, pub sha256: String, pub kind: StateKind }  // Current | Snapshot
@@ -63,7 +63,7 @@ pub fn decide(candidate_len: u64, legacy_rows_present: bool, compressed: bool,
 ```
 No I/O. The closure computes the prefix hash for a size, so the function is testable with synthetic data.
 
-## Preflight (`crates/stats-cli/src/main.rs`, new function `plan_sources`)
+## Preflight (`../../../crates/stats-cli/src/main.rs`, new function `plan_sources`)
 
 Inputs: the ordered file list (for backfill: `discover_backfill_files` output; for update: the single active file), the open `Batch` from phase 02 (reads only), the source key, the config hash.
 
@@ -95,8 +95,8 @@ Each abort produces one error that names the source, the file, and the reason. E
 The command exits non-zero (`anyhow` error). Nothing is written, because the plan is built before the apply transaction starts (phase 05).
 
 ## Files to Modify
-- `crates/stats-core/src/checkpoint_match.rs` (new), `crates/stats-core/src/lib.rs` (export)
-- `crates/stats-cli/src/main.rs`: new `plan_sources`; old decision block (`:871-945`) is replaced by a call to `decide` for stable cases and retained as the R3 legacy branch
+- `../../../crates/stats-core/src/checkpoint_match.rs` (new), `crates/stats-core/src/lib.rs` (export)
+- `../../../crates/stats-cli/src/main.rs`: new `plan_sources`; old decision block (`:871-945`) is replaced by a call to `decide` for stable cases and retained as the R3 legacy branch
 
 ## Tests
 

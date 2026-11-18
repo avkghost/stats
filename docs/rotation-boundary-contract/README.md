@@ -3,7 +3,7 @@ date: 2026-11-18
 feature: rotation-boundary-contract
 service: crates/stats-cli
 status: complete (implemented in c119d87; documentation in Phase 3 done)
-research: ../../../../.thoughts/research/2026-11-18-rotation-unread-tail.md
+research: ../../.thoughts/research/2026-11-18-rotation-unread-tail.md
 ---
 
 # Rotation Boundary Contract - Design Documents
@@ -24,8 +24,8 @@ After rotation to a plain, gzip, bzip2, or xz archive, followed by the documente
 
 Three phases (details in `03-decisions.md`):
 1. **Fixture:** T1-T3 pass. T4 for gz, bz2, and xz is added and fails, pinning the current defect. Kept on a feature branch while red.
-2. **Production fix:** compressed-prefix matching in checkpoint lookup (`crates/stats-cli/src/main.rs:871-945`, checkpoint schema in `crates/stats-core/src/store.rs`), per D-9.
-3. **Merge and document:** T4 green, T5 and T6 added, `docs/operations.md` updated.
+2. **Production fix:** compressed-prefix matching in checkpoint lookup (`crates/stats-cli/src/main.rs:871-945`, checkpoint schema in `../../crates/stats-core/src/store.rs`), per D-9.
+3. **Merge and document:** T4 green, T5 and T6 added, `../operations.md` updated.
 
 Out of scope: whether the web server keeps writing to the renamed file through its open descriptor (D-10). The contract covers the analyzer only.
 
@@ -43,11 +43,11 @@ Out of scope: whether the web server keeps writing to the renamed file through i
 
 | File | View | Description |
 |---|---|---|
-| [01-architecture.md](./01-architecture.md) | Logical | C4 L1-L3 for the fixture, the binary, and the data it touches |
-| [02-behavior.md](./02-behavior.md) | Process | Data flow and sequence per scenario, including the Phase 2 target flow |
-| [03-decisions.md](./03-decisions.md) | Decision | Normative contract, phases, decisions D-1 to D-10, matching algorithm, risks, open questions |
-| [04-testing.md](./04-testing.md) | Quality | Comparison surface, test cases T1-T6, acceptance coverage |
+| [01-architecture.md](01-architecture.md) | Logical | C4 L1-L3 for the fixture, the binary, and the data it touches |
+| [02-behavior.md](02-behavior.md) | Process | Data flow and sequence per scenario, including the Phase 2 target flow |
+| [03-decisions.md](03-decisions.md) | Decision | Normative contract, phases, decisions D-1 to D-10, matching algorithm, risks, open questions |
+| [04-testing.md](04-testing.md) | Quality | Comparison surface, test cases T1-T6, acceptance coverage |
 
 Conditional files 05-08 are not created. The feature has no domain events, no repository model, no REST endpoints, and no new persistence beyond the checkpoint columns in Phase 2. The `/prompts/` standards referenced by the template do not exist in this repository, so the standards matrix (07) is not applicable.
 
-Research: [`.thoughts/research/2026-11-18-rotation-unread-tail.md`](../../../../.thoughts/research/2026-11-18-rotation-unread-tail.md) (includes the scratch experiment results).
+Research: [`../../.thoughts/research/2026-11-18-rotation-unread-tail.md`](../../.thoughts/research/2026-11-18-rotation-unread-tail.md) (includes the scratch experiment results).

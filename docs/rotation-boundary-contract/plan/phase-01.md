@@ -22,7 +22,7 @@ The existing additive pattern is the `last_url` column migration inside `open()`
 
 ## Files to Modify
 
-### `crates/stats-core/src/store.rs`
+### `../../../crates/stats-core/src/store.rs`
 
 **Additive migration (inside `open()`, after the `input_checkpoints` CREATE at `:84`):**
 - `PRAGMA table_info(input_checkpoints)`; for each missing column run `ALTER TABLE input_checkpoints ADD COLUMN ...`:
@@ -48,7 +48,7 @@ Do not add fields to `InputCheckpoint`. Its struct literal is constructed in exi
 - `legacy_checkpoint_count(&self, source_key: &str, config_hash: &str) -> Result<u64, StoreError>`: rows with `prefix_sha256 IS NULL` for that source.
 - `snapshot_prefix(&self, state: &PrefixState, captured_at: i64) -> Result<(), StoreError>`: `INSERT OR IGNORE` into `input_prefix_snapshots`.
 
-**Stable hash helper** (new `crates/stats-core/src/prefix_hash.rs`, decision A):
+**Stable hash helper** (new `../../../crates/stats-core/src/prefix_hash.rs`, decision A):
 - `pub fn prefix_sha256(bytes: &[u8]) -> String` (lowercase hex of `sha2::Sha256`).
 - Also `pub struct PrefixDigest` with `update(&[u8])` and `finish()`, so preflight can stream a decoder through the hasher without holding the content (decision J).
 - Unit test with the standard vectors for empty input and `"abc"`, so the algorithm is pinned and any change fails loudly.
@@ -60,11 +60,11 @@ Do not add fields to `InputCheckpoint`. Its struct literal is constructed in exi
 
 **`reset_checkpoint` (`store.rs:431-438`)**: also clears `input_prefix_snapshots`. Snapshots describe checkpointed history, so they are reset together with checkpoints.
 
-### `crates/stats-core/src/lib.rs`
+### `../../../crates/stats-core/src/lib.rs`
 Export `PrefixState` and `prefix_sha256`.
 
-### `crates/stats-core/Cargo.toml`
-Add `sha2` (decision A, approved), pinned to the current major version at implementation time. Check the license against the workspace and confirm the crate is not already transitively present in `Cargo.lock`, so the diff shows the exact new dependency.
+### `../../../crates/stats-core/Cargo.toml`
+Add `sha2` (decision A, approved), pinned to the current major version at implementation time. Check the license against the workspace and confirm the crate is not already transitively present in `../../../Cargo.lock`, so the diff shows the exact new dependency.
 
 ---
 

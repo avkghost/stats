@@ -17,7 +17,7 @@ Let the CLI write a whole backfill (aggregates, checkpoints, meta, diagnostics) 
 
 ## Files to Modify
 
-### `crates/stats-core/src/store.rs`
+### `../../../crates/stats-core/src/store.rs`
 
 **New API:**
 ```text
@@ -60,5 +60,5 @@ pub struct Batch<'a> { tx: &'a Transaction<'a> }
 
 ## Verification
 - `cargo test -p stats-core` passes, including the existing store tests (`store.rs:916-1195`).
-- Totals produced by the existing rotation tests (`crates/stats-cli/tests/rotation_boundary.rs`, T1-T3) are unchanged, because the behaviour of a single-event `record` is unchanged.
+- Totals produced by the existing rotation tests (`../../../crates/stats-cli/tests/rotation_boundary.rs`, T1-T3) are unchanged, because the behaviour of a single-event `record` is unchanged.
 - `cargo test -p stats-cli --test rotation_boundary` still shows T1-T3 passing and T4-* failing (the defect is not yet fixed in this phase).

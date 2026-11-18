@@ -6,7 +6,7 @@ view: quality
 # Testing Strategy: Rotation Boundary Contract
 
 ## Test Rules
-- Integration test under `crates/stats-cli/tests/`, using `env!("CARGO_BIN_EXE_stats-cli")`, as in `native_report_failure.rs`.
+- Integration test under `../../crates/stats-cli/tests`, using `env!("CARGO_BIN_EXE_stats-cli")`, as in `native_report_failure.rs`.
 - Deterministic generated records with fixed timestamps.
 - Expected values are computed from `P`, `T`, `N` in the test, not hard-coded.
 - Each test uses its own temporary directory, named with process id and test name, removed at start and end.

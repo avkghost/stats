@@ -39,11 +39,11 @@ C4Container
     Rel(fixture, store, "Reads observable aggregates via StatsStore read methods (totals, top, daily, not_found), checkpoint rows are not read")
 ```
 
-Communication is subprocess invocation and direct file and SQLite access. The fixture drives the public CLI surface rather than calling `update_inner` directly, because that function is private to `crates/stats-cli/src/main.rs` (`:784`). Running the binary also exercises config loading, `StoreRouter`, and report regeneration, which the boundary depends on.
+Communication is subprocess invocation and direct file and SQLite access. The fixture drives the public CLI surface rather than calling `update_inner` directly, because that function is private to `../../crates/stats-cli/src/main.rs` (`:784`). Running the binary also exercises config loading, `StoreRouter`, and report regeneration, which the boundary depends on.
 
 ## C4 Level 3 - Component
 
-### 3.1 Rotation fixture (`crates/stats-cli/tests/rotation_boundary.rs`, new)
+### 3.1 Rotation fixture (`../../crates/stats-cli/tests/rotation_boundary.rs`, new)
 
 ```mermaid
 flowchart TB
@@ -84,7 +84,7 @@ flowchart TB
 | `backfill` / `discover_backfill_files` | `crates/stats-cli/src/main.rs:500`, `:544` | Reads rotations oldest-first, one `update_inner` per file |
 | Checkpoint lookups | `crates/stats-cli/src/main.rs:871-945`; `crates/stats-core/src/store.rs:440-516` | Identity, content, and prefix matching |
 | `file_identity` | `crates/stats-cli/src/main.rs:1170` | `dev:ino` on Unix |
-| `StatsStore` read API | `crates/stats-core/src/store.rs` | Aggregate comparison only |
+| `StatsStore` read API | `../../crates/stats-core/src/store.rs` | Aggregate comparison only |
 | Checkpoint methods (`input_checkpoint_*`) | `crates/stats-core/src/store.rs:440-516` | Internal bookkeeping; used by the updater, not read by the fixture. Modified in Phase 2 |
 
 ## Module Dependency graph

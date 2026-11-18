@@ -12,7 +12,7 @@ status: complete. Phases 1-5 implemented and committed in c119d87 (fixture in ac
 
 Phase 2 makes backfill correct for compressed rotations (the defect pinned by T4-gz, T4-bz2, T4-xz), makes every unpartitioned write all-or-nothing, and covers copytruncate (T7). It also prevents a silent loss found while planning: a partially written trailing line in the active log (T11).
 
-Production files changed: `crates/stats-core/src/store.rs`, `crates/stats-cli/src/main.rs`, plus new modules in `stats-core`. The schema version does not change, so no existing database is cleared on upgrade.
+Production files changed: `../../../crates/stats-core/src/store.rs`, `crates/stats-cli/src/main.rs`, plus new modules in `stats-core`. The schema version does not change, so no existing database is cleared on upgrade.
 
 ## Decisions (final, after review)
 
@@ -28,7 +28,7 @@ Production files changed: `crates/stats-core/src/store.rs`, `crates/stats-cli/sr
 | H | Failure policy | Non-zero exit and no writes. |
 | I | Partial trailing line (new, from F-7) | The updater consumes only newline-terminated lines of the active file. The checkpoint `size` and `lines` cover only those complete lines. Archives are complete files, so their final unterminated line is consumed at end of file. See "Complete-line rule". |
 | J | Preflight input and TOCTOU (new, from review) | Preflight streams each file through a hasher; it does not keep decoded content in memory. For the active file, preflight and apply use the same byte limit `S` (the size at preflight start). Apply verifies the digest of `[0, S)` only; bytes after `S` are ignored and handled by the next run. For archives, apply verifies the whole file. Any mismatch inside the verified range aborts and rolls back the transaction. See "Preflight input strategy". |
-| K | Replacement policy | Additive, confirmed. A changed prefix adds the new records to the existing aggregates. This is not a replay and does not delete earlier statistics. `docs/operations.md` must say this (Phase 3). |
+| K | Replacement policy | Additive, confirmed. A changed prefix adds the new records to the existing aggregates. This is not a replay and does not delete earlier statistics. `../../operations.md` must say this (Phase 3). |
 
 ## Lock wiring (decision F)
 
@@ -83,25 +83,25 @@ Trade-off: each file is decoded twice (preflight and apply). Accepted for bounde
 
 | # | File | Scope | Production files | Exit condition |
 |---|---|---|---|---|
-| 01 | [phase-01.md](./phase-01.md) | Store foundation: additive columns, snapshot table, SHA-256 prefix helper | `store.rs`, new hash helper, `Cargo.toml` | Legacy DB opens without replay; migration unit tests pass |
-| 02 | [phase-02.md](./phase-02.md) | Batch transactions | `store.rs` | Rollback unit test passes |
-| 03 | [phase-03.md](./phase-03.md) | `source_key`, dispatcher lock wiring | `main.rs`, `source_key.rs` | T9 passes; lock acquisition counted once per command |
-| 04 | [phase-04.md](./phase-04.md) | Matching, complete-line rule, streaming preflight | `checkpoint_match.rs`, `main.rs` | Matching and preflight unit tests pass |
-| 05 | [phase-05.md](./phase-05.md) | Apply in one transaction, unified update/backfill, migrate split, snapshots, T4-T11 | `main.rs` | All rotation tests green; `cargo test --workspace` green |
+| 01 | [phase-01.md](phase-01.md) | Store foundation: additive columns, snapshot table, SHA-256 prefix helper | `store.rs`, new hash helper, `../../../Cargo.toml` | Legacy DB opens without replay; migration unit tests pass |
+| 02 | [phase-02.md](phase-02.md) | Batch transactions | `store.rs` | Rollback unit test passes |
+| 03 | [phase-03.md](phase-03.md) | `source_key`, dispatcher lock wiring | `main.rs`, `source_key.rs` | T9 passes; lock acquisition counted once per command |
+| 04 | [phase-04.md](phase-04.md) | Matching, complete-line rule, streaming preflight | `checkpoint_match.rs`, `main.rs` | Matching and preflight unit tests pass |
+| 05 | [phase-05.md](phase-05.md) | Apply in one transaction, unified update/backfill, migrate split, snapshots, T4-T11 | `main.rs` | All rotation tests green; `cargo test --workspace` green |
 
 ## File map
 
 ### New files
-- `crates/stats-core/src/prefix_hash.rs` - SHA-256 helper (phase 01)
-- `crates/stats-core/src/checkpoint_match.rs` - pure decision logic (phase 04)
-- `crates/stats-core/src/source_key.rs` - source key derivation (phase 03)
-- `crates/stats-cli/tests/rotation_boundary.rs` - exists (Phase 1); extended in phase 05
+- `../../../crates/stats-core/src/prefix_hash.rs` - SHA-256 helper (phase 01)
+- `../../../crates/stats-core/src/checkpoint_match.rs` - pure decision logic (phase 04)
+- `../../../crates/stats-core/src/source_key.rs` - source key derivation (phase 03)
+- `../../../crates/stats-cli/tests/rotation_boundary.rs` - exists (Phase 1); extended in phase 05
 
 ### Modified files
-- `crates/stats-core/src/store.rs` - schema additions (`:84`, migration in `open()` `:69-131`), `record` → `record_in` (`:132-357`), `with_batch` / `Batch`, prefix state methods, `reset_checkpoint` (`:431-438`)
-- `crates/stats-core/src/lib.rs` - exports
-- `crates/stats-core/Cargo.toml` - `sha2`
-- `crates/stats-cli/src/main.rs` - dispatcher lock (`:237-365`), `update` (`:486`), `backfill` (`:500`), `rebuild` (`:1118`), `migrate` (`:1858`, call at `:1899`), `update_inner` (`:784-1088`) split into `plan_sources`, `apply_plan`, `process_lines`, and the `*_unlocked` variants
+- `../../../crates/stats-core/src/store.rs` - schema additions (`:84`, migration in `open()` `:69-131`), `record` → `record_in` (`:132-357`), `with_batch` / `Batch`, prefix state methods, `reset_checkpoint` (`:431-438`)
+- `../../../crates/stats-core/src/lib.rs` - exports
+- `../../../crates/stats-core/Cargo.toml` - `sha2`
+- `../../../crates/stats-cli/src/main.rs` - dispatcher lock (`:237-365`), `update` (`:486`), `backfill` (`:500`), `rebuild` (`:1118`), `migrate` (`:1858`, call at `:1899`), `update_inner` (`:784-1088`) split into `plan_sources`, `apply_plan`, `process_lines`, and the `*_unlocked` variants
 
 ## Error codes
 Not applicable (anyhow messages). Message formats are specified in phase 04.
@@ -112,13 +112,13 @@ Not applicable (anyhow messages). Message formats are specified in phase 04.
 - [ ] `cargo test --workspace` passes, including `migrates_old_schema_and_invalidates_checkpoint` (`store.rs:1072`)
 - [ ] Lock acquisition counted once per command (phase 03 test)
 - [ ] `migrate` still replays into partitions (regression test: existing `migration_backs_up_old_store_before_replaying_into_partitions`, `main.rs:2840`)
-- [ ] `cargo clippy --workspace` clean if CI runs it (check `.github/workflows/ci.yml`)
-- [ ] `docs/operations.md` corrected in design Phase 3 (decision K wording: additive, analyzer cannot remove events without event-level storage)
+- [ ] `cargo clippy --workspace` clean if CI runs it (check `../../../.github/workflows/ci.yml`)
+- [ ] `../../operations.md` corrected in design Phase 3 (decision K wording: additive, analyzer cannot remove events without event-level storage)
 
 ## Findings from planning
 
 - **F-1 (verified):** copytruncate then backfill double counts: 250 vs clean 150. Mechanism: the truncated identity's checkpoint is overwritten; the copied archive has a new identity and no path match. Addressed by decision C.
-- **F-2 (resolved in code; documented):** `DefaultHasher` is not specified across Rust releases. `hash_bytes` now uses a frozen SipHash-1-3 implementation (`crates/stats-cli/src/legacy_hash.rs`) that matches `DefaultHasher` on the toolchain that wrote existing data (unit-tested). The new config fingerprint is SHA-256. A stored legacy config hash is migrated in place, keeping aggregates and checkpoints (test T12); only a genuinely different config clears (T12b).
+- **F-2 (resolved in code; documented):** `DefaultHasher` is not specified across Rust releases. `hash_bytes` now uses a frozen SipHash-1-3 implementation (`../../../crates/stats-cli/src/legacy_hash.rs`) that matches `DefaultHasher` on the toolchain that wrote existing data (unit-tested). The new config fingerprint is SHA-256. A stored legacy config hash is migrated in place, keeping aggregates and checkpoints (test T12); only a genuinely different config clears (T12b).
 - **Limitation: legacy rows.** Rows written before checkpoint support (no stable prefix fields) cannot be matched against compressed archives. Such a backfill aborts with a message and needs the documented rebuild recovery (test T6). This is a permanent requirement for those databases, not a bug to fix.
 - **Limitation: lock cost.** The writer lock is held through preflight. Each archive is decoded twice (preflight and apply, plus one extra pass when a backfill has several files for overlap detection). Large archives block other writers for that time.
 - **Limitation: containment.** Overlap detection in one run covers both identical files and one file that begins with another. An archive that ends mid-line and is then continued by another file is not detected. Copy-without-truncate (decision G) is out of scope.

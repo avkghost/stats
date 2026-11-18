@@ -10,7 +10,7 @@ plan: ./README.md
 ## Goal
 Apply a validated plan in one transaction, route normal `update` through the same path, record superseded prefixes on truncation (copytruncate), and make T4, T5, T6, T7 and T10 pass.
 
-## Apply (`crates/stats-cli/src/main.rs`)
+## Apply (`../../../crates/stats-cli/src/main.rs`)
 
 Bounds (decision J, refined): for the active file, apply reads only `[0, S)`, the same limit used by preflight, and verifies the digest of that range before `COMMIT`. Bytes after `S` are not read and are handled by the next run. For archives apply verifies the whole file. A mismatch inside the verified range aborts and rolls back the transaction.
 
@@ -57,9 +57,9 @@ The command flow for `update` and `backfill` becomes:
 A changed prefix adds the new records to the existing aggregates. This is not a replay and does not delete the earlier statistics. The analyzer cannot remove already-aggregated events, because the store keeps aggregates, not event rows. `docs/operations.md:9-10` currently says "trigger a safe aggregate replay", which is wrong; design phase 3 replaces that sentence with the additive description above.
 
 ## Files to Modify
-- `crates/stats-cli/src/main.rs`: `update` (`:486-498`), `backfill` (`:500-542`), `update_inner` (`:784-1088`) split into `plan_sources`, `apply_plan`, `process_lines`
-- `crates/stats-core/src/store.rs`: none beyond phases 01-02 (apply uses the `Batch` API)
-- `crates/stats-cli/tests/rotation_boundary.rs`: add T5, T6, T7, T8, T10; T4-* expectations unchanged
+- `../../../crates/stats-cli/src/main.rs`: `update` (`:486-498`), `backfill` (`:500-542`), `update_inner` (`:784-1088`) split into `plan_sources`, `apply_plan`, `process_lines`
+- `../../../crates/stats-core/src/store.rs`: none beyond phases 01-02 (apply uses the `Batch` API)
+- `../../../crates/stats-cli/tests/rotation_boundary.rs`: add T5, T6, T7, T8, T10; T4-* expectations unchanged
 
 ## Test cases
 
@@ -120,4 +120,4 @@ Steps:
 Baseline with the current code: 100, then 109 (verified, F-7). T11 is red until phase 05.
 
 ## Open questions (phase 05)
-None outstanding from the review. Documentation edits (`docs/operations.md`, `deploy/stats-logrotate`) remain in design Phase 3, after these tests pass.
+None outstanding from the review. Documentation edits (`../../operations.md`, `deploy/stats-logrotate`) remain in design Phase 3, after these tests pass.
