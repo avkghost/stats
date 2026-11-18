@@ -2,8 +2,14 @@ use stats_core::{AccessEvent, AccessTimestamp, GeoInfo, StatsStore};
 use std::{fs, path::PathBuf};
 
 fn database() -> PathBuf {
-    let directory =
-        std::env::temp_dir().join(format!("stats-core-store-golden-{}", std::process::id()));
+    let directory = std::env::temp_dir().join(format!(
+        "stats-core-store-golden-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
     let _ = fs::remove_dir_all(&directory);
     fs::create_dir_all(&directory).unwrap();
     directory.join("stats.sqlite3")
@@ -86,6 +92,34 @@ fn fixed_fixture_has_stable_store_projection() {
     assert_eq!(
         store.top("request_times", 10).unwrap(),
         vec![("100-500ms".into(), 3)]
+    );
+
+    drop(store);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[test]
+fn cardinality_limit_buckets_new_untrusted_keys() {
+    let path = database();
+    let store = StatsStore::open(&path).unwrap();
+    let first = event("/one", 1);
+    let mut second = event("/two", 1);
+    second.user_agent = Some("second-agent".into());
+    second.referer = Some("https://other.example/".into());
+    store
+        .record_with_cardinality_limit(&first, true, 1)
+        .unwrap();
+    store
+        .record_with_cardinality_limit(&second, true, 1)
+        .unwrap();
+
+    assert_eq!(
+        store.top("user_agents", 10).unwrap(),
+        vec![("golden-agent".into(), 1), ("other".into(), 1)]
+    );
+    assert_eq!(
+        store.top("referers", 10).unwrap(),
+        vec![("https://example.test/".into(), 1), ("other".into(), 1)]
     );
 
     drop(store);

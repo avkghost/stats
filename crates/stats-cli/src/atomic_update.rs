@@ -529,10 +529,13 @@ fn apply_file(
         let text = String::from_utf8_lossy(line);
         if !invalid_reported && std::str::from_utf8(line).is_err() {
             invalid_reported = true;
-            batch.diagnostic(&format!(
-                "{}: input contains invalid UTF-8; replacement characters were used",
-                plan.path.display()
-            ))?;
+            batch.diagnostic_with_cardinality_limit(
+                &format!(
+                    "{}: input contains invalid UTF-8; replacement characters were used",
+                    plan.path.display()
+                ),
+                config.cardinality_limit,
+            )?;
             diagnostics += 1;
         }
         let text: &str = &text;
@@ -562,7 +565,10 @@ fn apply_file(
                     matcher.apply(&mut event);
                 }
                 if let Err(error) = enrich_with_native_plugins(&mut event, native_plugins) {
-                    batch.diagnostic(&format!("native plugin enrichment disabled: {error}"))?;
+                    batch.diagnostic_with_cardinality_limit(
+                        &format!("native plugin enrichment disabled: {error}"),
+                        config.cardinality_limit,
+                    )?;
                 }
                 if !config.url_referrer_with_query {
                     event.referer = event
@@ -572,17 +578,32 @@ fn apply_file(
                 }
                 pending.push(*event);
                 if pending.len() >= 256 {
-                    events += flush(batch, &mut pending, reverse_dns.as_mut(), &config.filters)?;
+                    events += flush(
+                        batch,
+                        &mut pending,
+                        reverse_dns.as_mut(),
+                        &config.filters,
+                        config.cardinality_limit,
+                    )?;
                 }
             }
             ParseOutcome::Diagnostic(error) => {
-                batch.diagnostic(&format!("{}: {error}", plan.path.display()))?;
+                batch.diagnostic_with_cardinality_limit(
+                    &format!("{}: {error}", plan.path.display()),
+                    config.cardinality_limit,
+                )?;
                 diagnostics += 1;
             }
         }
         Ok(())
     })?;
-    events += flush(batch, &mut pending, reverse_dns.as_mut(), &config.filters)?;
+    events += flush(
+        batch,
+        &mut pending,
+        reverse_dns.as_mut(),
+        &config.filters,
+        config.cardinality_limit,
+    )?;
 
     // Verification before commit: the bytes we parsed must be the bytes we planned
     // against. A change inside the bound aborts the whole transaction.
@@ -634,13 +655,14 @@ fn flush(
     events: &mut Vec<AccessEvent>,
     reverse_dns: Option<&mut reverse_dns::ReverseDnsEnricher>,
     filters: &FilterConfig,
+    cardinality_limit: usize,
 ) -> anyhow::Result<u64> {
     if let Some(enricher) = reverse_dns {
         let _ = enricher.enrich_batch(events);
     }
     let count = events.len() as u64;
     for event in events.drain(..) {
-        batch.record(&event, is_page(&event, filters))?;
+        batch.record_with_cardinality_limit(&event, is_page(&event, filters), cardinality_limit)?;
     }
     Ok(count)
 }

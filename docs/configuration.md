@@ -17,6 +17,12 @@ are reported as ignored diagnostics.
 `DatabasePeriod=none` keeps the default single-database layout. `monthly` and
 `yearly` enable partitioned storage; see [Operations](operations.md#partitioning-and-retention).
 
+`CardinalityLimit` controls the maximum number of distinct keys retained for
+high-cardinality dimensions such as URLs, user agents, referers, hostnames,
+and diagnostics. New keys beyond the limit are counted under `other`. The
+default is `10000`; set a smaller value when untrusted traffic must not be
+allowed to grow the database through unique dimension values.
+
 ## Log formats
 
 Supported inputs include Apache/Nginx custom formats, common LogFormat 4,

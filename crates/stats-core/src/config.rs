@@ -115,6 +115,7 @@ pub struct Config {
     pub http_method_anomaly_allowed: Vec<String>,
     pub plugins: Vec<PluginConfig>,
     pub filters: FilterConfig,
+    pub cardinality_limit: usize,
     pub url_referrer_with_query: bool,
     pub warnings: Vec<String>,
 }
@@ -241,6 +242,7 @@ impl Config {
             "OnlyUserAgents",
             "NotPageList",
             "URLReferrerWithQuery",
+            "CardinalityLimit",
             "FirstDayOfWeek",
             // AWStats presentation-only directives accepted as no-ops.
             "UseFramesWhenCGI",
@@ -280,6 +282,21 @@ impl Config {
                     .unwrap_or_else(|| Path::new("."))
                     .join("output")
             });
+        let cardinality_limit = values
+            .get("CardinalityLimit")
+            .map(|value| value.parse::<usize>())
+            .transpose()
+            .map_err(|_| ConfigError::Invalid {
+                line: 0,
+                message: "CardinalityLimit must be a positive integer".into(),
+            })?
+            .unwrap_or(10_000);
+        if cardinality_limit == 0 {
+            return Err(ConfigError::Invalid {
+                line: 0,
+                message: "CardinalityLimit must be a positive integer".into(),
+            });
+        }
         Ok(Self {
             log_file: PathBuf::from(required("LogFile")?),
             log_format,
@@ -379,6 +396,7 @@ impl Config {
                     .map(|_| list("NotPageList"))
                     .unwrap_or_else(|| FilterConfig::default().not_page_files),
             },
+            cardinality_limit,
             url_referrer_with_query: values
                 .get("URLReferrerWithQuery")
                 .map(|value| value != "0")
@@ -559,6 +577,18 @@ mod tests {
         assert!(error
             .to_string()
             .contains("line 3: invalid SkipFiles pattern"));
+    }
+
+    #[test]
+    fn parses_cardinality_limit() {
+        let config =
+            Config::parse("LogFile=access.log\nLogFormat=\"%host %time1\"\nCardinalityLimit=42\n")
+                .unwrap();
+        assert_eq!(config.cardinality_limit, 42);
+        assert!(Config::parse(
+            "LogFile=access.log\nLogFormat=\"%host %time1\"\nCardinalityLimit=0\n"
+        )
+        .is_err());
     }
 
     #[test]

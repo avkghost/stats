@@ -8,6 +8,7 @@
 - Added a deterministic store characterization fixture covering aggregate projections.
 - Native worker tests now verify that the raw-log bearer token is not inherited by plugins.
 - Added native plugin load-error coverage and expanded the store characterization dimensions.
+- Added configurable cardinality limits for high-cardinality report dimensions; excess keys are grouped under `other`.
 
 ## 0.1.11
 

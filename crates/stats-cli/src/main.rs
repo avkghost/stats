@@ -753,10 +753,15 @@ struct StoreRouter {
     partitions: HashMap<String, StatsStore>,
     data_dir: PathBuf,
     period: DatabasePeriod,
+    cardinality_limit: usize,
 }
 
 impl StoreRouter {
-    fn open(data_dir: &Path, period: DatabasePeriod) -> anyhow::Result<Self> {
+    fn open(
+        data_dir: &Path,
+        period: DatabasePeriod,
+        cardinality_limit: usize,
+    ) -> anyhow::Result<Self> {
         fs::create_dir_all(data_dir)
             .with_context(|| format!("create data directory {}", data_dir.display()))?;
         let db_path = data_dir.join("stats.sqlite3");
@@ -767,6 +772,7 @@ impl StoreRouter {
             partitions: HashMap::new(),
             data_dir: data_dir.to_path_buf(),
             period,
+            cardinality_limit,
         })
     }
 
@@ -794,6 +800,7 @@ impl StoreRouter {
     }
 
     fn record(&mut self, event: &stats_core::AccessEvent, page: bool) -> anyhow::Result<()> {
+        let cardinality_limit = self.cardinality_limit;
         if let Some(key) = self.partition_key(event) {
             let shared_state = self.control.session_state_for_event(event)?;
             {
@@ -801,19 +808,21 @@ impl StoreRouter {
                 if let Some(state) = &shared_state {
                     partition.seed_session_state(event, state)?;
                 }
-                partition.record(event, page)?;
+                partition.record_with_cardinality_limit(event, page, cardinality_limit)?;
                 if let Some(state) = partition.session_state_for_event(event)? {
                     self.control.merge_session_state(event, &state)?;
                 }
             }
         } else {
-            self.control.record(event, page)?;
+            self.control
+                .record_with_cardinality_limit(event, page, cardinality_limit)?;
         }
         Ok(())
     }
 
     fn diagnostic(&self, message: &str) -> anyhow::Result<()> {
-        self.control.diagnostic(message)?;
+        self.control
+            .diagnostic_with_cardinality_limit(message, self.cardinality_limit)?;
         Ok(())
     }
 
@@ -927,7 +936,11 @@ fn update_inner_partitioned(
         }
     }
     let db_path = config.data_dir.join("stats.sqlite3");
-    let mut store = StoreRouter::open(&config.data_dir, config.database_period)?;
+    let mut store = StoreRouter::open(
+        &config.data_dir,
+        config.database_period,
+        config.cardinality_limit,
+    )?;
     if hashfiles_backend(&config.plugins).is_some() {
         store.set_meta("hashfiles_backend", "sqlite")?;
     }
@@ -1246,7 +1259,11 @@ fn rebuild(
         .with_context(|| format!("load configuration {}", config_path.display()))?
         .with_overrides(log_override.clone(), data_override.clone());
     let db_path = config.data_dir.join("stats.sqlite3");
-    let mut store = StoreRouter::open(&config.data_dir, config.database_period)?;
+    let mut store = StoreRouter::open(
+        &config.data_dir,
+        config.database_period,
+        config.cardinality_limit,
+    )?;
     store.clear_aggregates()?;
     if store.control.totals()?.0 != 0 {
         bail!(
@@ -2010,7 +2027,7 @@ fn migrate(
             backup_dir.display()
         );
     }
-    let mut store = StoreRouter::open(&data_dir, config.database_period)?;
+    let mut store = StoreRouter::open(&data_dir, config.database_period, config.cardinality_limit)?;
     store.clear_aggregates()?;
     store.reset_checkpoint()?;
     drop(store);
@@ -2860,7 +2877,12 @@ mod tests {
                 .as_nanos()
         ));
         fs::create_dir_all(&directory).unwrap();
-        let mut router = StoreRouter::open(&directory, DatabasePeriod::Month).unwrap();
+        let mut router = StoreRouter::open(
+            &directory,
+            DatabasePeriod::Month,
+            stats_core::DEFAULT_CARDINALITY_LIMIT,
+        )
+        .unwrap();
         for timestamp in ["2026-01-31T23:59:00+00:00", "2026-02-01T00:01:00+00:00"] {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
@@ -3065,7 +3087,12 @@ mod tests {
         let data_dir = root.join("data");
         let archive_dir = root.join("archive");
         fs::create_dir_all(&data_dir).unwrap();
-        let mut router = StoreRouter::open(&data_dir, DatabasePeriod::Month).unwrap();
+        let mut router = StoreRouter::open(
+            &data_dir,
+            DatabasePeriod::Month,
+            stats_core::DEFAULT_CARDINALITY_LIMIT,
+        )
+        .unwrap();
         for timestamp in ["2024-12-31T23:59:00+00:00", "2025-01-01T00:01:00+00:00"] {
             let event = AccessEvent {
                 client_ip: "203.0.113.10".into(),
