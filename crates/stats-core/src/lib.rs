@@ -18,40 +18,51 @@ mod store;
 /// Formats a byte count using binary units for human-facing output.
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 6] = ["B", "KB", "MB", "GB", "TB", "PB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
+    if bytes < 1024 {
+        return format!("{bytes} B");
     }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else if value >= 100.0 {
-        format!("{value:.0} {}", UNITS[unit])
-    } else if value >= 10.0 {
-        format!("{value:.1} {}", UNITS[unit])
-    } else {
-        format!("{value:.2} {}", UNITS[unit])
-    }
+    let (value, unit, decimals) = scale_for_display(bytes as f64, 1024.0, UNITS.len() - 1);
+    format!("{value:.decimals$} {}", UNITS[unit])
 }
 
 /// Formats a non-byte count using compact decimal units for human-facing output.
 pub fn format_count(count: u64) -> String {
     const UNITS: [&str; 5] = ["", "K", "M", "B", "T"];
-    let mut value = count as f64;
+    if count < 1000 {
+        return count.to_string();
+    }
+    let (value, unit, decimals) = scale_for_display(count as f64, 1000.0, UNITS.len() - 1);
+    format!("{value:.decimals$}{}", UNITS[unit])
+}
+
+/// Chooses the unit and decimal places for a value of at least one base unit.
+///
+/// The value is rounded at the precision it will be displayed with, and the unit is chosen
+/// from that rounded value. Rounding first prevents "1024 KB" or "1000K" when the scaled value
+/// is just below the next unit.
+fn scale_for_display(raw: f64, base: f64, max_unit: usize) -> (f64, usize, usize) {
     let mut unit = 0;
-    while value >= 1000.0 && unit < UNITS.len() - 1 {
-        value /= 1000.0;
+    let mut value = raw;
+    while value >= base && unit < max_unit {
+        value /= base;
         unit += 1;
     }
-    if unit == 0 {
-        count.to_string()
-    } else if value >= 100.0 {
-        format!("{value:.0}{}", UNITS[unit])
-    } else if value >= 10.0 {
-        format!("{value:.1}{}", UNITS[unit])
-    } else {
-        format!("{value:.2}{}", UNITS[unit])
+    loop {
+        let decimals = if value >= 100.0 {
+            0
+        } else if value >= 10.0 {
+            1
+        } else {
+            2
+        };
+        let factor = 10f64.powi(decimals as i32);
+        let rounded = (value * factor).round() / factor;
+        if rounded >= base && unit < max_unit {
+            value = rounded / base;
+            unit += 1;
+        } else {
+            return (rounded, unit, decimals);
+        }
     }
 }
 
@@ -96,7 +107,9 @@ mod tests {
         assert_eq!(format_bytes(1024 * 1024), "1.00 MB");
         assert_eq!(format_bytes(5 * 1024 * 1024), "5.00 MB");
         assert_eq!(format_bytes(1024 * 1024 * 1024), "1.00 GB");
-        assert_eq!(format_bytes(1_048_575), "1024 KB");
+        assert_eq!(format_bytes(1_048_575), "1.00 MB");
+        assert_eq!(format_bytes(1_048_051), "1023 KB");
+        assert_eq!(format_bytes(1_073_741_823), "1.00 GB");
     }
 
     #[test]
@@ -106,6 +119,9 @@ mod tests {
         assert_eq!(format_count(12_500), "12.5K");
         assert_eq!(format_count(1_000_000), "1.00M");
         assert_eq!(format_count(2_000_000_000), "2.00B");
-        assert_eq!(format_count(999_999), "1000K");
+        assert_eq!(format_count(999_999), "1.00M");
+        assert_eq!(format_count(999_950), "1.00M");
+        assert_eq!(format_count(999_400), "999K");
+        assert_eq!(format_count(9_996), "10.00K");
     }
 }

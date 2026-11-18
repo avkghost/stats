@@ -3,6 +3,7 @@
 ## 0.1.10
 
 - Human-facing HTML and TUI reports now use compact, readable byte and count units while CLI, CSV, and JSON values remain exact.
+- Human-readable values round at display precision before choosing a unit, so values near a boundary show as `1.00 MB` or `1.00M` instead of `1024 KB` or `1000K`.
 - The systemd update service now has a five-minute startup deadline.
 - The supplied logrotate template creates the active log with the `stats` reader group, so the scheduled service can read it after rotation.
 - Deployment documentation describes the required log ownership and group access.
