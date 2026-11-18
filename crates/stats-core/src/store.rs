@@ -183,6 +183,18 @@ impl StatsStore {
         event: &AccessEvent,
         is_page: bool,
     ) -> Result<(), StoreError> {
+        // Resolve values reused by several dimensions once per event. This keeps
+        // the hot path deterministic while avoiding repeated formatting and UA
+        // classification work for every aggregate insert.
+        let user_agent = event.user_agent.as_deref().unwrap_or("UNKNOWN");
+        let browser_name = browser(user_agent);
+        let operating_system_name = operating_system(user_agent);
+        let robot_name = robot(user_agent);
+        let file_type_name = file_type(event.url.as_deref());
+        let hour = event.timestamp.format("%H").to_string();
+        let date = event.timestamp.format("%Y-%m-%d").to_string();
+        let month = event.timestamp.format("%Y-%m").to_string();
+        let weekday = event.timestamp.format("%A").to_string();
         tx.execute("INSERT INTO totals(key,hits,bytes) VALUES('all',1,?1) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![event.bytes as i64])?;
         let class = if is_page { "pages" } else { "files" };
         tx.execute("INSERT INTO totals(key,hits,bytes) VALUES(?1,1,?2) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes", params![class, event.bytes as i64])?;
@@ -258,14 +270,13 @@ impl StatsStore {
                 params![label],
             )?;
         }
-        tx.execute("INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![file_type(event.url.as_deref())])?;
-        let user_agent = event.user_agent.as_deref().unwrap_or("UNKNOWN");
-        tx.execute("INSERT INTO browsers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![browser(user_agent)])?;
+        tx.execute("INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![file_type_name])?;
+        tx.execute("INSERT INTO browsers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![browser_name])?;
         tx.execute(
             "INSERT INTO oses(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![operating_system(user_agent)],
+            params![operating_system_name],
         )?;
-        if let Some(robot) = robot(user_agent) {
+        if let Some(robot) = robot_name {
             tx.execute("INSERT INTO robots(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![robot])?;
         }
         if let Some(duration) = event
@@ -279,18 +290,17 @@ impl StatsStore {
         }
         tx.execute(
             "INSERT INTO hours(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![event.timestamp.format("%H").to_string()],
+            params![hour],
         )?;
         tx.execute(
             "INSERT INTO dates(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![event.timestamp.format("%Y-%m-%d").to_string()],
+            params![date],
         )?;
         tx.execute(
             "INSERT INTO months(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![event.timestamp.format("%Y-%m").to_string()],
+            params![month],
         )?;
-        tx.execute("INSERT INTO weekdays(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![event.timestamp.format("%A").to_string()])?;
-        let date = event.timestamp.format("%Y-%m-%d").to_string();
+        tx.execute("INSERT INTO weekdays(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![weekday])?;
         tx.execute(
             "INSERT INTO daily(key,hits,bytes,pages,files,visits) VALUES(?1,1,?2,?3,?4,0) ON CONFLICT(key) DO UPDATE SET hits=hits+1, bytes=bytes+excluded.bytes, pages=pages+excluded.pages, files=files+excluded.files",
             params![date, event.bytes as i64, is_page as i64, (!is_page) as i64],
