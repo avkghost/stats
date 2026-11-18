@@ -304,6 +304,36 @@ fn render_report(
     Ok((StatusCode::OK, [(header::CONTENT_TYPE, media_type)], body).into_response())
 }
 
-fn error_response(_error: anyhow::Error) -> Response {
-    (StatusCode::INTERNAL_SERVER_ERROR, "report request failed\n").into_response()
+fn error_response(error: anyhow::Error) -> Response {
+    eprintln!("HTTP report request failed: {error:#}");
+    let message = error.to_string();
+    let status = if message.contains("sections are supported")
+        || message.contains("unsupported output format")
+    {
+        StatusCode::BAD_REQUEST
+    } else if message.contains("requires --config") || message.contains("LoadPlugin=report_") {
+        StatusCode::NOT_IMPLEMENTED
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (status, "report request failed\n").into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::error_response;
+    use axum::body::to_bytes;
+
+    #[tokio::test]
+    async fn maps_client_and_missing_plugin_errors_without_leaking_details() {
+        let response = error_response(anyhow::anyhow!(
+            "sections are supported only for HTML output"
+        ));
+        assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&body[..], b"report request failed\n");
+
+        let response = error_response(anyhow::anyhow!("output csv requires --config"));
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_IMPLEMENTED);
+    }
 }

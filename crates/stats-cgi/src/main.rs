@@ -237,14 +237,33 @@ fn render_cgi(
 
 fn main() {
     if let Err(error) = run_cgi() {
+        let status = cgi_error_status(&error);
         let mut stdout = io::BufWriter::new(io::stdout().lock());
         let _ = writeln!(
             stdout,
-            "Status: 500 Internal Server Error\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nreport request failed"
+            "Status: {}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nreport request failed",
+            status
         );
         let _ = stdout.flush();
         eprintln!("CGI request failed: {error}");
         std::process::exit(1);
+    }
+}
+
+fn cgi_error_status(error: &anyhow::Error) -> &'static str {
+    let message = error.to_string();
+    if message.contains("invalid CGI")
+        || message.contains("unsupported CGI")
+        || message.contains("supported only for HTML")
+    {
+        "400 Bad Request"
+    } else if message.contains("requires STATS_CONFIG")
+        || message.contains("requires LoadPlugin")
+        || message.contains("external plugin")
+    {
+        "501 Not Implemented"
+    } else {
+        "500 Internal Server Error"
     }
 }
 
@@ -329,6 +348,18 @@ mod tests {
                 limit: DEFAULT_LIMIT,
                 section: Some("visitors".into()),
             }
+        );
+    }
+
+    #[test]
+    fn maps_cgi_request_errors_to_client_statuses() {
+        assert_eq!(
+            cgi_error_status(&anyhow::anyhow!("invalid CGI limit")),
+            "400 Bad Request"
+        );
+        assert_eq!(
+            cgi_error_status(&anyhow::anyhow!("output csv requires STATS_CONFIG")),
+            "501 Not Implemented"
         );
     }
 }
