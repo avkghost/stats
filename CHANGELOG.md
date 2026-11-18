@@ -6,6 +6,7 @@
 - Filter regexes are compiled once while loading the configuration instead of being recompiled for every access event.
 - Region aggregates include the country as `region, country` when GeoIP provides both values, making regions unambiguous in reports.
 - Schema version 14 automatically replays schema 13 databases so existing region aggregates are rebuilt with the new keys.
+  The replay clears derived aggregates and rebuilds them only from input files available to the update; preserve rotated archives and use the documented [backfill recovery procedure](docs/operations.md#rotation-and-backfill), because history from logs that are no longer available cannot be reconstructed.
 - The HTML Performance page lists request-time buckets from fastest to slowest, hours from 00 to 23, and status codes by hit count, with numeric-code order as the tie-breaker. Other pages keep their order.
 
 ## 0.1.13
