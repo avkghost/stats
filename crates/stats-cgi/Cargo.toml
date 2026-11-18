@@ -1,6 +1,6 @@
 [package]
 name = "stats-cgi"
-version = "0.1.8"
+version = "0.1.9"
 description = "Read-only CGI adapter for Stats reports"
 edition.workspace = true
 license.workspace = true

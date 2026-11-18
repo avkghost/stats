@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Release archive checksum files now use relocatable archive names, so CI and users can verify them from any extracted artifact directory.
+
 ## 0.1.8
 
 - Release bundles now include the native `stats-report-worker` beside every frontend that can render native plugins.

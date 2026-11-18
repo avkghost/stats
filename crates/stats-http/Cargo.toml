@@ -1,6 +1,6 @@
 [package]
 name = "stats-http"
-version = "0.1.8"
+version = "0.1.9"
 description = "Standalone HTTP frontend for the AWStats-style Rust web log analyzer"
 edition.workspace = true
 license.workspace = true
