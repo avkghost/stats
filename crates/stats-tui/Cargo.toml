@@ -1,6 +1,6 @@
 [package]
 name = "stats-tui"
-version = "0.1.5"
+version = "0.1.6"
 description = "Terminal frontend for the AWStats-style Rust web log analyzer"
 edition.workspace = true
 license.workspace = true
@@ -10,4 +10,4 @@ documentation.workspace = true
 [dependencies]
 anyhow.workspace = true
 ratatui.workspace = true
-stats-core = { version = "0.1.5", path = "../stats-core" }
+stats-core = { version = "0.1.6", path = "../stats-core" }

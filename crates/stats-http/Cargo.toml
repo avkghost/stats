@@ -1,6 +1,6 @@
 [package]
 name = "stats-http"
-version = "0.1.5"
+version = "0.1.6"
 description = "Standalone HTTP frontend for the AWStats-style Rust web log analyzer"
 edition.workspace = true
 license.workspace = true
@@ -15,8 +15,8 @@ clap.workspace = true
 flate2.workspace = true
 regex.workspace = true
 serde.workspace = true
-stats-core = { version = "0.1.5", path = "../stats-core" }
-stats-render = { version = "0.1.5", path = "../stats-render" }
+stats-core = { version = "0.1.6", path = "../stats-core" }
+stats-render = { version = "0.1.6", path = "../stats-render" }
 tokio.workspace = true
 xz2.workspace = true
 

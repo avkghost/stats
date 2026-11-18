@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.6
 
 - Report metadata now records the processed active log: `input_path`, `input_size`, and `input_lines` are populated for unpartitioned stores again.
 - Storage reads (`totals`, `metric`, `unique_visits`, `meta`) return errors on database failures instead of reporting zero or an absent value.
