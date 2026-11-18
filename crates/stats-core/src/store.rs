@@ -38,6 +38,9 @@ fn capped_key(
     key: &str,
     limit: usize,
 ) -> Result<String, rusqlite::Error> {
+    if limit == usize::MAX {
+        return Ok(key.to_owned());
+    }
     let exists_sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)");
     if tx.query_row(&exists_sql, [key], |row| row.get::<_, bool>(0))? {
         return Ok(key.to_owned());
@@ -58,6 +61,9 @@ fn capped_key_connection(
     key: &str,
     limit: usize,
 ) -> Result<String, rusqlite::Error> {
+    if limit == usize::MAX {
+        return Ok(key.to_owned());
+    }
     let exists_sql = format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {column}=?1)");
     if conn.query_row(&exists_sql, [key], |row| row.get::<_, bool>(0))? {
         return Ok(key.to_owned());

@@ -125,3 +125,37 @@ fn cardinality_limit_buckets_new_untrusted_keys() {
     drop(store);
     let _ = fs::remove_dir_all(path.parent().unwrap());
 }
+
+#[test]
+#[ignore = "manual performance measurement; run with --ignored --nocapture"]
+fn benchmark_cardinality_limit() {
+    use std::time::Instant;
+
+    const EVENTS: usize = 10_500;
+    let run = |limit| {
+        let path = database();
+        let store = StatsStore::open(&path).unwrap();
+        let started = Instant::now();
+        store
+            .with_batch(|batch| {
+                for index in 0..EVENTS {
+                    let mut item = event(&format!("/bench/{index}"), 1);
+                    item.user_agent = Some(format!("agent-{index}"));
+                    item.referer = Some(format!("https://ref-{index}.example/"));
+                    batch.record_with_cardinality_limit(&item, true, limit)?;
+                }
+                Ok::<_, stats_core::StoreError>(())
+            })
+            .unwrap();
+        let elapsed = started.elapsed();
+        drop(store);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        elapsed
+    };
+
+    let capped = run(10_000);
+    let uncapped = run(usize::MAX);
+    println!(
+        "cardinality benchmark: {EVENTS} unique events: capped={capped:?}, uncapped={uncapped:?}"
+    );
+}

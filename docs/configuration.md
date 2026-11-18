@@ -20,8 +20,18 @@ are reported as ignored diagnostics.
 `CardinalityLimit` controls the maximum number of distinct keys retained for
 high-cardinality dimensions such as URLs, user agents, referers, hostnames,
 and diagnostics. New keys beyond the limit are counted under `other`. The
-default is `10000`; set a smaller value when untrusted traffic must not be
-allowed to grow the database through unique dimension values.
+default is `10000`; the `other` bucket occupies one of those rows, so at most
+`CardinalityLimit - 1` named keys are retained. Set a smaller value when
+untrusted traffic must not be allowed to grow the database through unique
+dimension values. The limit applies to new records only: existing rows are not
+pruned or merged when the setting is lowered, and changing the configuration
+causes the normal configuration-fingerprint replay.
+
+The repository includes a manual benchmark for this path. Run
+`cargo test -p stats-core --test store_golden benchmark_cardinality_limit
+-- --ignored --nocapture` to compare the capped path with the internal
+uncapped control on 10,500 unique events. The benchmark is intentionally
+ignored by the normal suite because timings are machine-dependent.
 
 ## Log formats
 
