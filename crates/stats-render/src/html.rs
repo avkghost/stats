@@ -44,13 +44,13 @@ pub(crate) fn bandwidth_table(rows: &[BandwidthRow]) -> String {
     );
     for row in rows {
         out.push_str(&format!(
-            "<tr title=\"{}: {} hits, {} bytes\"><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} hits, {}\"><td>{}</td><td>{}</td><td>{}</td></tr>",
             html_escape(&row.key),
             row.hits,
-            row.bytes,
+            stats_core::format_bytes(row.bytes),
             html_escape(&row.key),
             row.hits,
-            row.bytes
+            stats_core::format_bytes(row.bytes)
         ));
     }
     out.push_str("</tbody></table>");
@@ -87,13 +87,13 @@ pub(crate) fn daily_table(rows: &[DailyRow]) -> String {
     );
     for row in rows {
         out.push_str(&format!(
-            "<tr title=\"{}: {} hits, {} bytes\"><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            "<tr title=\"{}: {} hits, {}\"><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
             html_escape(&row.date),
             row.hits,
-            row.bytes,
+            stats_core::format_bytes(row.bytes),
             html_escape(&row.date),
             row.hits,
-            row.bytes,
+            stats_core::format_bytes(row.bytes),
             row.pages,
             row.files,
             row.visits
@@ -135,8 +135,12 @@ pub(crate) fn bandwidth_chart(rows: &[BandwidthRow]) -> String {
             .checked_div(maximum)
             .unwrap_or(0);
         out.push_str(&format!(
-            "<div class=\"aw-chart-row\" title=\"{}: {} bytes\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
-            html_escape(&row.key), row.bytes, html_escape(&row.key), width, row.bytes
+            "<div class=\"aw-chart-row\" title=\"{}: {}\"><span class=\"aw-chart-label\">{}</span><span class=\"aw-chart-track\"><span class=\"aw-chart-bar\" style=\"width:{}%\"></span></span><span class=\"aw-chart-value\">{}</span></div>",
+            html_escape(&row.key),
+            stats_core::format_bytes(row.bytes),
+            html_escape(&row.key),
+            width,
+            stats_core::format_bytes(row.bytes)
         ));
     }
     out.push_str("</div>");
@@ -152,6 +156,14 @@ fn section(title: &str, content: String) -> String {
 }
 
 fn metric(label: &str, value: u64) -> String {
+    format!(
+        "<div class=\"metric\"><strong>{}</strong><span>{}</span></div>",
+        stats_core::format_count(value),
+        html_escape(label)
+    )
+}
+
+fn metric_text(label: &str, value: String) -> String {
     format!(
         "<div class=\"metric\"><strong>{value}</strong><span>{}</span></div>",
         html_escape(label)
@@ -184,7 +196,7 @@ fn overview(report: &Report, periods: &[(String, String)]) -> String {
     format!(
         "<div class=\"eyebrow\">Traffic overview</div><h1>Stats Web Server Statistics</h1><p class=\"lede\">Aggregated activity from the configured access log.</p><div class=\"metric-grid\">{}{}{}{}{}{}</div><div class=\"overview-grid\">{}{}{}{}{}</div>",
         metric("Hits", report.hits),
-        metric("Bytes", report.bytes),
+        metric_text("Bytes", stats_core::format_bytes(report.bytes)),
         metric("Pages", report.pages),
         metric("Files", report.files),
         metric("Visits", report.visits),

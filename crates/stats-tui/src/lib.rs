@@ -123,11 +123,11 @@ fn draw(
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(lower);
     let overview = format!(
         "Hits {}  Pages {}  Files {}  Visits {}  Bytes {}  |  {}",
-        report.hits,
-        report.pages,
-        report.files,
-        report.visits,
-        report.bytes,
+        stats_core::format_count(report.hits),
+        stats_core::format_count(report.pages),
+        stats_core::format_count(report.files),
+        stats_core::format_count(report.visits),
+        stats_core::format_bytes(report.bytes),
         log_file.display()
     );
     frame.render_widget(
