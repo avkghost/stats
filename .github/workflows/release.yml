@@ -14,8 +14,46 @@ jobs:
     permissions:
       contents: read
 
-  release:
+  macos-release:
     needs: ci
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            platform: macos-arm64
+            target: aarch64-apple-darwin
+          - runner: macos-13
+            platform: macos-x86_64
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2.9.1
+      - name: Build macOS release bundle
+        env:
+          STATS_VERSION: ${{ github.ref_name }}
+          STATS_PLATFORM: ${{ matrix.platform }}
+          STATS_TARGET: ${{ matrix.target }}
+          STATS_RELEASE_DIR: target/release-artifacts
+        run: bash deploy/package-release.sh
+      - name: Verify macOS checksums
+        working-directory: target/release-artifacts
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c *.sha256; else shasum -a 256 -c *.sha256; fi
+      - name: Verify macOS archive contents
+        run: bash deploy/verify-release-artifacts.sh target/release-artifacts
+      - name: Upload macOS release bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: stats-${{ matrix.platform }}-${{ github.sha }}
+          path: target/release-artifacts/*
+          if-no-files-found: error
+
+  release:
+    needs: [ci, macos-release]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -33,6 +71,12 @@ jobs:
         run: sha256sum -c *.sha256
       - name: Verify release archive contents
         run: bash deploy/verify-release-artifacts.sh target/release-artifacts
+      - name: Download macOS release bundles
+        uses: actions/download-artifact@v6
+        with:
+          pattern: stats-macos-*-${{ github.sha }}
+          path: target/release-artifacts
+          merge-multiple: true
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:

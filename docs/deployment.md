@@ -62,8 +62,25 @@ cp target/release/stats-report-worker "$HOME/.local/bin/"
 
 For periodic updates, render `deploy/com.avkghost.stats-update.plist` with
 absolute values for `@STATS_BINARY_PATH@`, `@STATS_CONFIG_PATH@`, and
-`@STATS_LOG_DIR@`, then load it with `launchctl`. The plist uses a five-minute
-`StartInterval`; it does not run at login unless `RunAtLoad` is added.
+`@STATS_LOG_DIR@`, then load it with `launchctl`:
+
+```text
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/.local/var/log"
+sed \
+  -e "s#@STATS_BINARY_PATH@#$HOME/.local/bin/stats#g" \
+  -e "s#@STATS_CONFIG_PATH@#$HOME/.config/stats/awstats.conf#g" \
+  -e "s#@STATS_LOG_DIR@#$HOME/.local/var/log#g" \
+  deploy/com.avkghost.stats-update.plist \
+  > "$HOME/Library/LaunchAgents/com.avkghost.stats-update.plist"
+plutil -lint "$HOME/Library/LaunchAgents/com.avkghost.stats-update.plist"
+launchctl bootstrap "gui/$(id -u)" \
+  "$HOME/Library/LaunchAgents/com.avkghost.stats-update.plist"
+launchctl kickstart -k "gui/$(id -u)/com.avkghost.stats-update"
+```
+
+The plist uses a five-minute `StartInterval`; it does not run at login unless
+`RunAtLoad` is added. To unload it, use `launchctl bootout` with the same
+`gui/$(id -u)` domain and plist path.
 
 Cross-target release packaging is supported by setting both variables, for
 example `STATS_PLATFORM=macos-arm64 STATS_TARGET=aarch64-apple-darwin` or
@@ -163,7 +180,8 @@ The script creates four archives, each with a `.sha256` sidecar:
   libraries.
 
 The archives do not include source code, the full documentation tree, a database,
-or generated reports. `stats-report-worker` must remain beside every frontend
+or generated reports. Linux and macOS release workflows publish the same four
+archive types for their respective platforms. `stats-report-worker` must remain beside every frontend
 that renders native reports. Run `bash deploy/verify-release-artifacts.sh
 <artifact-dir>` to verify checksums and required archive contents.
 
