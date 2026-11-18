@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Geography page omits the Virtual hosts section when the log format records no virtual host (`%virtualname`).
 ## 0.1.14
 
 - HTTP and CGI return 400 for an unsupported output format, whether or not a configuration is present, and 404 for an unknown HTML section.

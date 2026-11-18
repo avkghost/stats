@@ -291,7 +291,12 @@ fn detail_body(report: &Report, page: &str) -> String {
         ),
         "geography" => format!(
             "{}{}{}{}{}{}",
-            section("Virtual hosts", table(&report.virtual_hosts)),
+            // Without a recorded server name the virtual-host section is omitted entirely.
+            if report.virtual_hosts.is_empty() {
+                String::new()
+            } else {
+                section("Virtual hosts", table(&report.virtual_hosts))
+            },
             section("Countries", table(&report.countries)),
             section("Regions", table(&report.regions)),
             section("Cities", table(&report.cities)),
@@ -785,6 +790,102 @@ mod tests {
         ])));
         assert!(in_order(cells(&["00", "01", "10", "23"])));
         assert!(in_order(cells(&["500", "200", "x", "404", "301"])));
+        let _ = fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn geography_omits_the_virtual_host_section_without_data() {
+        let build = |virtual_hosts: Vec<ReportRow>| Report {
+            metadata: ReportMetadata {
+                schema_version: None,
+                input_path: None,
+                input_size: None,
+                input_lines: None,
+                config_path: None,
+                config_hash: None,
+                approximations: Vec::new(),
+            },
+            hits: 1,
+            bytes: 0,
+            pages: 0,
+            files: 0,
+            visits: 0,
+            unique_visits: 0,
+            countries: Vec::new(),
+            regions: Vec::new(),
+            cities: Vec::new(),
+            asns: Vec::new(),
+            organizations: Vec::new(),
+            hostnames: Vec::new(),
+            statuses: [("404", 2), ("200", 5), ("500", 5), ("301", 1), ("x", 3)]
+                .iter()
+                .map(|(key, hits)| ReportRow {
+                    key: (*key).into(),
+                    hits: *hits,
+                })
+                .collect(),
+            status_classes: Vec::new(),
+            errors: vec![ReportRow {
+                key: "500".into(),
+                hits: 1,
+            }],
+            methods: Vec::new(),
+            method_anomalies: Vec::new(),
+            urls: Vec::new(),
+            not_found: Vec::new(),
+            bandwidth_urls: Vec::new(),
+            daily: Vec::new(),
+            users: Vec::new(),
+            user_agents: Vec::new(),
+            referers: Vec::new(),
+            referrer_domains: Vec::new(),
+            referer_spam: Vec::new(),
+            scanners: Vec::new(),
+            file_types: Vec::new(),
+            browsers: Vec::new(),
+            oses: Vec::new(),
+            robots: Vec::new(),
+            request_times: ["10-100ms", ">=5s", "<10ms", "1-5s", "500ms-1s", "100-500ms"]
+                .iter()
+                .map(|key| ReportRow {
+                    key: (*key).into(),
+                    hits: 1,
+                })
+                .collect(),
+            virtual_hosts,
+            entry_pages: Vec::new(),
+            exit_pages: Vec::new(),
+            search_engines: Vec::new(),
+            keyphrases: Vec::new(),
+            hours: ["10", "23", "01", "00"]
+                .iter()
+                .map(|key| ReportRow {
+                    key: (*key).into(),
+                    hits: 1,
+                })
+                .collect(),
+            dates: Vec::new(),
+            months: Vec::new(),
+            weekdays: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+        let directory =
+            std::env::temp_dir().join(format!("stats-geography-vhost-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+
+        write_html_site(&build(Vec::new()), &directory.join("index.html")).unwrap();
+        let page = fs::read_to_string(directory.join("geography.html")).unwrap();
+        assert!(!page.contains("Virtual hosts"), "missing empty-state note");
+
+        let populated = build(vec![ReportRow {
+            key: "www.example.test".into(),
+            hits: 3,
+        }]);
+        write_html_site(&populated, &directory.join("index.html")).unwrap();
+        let page = fs::read_to_string(directory.join("geography.html")).unwrap();
+        assert!(page.contains("Virtual hosts"));
+        assert!(page.contains("<td>www.example.test</td>"));
         let _ = fs::remove_dir_all(&directory);
     }
 
