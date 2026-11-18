@@ -5,8 +5,10 @@ use rusqlite::{
 use std::{path::Path, sync::Mutex, time::Duration};
 use thiserror::Error;
 
+mod aggregate;
 mod classify;
 mod schema;
+use aggregate::{bump, decrement};
 #[cfg(test)]
 use classify::decode_query;
 pub(crate) use classify::referrer_domain;
@@ -1054,24 +1056,6 @@ fn prefix_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PrefixState> {
         lines: row.get::<_, i64>(5)? as u64,
         sha256: row.get(6)?,
     })
-}
-
-fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
-    let sql = format!(
-        "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"
-    );
-    tx.execute(&sql, params![key])?;
-    Ok(())
-}
-
-fn decrement(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
-    let sql = format!("UPDATE {table} SET hits=hits-1 WHERE key=?1 AND hits>1");
-    let changed = tx.execute(&sql, params![key])?;
-    if changed == 0 {
-        let delete = format!("DELETE FROM {table} WHERE key=?1");
-        tx.execute(&delete, params![key])?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
