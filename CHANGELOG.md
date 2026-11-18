@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.1.16
+
+- Moved the private `stats-core` store unit tests into `store/tests.rs`, reducing the production module to its storage types and implementation while preserving private access and test coverage.
+
 ## 0.1.15
 
 - Completed the `stats-core` store extraction: aggregate recording, report queries, checkpoints, metadata, and maintenance operations are separated into focused modules without changing the storage contract.
