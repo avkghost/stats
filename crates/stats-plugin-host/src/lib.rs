@@ -121,6 +121,9 @@ pub fn supervise_report_worker(
     let mut command = Command::new(executable.as_ref());
     command
         .arg(plugin.as_ref())
+        // Report plugins receive only the report request. In particular, do not
+        // expose the frontend's raw-log bearer token to native plugin code.
+        .env_remove("STATS_RAW_LOG_AUTH_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
