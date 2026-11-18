@@ -195,4 +195,31 @@ mod open_tests {
         assert!(info.city.is_none());
         assert!(info.asn.is_none());
     }
+
+    #[test]
+    #[ignore = "requires local MaxMind MMDB files"]
+    fn configured_databases_return_positive_lookup_data() {
+        let directory = std::env::var_os("STATS_GEOIP_TEST_DIR")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .map(|home| home.join(".local/share/GeoIP"))
+            })
+            .expect("set STATS_GEOIP_TEST_DIR or HOME");
+        let country = directory.join("GeoLite2-Country.mmdb");
+        let city = directory.join("GeoLite2-City.mmdb");
+        let asn = directory.join("GeoLite2-ASN.mmdb");
+        let ip = std::env::var("STATS_GEOIP_TEST_IP").unwrap_or_else(|_| "1.1.1.1".into());
+        let geoip = MaxMindGeoIp::open(Some(&country), Some(&city), Some(&asn)).unwrap();
+        let info = geoip.lookup(&ip);
+        assert!(
+            info.country.is_some()
+                || info.city.is_some()
+                || info.asn.is_some()
+                || info.organization.is_some(),
+            "no GeoIP data returned for {ip} from {}",
+            directory.display()
+        );
+    }
 }
