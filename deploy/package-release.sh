@@ -14,7 +14,19 @@ if [[ ${version} != "${crate_version}" ]]; then
     exit 1
 fi
 
-platform=${STATS_PLATFORM:-linux-x86_64}
+if [[ -n ${STATS_PLATFORM:-} ]]; then
+    platform=${STATS_PLATFORM}
+else
+    host_os=$(uname -s)
+    host_arch=$(uname -m)
+    case "${host_os}:${host_arch}" in
+        Darwin:arm64) platform=macos-arm64 ;;
+        Darwin:x86_64) platform=macos-x86_64 ;;
+        Linux:x86_64) platform=linux-x86_64 ;;
+        Linux:aarch64|Linux:arm64) platform=linux-aarch64 ;;
+        *) platform="${host_os,,}-${host_arch}" ;;
+    esac
+fi
 target=${STATS_TARGET:-}
 case "${STATS_PLUGIN_SUFFIX:-${platform}}" in
     *.so|so|*linux*) plugin_suffix=so ;;

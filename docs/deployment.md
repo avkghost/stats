@@ -168,7 +168,7 @@ bash deploy/package-release.sh
 
 The package script derives the version from `crates/stats-cli/Cargo.toml` unless
 `STATS_VERSION` is supplied. A tag value such as `v0.1.2` is normalized to
-`0.1.2`. `STATS_PLATFORM`, `STATS_TARGET`, and `STATS_RELEASE_DIR` are also supported. Checksums use `sha256sum` when available and fall back to macOS `shasum -a 256`. It refuses
+`0.1.2`. `STATS_PLATFORM`, `STATS_TARGET`, and `STATS_RELEASE_DIR` are also supported; when `STATS_PLATFORM` is omitted, the host OS and architecture are detected. Checksums use `sha256sum` when available and fall back to macOS `shasum -a 256`. It refuses
 to package when an explicitly supplied version differs from the crate version.
 The script creates four archives, each with a `.sha256` sidecar:
 
