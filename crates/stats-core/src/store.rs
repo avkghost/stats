@@ -10,7 +10,7 @@ mod checkpoint;
 mod classify;
 mod schema;
 use aggregate::{bump, decrement};
-use checkpoint::prefix_state_row;
+use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
 use classify::decode_query;
 pub(crate) use classify::referrer_domain;
@@ -1018,34 +1018,6 @@ impl StatsStore {
         )?;
         Ok(())
     }
-}
-
-/// Adds the prefix columns and snapshot table to a pre-existing database.
-///
-/// Additive only: the schema version is unchanged, so nothing is cleared and
-/// existing aggregates and checkpoints are kept (plan decision and finding F-6).
-fn ensure_checkpoint_columns(conn: &Connection) -> Result<(), StoreError> {
-    let existing = conn
-        .prepare("PRAGMA table_info(input_checkpoints)")?
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<Result<Vec<_>, _>>()?;
-    for (name, declaration) in [
-        ("source_key", "TEXT NOT NULL DEFAULT ''"),
-        ("prefix_size", "INTEGER"),
-        ("prefix_lines", "INTEGER"),
-        ("prefix_sha256", "TEXT"),
-    ] {
-        if !existing.iter().any(|column| column.as_str() == name) {
-            conn.execute(
-                &format!("ALTER TABLE input_checkpoints ADD COLUMN {name} {declaration}"),
-                [],
-            )?;
-        }
-    }
-    conn.execute_batch(
-        "CREATE INDEX IF NOT EXISTS input_checkpoints_source ON input_checkpoints(source_key, config_hash); CREATE TABLE IF NOT EXISTS input_prefix_snapshots(source_key TEXT NOT NULL, config_hash TEXT NOT NULL, prefix_size INTEGER NOT NULL, prefix_lines INTEGER NOT NULL, prefix_sha256 TEXT NOT NULL, identity TEXT NOT NULL, path TEXT NOT NULL, captured_at INTEGER NOT NULL, PRIMARY KEY(source_key, config_hash, prefix_size, prefix_sha256));",
-    )?;
-    Ok(())
 }
 
 #[cfg(test)]
