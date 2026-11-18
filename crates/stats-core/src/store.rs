@@ -270,19 +270,6 @@ impl StatsStore {
             conn: Mutex::new(conn),
         })
     }
-    pub fn record(&self, event: &AccessEvent, is_page: bool) -> Result<(), StoreError> {
-        self.record_with_cardinality_limit(event, is_page, DEFAULT_CARDINALITY_LIMIT)
-    }
-
-    pub fn record_with_cardinality_limit(
-        &self,
-        event: &AccessEvent,
-        is_page: bool,
-        limit: usize,
-    ) -> Result<(), StoreError> {
-        self.with_batch(|batch| batch.record_with_cardinality_limit(event, is_page, limit))
-    }
-
     fn record_in(
         batch: &Batch<'_, '_>,
         event: &AccessEvent,
@@ -709,19 +696,6 @@ pub struct Batch<'t, 'c> {
 }
 
 impl Batch<'_, '_> {
-    pub fn record(&self, event: &AccessEvent, is_page: bool) -> Result<(), StoreError> {
-        self.record_with_cardinality_limit(event, is_page, DEFAULT_CARDINALITY_LIMIT)
-    }
-
-    pub fn record_with_cardinality_limit(
-        &self,
-        event: &AccessEvent,
-        is_page: bool,
-        limit: usize,
-    ) -> Result<(), StoreError> {
-        StatsStore::record_in(self, event, is_page, limit)
-    }
-
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
         StatsStore::clear_aggregates_on(self.tx)?;
         self.cardinality_counts.borrow_mut().clear();
