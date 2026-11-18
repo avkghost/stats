@@ -7,7 +7,9 @@
     compress
     delaycompress
     dateext
-    create 0640 root adm
+    # stats-update.service runs as stats and must read the new file after
+    # rotation. Keep the reader group explicit instead of relying on adm.
+    create 0640 root stats
     sharedscripts
     prerotate
         systemctl start --wait stats-update.service

@@ -7,6 +7,7 @@ Type=oneshot
 User=stats
 Group=stats
 ExecStart=/opt/stats/bin/stats update --config=/opt/stats/etc/awstats.example.test.conf
+TimeoutStartSec=5min
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes

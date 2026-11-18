@@ -34,6 +34,11 @@ The service is restricted with `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
 needs read access to the active log and GeoIP databases and write access to the
 data and output directories.
 
+The supplied logrotate template creates the active log as `root:stats` with
+mode `0640`, so the `stats` service can read it after rotation. If the web
+server has a different file-creation requirement, preserve read access for the
+`stats` group when adapting the template to the host.
+
 If a configuration points at production paths such as
 `/var/log/nginx/access.log` or `/var/lib/awstats`, run as the service account
 with those permissions, or override both paths explicitly for a local run.
