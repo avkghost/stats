@@ -6,6 +6,7 @@
 - The supplied logrotate template creates the active log with the `stats` reader group, so the scheduled service can read it after rotation.
 - Deployment documentation describes the required log ownership and group access.
 - The installer copies the bundled example configuration on a fresh install without overwriting an existing configuration.
+- Quoted HTTP request lines now normalize methods such as `GET` and `POST` without retaining the opening quote.
 
 ## 0.1.9
 

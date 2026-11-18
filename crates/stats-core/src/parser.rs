@@ -244,6 +244,7 @@ impl LogParser {
             let protocol = get("protocol").unwrap_or_default();
             format_request(&method, &url, &protocol)
         });
+        let request = request.trim().trim_matches('"').to_owned();
         let (request_method, request_url) = split_request(&request);
         let method = get("method").or(request_method);
         let url = get("url")
@@ -709,6 +710,23 @@ mod tests {
         assert_eq!(event.url.as_deref(), Some("/"));
         assert_eq!(event.bytes, 1318);
         assert_eq!(event.duration_seconds, Some(0.0));
+    }
+
+    #[test]
+    fn strips_quotes_from_methodurl_requests() {
+        let parser =
+            LogParser::new("%host %logname %user %time1 %methodurl %code %bytesd %referer %ua")
+                .unwrap();
+        let outcome = parser.parse(
+            r#"93.158.97.63 - - [18/Nov/2026:00:03:53 +0000] "GET / HTTP/1.1" 301 162 "-" "Mozilla/5.0""#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected event");
+        };
+
+        assert_eq!(event.method.as_deref(), Some("GET"));
+        assert_eq!(event.url.as_deref(), Some("/"));
+        assert_eq!(event.request, "GET / HTTP/1.1");
     }
 
     #[test]
