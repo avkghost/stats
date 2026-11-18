@@ -15,9 +15,9 @@ mod report;
 mod schema;
 mod session;
 use aggregate::{
-    record_calendar_aggregates, record_client_aggregates, record_http_aggregates,
-    record_referer_aggregates, record_security_aggregates, record_user_url_aggregates,
-    record_visit_session,
+    record_calendar_aggregates, record_client_aggregates, record_geo_aggregates,
+    record_http_aggregates, record_referer_aggregates, record_security_aggregates,
+    record_user_url_aggregates, record_visit_session,
 };
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
@@ -280,7 +280,6 @@ impl StatsStore {
         is_page: bool,
         limit: usize,
     ) -> Result<(), StoreError> {
-        let tx = batch.tx;
         // Resolve values reused by several dimensions once per event. This keeps
         // the hot path deterministic while avoiding repeated formatting and UA
         // classification work for every aggregate insert.
@@ -308,72 +307,7 @@ impl StatsStore {
         )?;
         record_calendar_aggregates(batch, event, is_page, hour, date.clone(), month, weekday)?;
         record_visit_session(batch, event, is_page, date)?;
-        if let Some(country) = &event.geo.country {
-            let country = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "countries",
-                "key",
-                country,
-                limit,
-            )?;
-            tx.execute("INSERT INTO countries(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![country])?;
-        }
-        if let Some(region) = &event.geo.region {
-            let region = event
-                .geo
-                .country
-                .as_deref()
-                .map_or_else(|| region.clone(), |country| format!("{region}, {country}"));
-            let region = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "regions",
-                "key",
-                &region,
-                limit,
-            )?;
-            tx.execute("INSERT INTO regions(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![region])?;
-        }
-        if let Some(city) = &event.geo.city {
-            let city = capped_key(tx, &batch.cardinality_counts, "cities", "key", city, limit)?;
-            tx.execute("INSERT INTO cities(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![city])?;
-        }
-        if let Some(asn) = event.geo.asn {
-            let asn = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "asns",
-                "key",
-                &asn.to_string(),
-                limit,
-            )?;
-            tx.execute("INSERT INTO asns(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![asn])?;
-        }
-        if let Some(organization) = &event.geo.organization {
-            let organization = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "organizations",
-                "key",
-                organization,
-                limit,
-            )?;
-            tx.execute("INSERT INTO organizations(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![organization])?;
-        }
-        let visitor = visitor_label(&event.client_ip, event.client_hostname.as_deref());
-        let visitor = capped_key(
-            tx,
-            &batch.cardinality_counts,
-            "hostnames",
-            "key",
-            &visitor,
-            limit,
-        )?;
-        tx.execute(
-            "INSERT INTO hostnames(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-            params![visitor],
-        )?;
+        record_geo_aggregates(batch, event, limit)?;
         Ok(())
     }
 

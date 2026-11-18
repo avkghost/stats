@@ -434,6 +434,96 @@ pub(super) fn record_visit_session(
     Ok(())
 }
 
+pub(super) fn record_geo_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    limit: usize,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    if let Some(country) = &event.geo.country {
+        let country = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "countries",
+            "key",
+            country,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO countries(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![country],
+        )?;
+    }
+    if let Some(region) = &event.geo.region {
+        let region = event
+            .geo
+            .country
+            .as_deref()
+            .map_or_else(|| region.clone(), |country| format!("{region}, {country}"));
+        let region = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "regions",
+            "key",
+            &region,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO regions(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![region],
+        )?;
+    }
+    if let Some(city) = &event.geo.city {
+        let city = super::capped_key(tx, &batch.cardinality_counts, "cities", "key", city, limit)?;
+        tx.execute(
+            "INSERT INTO cities(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![city],
+        )?;
+    }
+    if let Some(asn) = event.geo.asn {
+        let asn = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "asns",
+            "key",
+            &asn.to_string(),
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO asns(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![asn],
+        )?;
+    }
+    if let Some(organization) = &event.geo.organization {
+        let organization = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "organizations",
+            "key",
+            organization,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO organizations(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![organization],
+        )?;
+    }
+    let visitor = super::visitor_label(&event.client_ip, event.client_hostname.as_deref());
+    let visitor = super::capped_key(
+        tx,
+        &batch.cardinality_counts,
+        "hostnames",
+        "key",
+        &visitor,
+        limit,
+    )?;
+    tx.execute(
+        "INSERT INTO hostnames(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+        params![visitor],
+    )?;
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"
