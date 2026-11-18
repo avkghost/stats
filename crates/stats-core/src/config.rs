@@ -102,6 +102,7 @@ pub struct Config {
     pub host_aliases: Vec<String>,
     pub data_dir: PathBuf,
     pub output_dir: PathBuf,
+    output_dir_explicit: bool,
     pub database_period: DatabasePeriod,
     pub time_zone: Option<String>,
     pub dns_lookup: bool,
@@ -124,9 +125,20 @@ impl Config {
 
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let path = path.as_ref().to_path_buf();
-        let text =
-            fs::read_to_string(&path).map_err(|source| ConfigError::Read { path, source })?;
-        Self::parse(&text)
+        let text = fs::read_to_string(&path).map_err(|source| ConfigError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        let mut config = Self::parse(&text)?;
+        if config.output_dir_explicit && !config.output_dir.is_absolute() {
+            if let Some(parent) = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                config.output_dir = parent.join(config.output_dir);
+            }
+        }
+        Ok(config)
     }
 
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
@@ -252,6 +264,7 @@ impl Config {
             host_aliases,
             data_dir,
             output_dir,
+            output_dir_explicit: values.contains_key("DirOutput"),
             database_period: match values
                 .get("DatabasePeriod")
                 .map(|value| value.to_ascii_lowercase())
@@ -503,6 +516,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn parses_awstats_custom_config_and_plugins() {
@@ -532,6 +546,28 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.output_dir, PathBuf::from("/var/www/stats"));
+    }
+
+    #[test]
+    fn resolves_relative_output_directory_from_config_path() {
+        let root = std::env::temp_dir().join(format!(
+            "stats-config-{}-{}",
+            std::process::id(),
+            "relative-output"
+        ));
+        let config_dir = root.join("etc");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("stats.conf");
+        fs::write(
+            &config_path,
+            "LogFile=access.log\nLogFormat=\"%host %time1\"\nDirOutput=public\n",
+        )
+        .unwrap();
+
+        let config = Config::from_path(&config_path).unwrap();
+        assert_eq!(config.output_dir, config_dir.join("public"));
+
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
