@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added macOS release bundles for arm64 and x86_64, including the native
+  report worker and plugin libraries, plus a launchd deployment template.
 - Repeated cardinality keys are reused within a write batch, reducing the
   existence-query overhead of capped dimensions without changing the reported
   aggregates.
