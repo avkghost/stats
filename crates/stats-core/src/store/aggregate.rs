@@ -213,6 +213,43 @@ pub(super) fn record_referer_aggregates(
     Ok(())
 }
 
+pub(super) fn record_security_aggregates(
+    batch: &Batch<'_, '_>,
+    event: &AccessEvent,
+    limit: usize,
+) -> Result<(), StoreError> {
+    let tx = batch.tx;
+    if let Some(label) = &event.referer_spam {
+        let label = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "referer_spam",
+            "key",
+            label,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO referer_spam(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![label],
+        )?;
+    }
+    if let Some(label) = &event.scanner {
+        let label = super::capped_key(
+            tx,
+            &batch.cardinality_counts,
+            "scanners",
+            "key",
+            label,
+            limit,
+        )?;
+        tx.execute(
+            "INSERT INTO scanners(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
+            params![label],
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn bump(tx: &Transaction<'_>, table: &str, key: &str) -> Result<(), rusqlite::Error> {
     let sql = format!(
         "INSERT INTO {table}(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1"

@@ -15,7 +15,8 @@ mod report;
 mod schema;
 mod session;
 use aggregate::{
-    bump, decrement, record_http_aggregates, record_referer_aggregates, record_user_url_aggregates,
+    bump, decrement, record_http_aggregates, record_referer_aggregates, record_security_aggregates,
+    record_user_url_aggregates,
 };
 use checkpoint::{ensure_checkpoint_columns, prefix_state_row};
 #[cfg(test)]
@@ -294,31 +295,7 @@ impl StatsStore {
         record_http_aggregates(batch, event, is_page, limit)?;
         record_user_url_aggregates(batch, event, limit)?;
         record_referer_aggregates(batch, event, limit)?;
-        if let Some(label) = &event.referer_spam {
-            let label = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "referer_spam",
-                "key",
-                label,
-                limit,
-            )?;
-            tx.execute("INSERT INTO referer_spam(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![label])?;
-        }
-        if let Some(label) = &event.scanner {
-            let label = capped_key(
-                tx,
-                &batch.cardinality_counts,
-                "scanners",
-                "key",
-                label,
-                limit,
-            )?;
-            tx.execute(
-                "INSERT INTO scanners(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1",
-                params![label],
-            )?;
-        }
+        record_security_aggregates(batch, event, limit)?;
         tx.execute("INSERT INTO file_types(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![file_type_name])?;
         tx.execute("INSERT INTO browsers(key,hits) VALUES(?1,1) ON CONFLICT(key) DO UPDATE SET hits=hits+1", params![browser_name])?;
         tx.execute(
