@@ -68,3 +68,19 @@ pub struct RenderedReport {
 pub type RenderReport =
     unsafe extern "C" fn(request: *const ReportRequest, output: *mut RenderedReport) -> c_int;
 pub type ReleaseReport = unsafe extern "C" fn(output: *mut RenderedReport);
+
+#[cfg(test)]
+mod tests {
+    use super::{PluginApi, PluginDescriptor};
+    use std::mem::offset_of;
+
+    #[test]
+    fn abi_structs_keep_descriptor_fields_in_declared_order() {
+        assert!(
+            offset_of!(PluginDescriptor, abi_version) < offset_of!(PluginDescriptor, capabilities)
+        );
+        assert!(offset_of!(PluginDescriptor, capabilities) < offset_of!(PluginDescriptor, name));
+        assert!(offset_of!(PluginDescriptor, name) < offset_of!(PluginDescriptor, version));
+        assert_eq!(offset_of!(PluginApi, descriptor), 0);
+    }
+}

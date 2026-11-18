@@ -127,6 +127,18 @@ impl Enricher for GeoIpEnricher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{AccessTimestamp, GeoInfo};
+
+    struct TestGeoIp;
+
+    impl GeoIp for TestGeoIp {
+        fn lookup(&self, _ip: &str) -> GeoInfo {
+            GeoInfo {
+                country: Some("PL".into()),
+                ..GeoInfo::default()
+            }
+        }
+    }
 
     struct TestRenderer(&'static str);
 
@@ -171,5 +183,35 @@ mod tests {
         registry.replace_renderer(TestRenderer("html")).unwrap();
         assert_eq!(registry.renderers().count(), 1);
         assert_eq!(registry.renderer("html").unwrap().format_name(), "html");
+    }
+
+    #[test]
+    fn geoip_enricher_applies_provider_result() {
+        let mut event = AccessEvent {
+            client_ip: "203.0.113.10".into(),
+            client_hostname: None,
+            referer_spam: None,
+            referer_excluded: false,
+            scanner: None,
+            method_anomaly: None,
+            identity: None,
+            user: None,
+            timestamp: AccessTimestamp::parse_rfc3339("2026-01-01T00:00:00Z").unwrap(),
+            request: "GET / HTTP/1.1".into(),
+            method: Some("GET".into()),
+            url: Some("/".into()),
+            status: 200,
+            bytes: 0,
+            referer: None,
+            user_agent: None,
+            duration_seconds: None,
+            virtual_host: None,
+            geo: GeoInfo::default(),
+        };
+        GeoIpEnricher {
+            provider: Box::new(TestGeoIp),
+        }
+        .enrich(&mut event);
+        assert_eq!(event.geo.country.as_deref(), Some("PL"));
     }
 }

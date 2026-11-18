@@ -101,14 +101,7 @@ async fn main() -> Result<()> {
             .filter(|token| !token.is_empty()),
         raw_log_enabled,
     });
-    let app = Router::new()
-        .route("/", get(report))
-        .route("/report", get(report))
-        .route("/section/{section}", get(section))
-        .route("/raw-log", get(raw_log))
-        .route("/healthz", get(healthz))
-        .route("/readyz", get(readyz))
-        .with_state(state);
+    let app = app(state);
     let listener = tokio::net::TcpListener::bind(args.bind)
         .await
         .with_context(|| format!("bind HTTP listener on {}", args.bind))?;
@@ -116,6 +109,17 @@ async fn main() -> Result<()> {
         .await
         .context("serve HTTP requests")?;
     Ok(())
+}
+
+fn app(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/", get(report))
+        .route("/report", get(report))
+        .route("/section/{section}", get(section))
+        .route("/raw-log", get(raw_log))
+        .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
+        .with_state(state)
 }
 
 async fn healthz() -> Response {
@@ -345,8 +349,69 @@ fn error_response(error: anyhow::Error) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{error_response, RequestError};
-    use axum::body::to_bytes;
+    use super::{app, error_response, AppState, RequestError};
+    use axum::{body::to_bytes, body::Body, http::Request};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    fn test_state() -> Arc<AppState> {
+        let data_dir = std::env::temp_dir().join(format!(
+            "stats-http-routes-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&data_dir).unwrap();
+        Arc::new(AppState {
+            sandbox: stats_core::FileSandbox::for_data_dir(&data_dir).unwrap(),
+            data_dir,
+            config: None,
+            raw_log_token: None,
+            raw_log_enabled: false,
+        })
+    }
+
+    #[tokio::test]
+    async fn public_routes_have_stable_statuses() {
+        let state = test_state();
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let response = app(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/raw-log")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+
+        let response = app(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/readyz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
 
     #[tokio::test]
     async fn maps_client_and_missing_plugin_errors_without_leaking_details() {

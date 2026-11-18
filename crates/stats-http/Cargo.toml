@@ -18,3 +18,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 stats-report-json = { path = "../../plugins/report-json", features = ["test-fixture"] }
+tower = { version = "0.5", features = ["util"] }
