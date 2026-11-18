@@ -31,6 +31,11 @@ if [[ ! -f ${source_worker} ]]; then
     echo "could not find stats-report-worker next to ${source_binary}" >&2
     exit 1
 fi
+source_config=${STATS_CONFIG_SOURCE:-${project_dir}/awstats.example.test.conf}
+if [[ ! -f ${source_config} ]]; then
+    echo "could not find configuration source ${source_config}" >&2
+    exit 1
+fi
 
 if ! id "${stats_user}" >/dev/null 2>&1; then
     useradd --system --home-dir /opt/stats --no-create-home --shell /usr/sbin/nologin "${stats_user}"
@@ -44,6 +49,10 @@ install -D -m 0755 "${source_binary}" "${binary_path}"
 install -D -m 0755 "${source_worker}" "$(dirname "${binary_path}")/stats-report-worker"
 install -d -o "${stats_user}" -g "${stats_group}" "${data_dir}" "${output_dir}"
 install -d -o root -g root "$(dirname "${config_path}")"
+if [[ ! -e ${config_path} && ! -L ${config_path} ]]; then
+    install -m 0644 "${source_config}" "${config_path}"
+    echo "installed example configuration ${config_path}"
+fi
 install -d "${systemd_dir}" "${logrotate_dir}"
 install -m 0644 "${project_dir}/deploy/stats-update.service" "${systemd_dir}/stats-update.service"
 install -m 0644 "${project_dir}/deploy/stats-update.timer" "${systemd_dir}/stats-update.timer"
@@ -53,7 +62,7 @@ install -m 0644 "${project_dir}/deploy/stats-logrotate" "${logrotate_dir}/stats"
 "${systemctl_bin}" enable --now stats-update.timer
 
 echo "installed ${binary_path}"
-echo "configuration expected at ${config_path}"
+echo "configuration path: ${config_path}"
 echo "data directory: ${data_dir}"
 echo "output directory: ${output_dir}"
-echo "run 'systemctl start --wait stats-update.service' after installing the configuration"
+echo "review the configuration, then run 'systemctl start --wait stats-update.service'"

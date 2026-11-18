@@ -14,6 +14,8 @@ The supplied installer keeps application-owned files under `/opt/stats/`:
 System-managed units remain under `/etc/systemd/system/` and logrotate remains
 under `/etc/logrotate.d/`. Override application paths with
 `STATS_BINARY_PATH`, `STATS_CONFIG_PATH`, `STATS_DATA_DIR`, and `STATS_OUTPUT_DIR`.
+Set `STATS_CONFIG_SOURCE` to install an existing AWStats-compatible
+configuration into the target path on a fresh install.
 
 ## Installer and systemd
 
@@ -26,8 +28,9 @@ systemctl start --wait stats-update.service
 
 `deploy/install.sh` creates the `stats` system account and data/output
 directories, installs the binary and `stats-update.service`/`stats-update.timer`,
-reloads systemd, and enables the timer. It intentionally does not run an update
-until configuration has been installed.
+installs `STATS_CONFIG_SOURCE` (or the bundled example configuration) when the target path is absent,
+reloads systemd, and enables the timer. It never overwrites an existing
+configuration. Review and adapt the example before starting the service.
 
 The service is restricted with `NoNewPrivileges`, `PrivateTmp`, `ProtectHome`,
 `ProtectSystem=strict`, and explicit writable paths. The service account still

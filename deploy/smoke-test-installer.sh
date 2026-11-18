@@ -40,6 +40,7 @@ bash "${bundle_dir}/deploy/install.sh"
 
 [[ -x ${install_root}/bin/stats ]]
 [[ -x ${install_root}/bin/stats-report-worker ]]
+[[ -f ${install_root}/etc/stats.conf ]]
 [[ -f ${install_root}/systemd/stats-update.service ]]
 [[ -f ${install_root}/systemd/stats-update.timer ]]
 [[ -f ${install_root}/logrotate/stats ]]

@@ -5,6 +5,7 @@
 - The systemd update service now has a five-minute startup deadline.
 - The supplied logrotate template creates the active log with the `stats` reader group, so the scheduled service can read it after rotation.
 - Deployment documentation describes the required log ownership and group access.
+- The installer copies the bundled example configuration on a fresh install without overwriting an existing configuration.
 
 ## 0.1.9
 
