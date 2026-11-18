@@ -45,15 +45,17 @@ selected source. It is not the multi-file backfill operation.
 
 ### Database compatibility across releases
 
-Release 0.1.5 keeps SQLite schema version 13 and does not change the on-disk
-representation of aggregates, checkpoints, or session timestamps. Existing
-schema-13 databases with the `entry_exit_dimensions` marker retain their data
-and checkpoints when opened by the new binary.
+Release 0.1.16 uses SQLite schema version 14. Existing schema-14 databases
+retain their data and checkpoints when opened by the new binary. The schema-14
+upgrade adds country-qualified region keys and replays aggregates once so old
+and new region rows are not mixed.
 
 Older databases follow the existing recovery behavior: opening them upgrades the
 schema but clears derived aggregates and input checkpoints so the configured logs
 can be replayed safely. Keep a backup and run the documented rebuild/backfill
-sequence before treating such a database as upgraded.
+sequence before treating such a database as upgraded. A schema replay reads the
+configured active log; archives that are no longer present cannot be recovered
+by the automatic replay, so backfill while those archives are still available.
 
 ## Rotation and backfill
 

@@ -58,10 +58,11 @@ with AWStats or its original author.
 > controlled by the operator.
 >
 > The supervisor bounds each request/response message at 8 MiB and reaps the
-> direct worker process after completion, failure, or timeout. It does not
-> implement operating-system process-group or descendant cleanup; a plugin that
-> deliberately spawns independent descendants remains outside this isolation
-> guarantee.
+> direct worker process after completion, failure, or timeout. On Unix, timeout
+> and failed-response cleanup also kills the worker's process group, covering
+> descendants that inherit it. A descendant that calls `setsid` can leave that
+> group and remains outside this isolation guarantee; non-Unix platforms only
+> kill the direct worker process.
 
 ## Known behavioral differences and limitations
 

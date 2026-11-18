@@ -70,7 +70,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - runner: macos-14
+          # The hosted configuration does not expose the macos-14 arm64 image.
+          - runner: macos-13
             platform: macos-arm64
             target: aarch64-apple-darwin
           - runner: macos-13
