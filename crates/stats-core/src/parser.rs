@@ -596,10 +596,9 @@ fn compile_format(format: &str) -> Result<Regex, regex::Error> {
     if let Some(pattern) = predefined {
         return Regex::new(pattern);
     }
-    if format.contains("%host %logname %user %time1 %methodurl %code %bytesd %referer %ua %extra1")
-    {
+    if format.contains("%host %logname %user %time1 %methodurl %code %bytesd %referer %ua") {
         return Regex::new(
-            r#"^(?P<host>\S+)\s+(?P<logname>\S+)\s+(?P<user>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"\s+(?P<extra1>\S+)$"#,
+            r#"^(?P<host>\S+)\s+(?P<logname>\S+)\s+(?P<user>\S+)\s+\[(?P<time>[^]]+)\]\s+\"(?P<request>.*?)\"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)\s+\"(?P<referer>.*?)\"\s+\"(?P<ua>.*?)\"(?:\s+(?P<extra1>\S+))?$"#,
         );
     }
     let mut pattern = String::from("^");
@@ -727,6 +726,34 @@ mod tests {
         assert_eq!(event.method.as_deref(), Some("GET"));
         assert_eq!(event.url.as_deref(), Some("/"));
         assert_eq!(event.request, "GET / HTTP/1.1");
+    }
+
+    #[test]
+    fn parses_quoted_user_agent_without_absorbing_trailing_fields() {
+        let parser =
+            LogParser::new("%host %logname %user %time1 %methodurl %code %bytesd %referer %ua")
+                .unwrap();
+        let outcome = parser.parse(
+            r#"93.158.97.63 - - [18/Nov/2026:00:03:53 +0000] "GET / HTTP/1.1" 301 162 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64)""#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected event");
+        };
+
+        assert_eq!(
+            event.user_agent.as_deref(),
+            Some("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        );
+        assert_eq!(event.method.as_deref(), Some("GET"));
+
+        let outcome = parser.parse(
+            r#"93.158.97.63 - - [18/Nov/2026:00:03:53 +0000] "GET / HTTP/1.1" 301 162 "-" "Mozilla/5.0" 0.000"#,
+        );
+        let ParseOutcome::Event(event) = outcome else {
+            panic!("expected event with optional extra field");
+        };
+        assert_eq!(event.user_agent.as_deref(), Some("Mozilla/5.0"));
+        assert_eq!(event.duration_seconds, Some(0.0));
     }
 
     #[test]

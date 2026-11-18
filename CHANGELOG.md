@@ -7,6 +7,7 @@
 - Deployment documentation describes the required log ownership and group access.
 - The installer copies the bundled example configuration on a fresh install without overwriting an existing configuration.
 - Quoted HTTP request lines now normalize methods such as `GET` and `POST` without retaining the opening quote.
+- Nginx quoted referer and User-Agent fields are parsed as separate fields instead of absorbing surrounding quotes or trailing values.
 - Fresh installs leave the periodic timer disabled until the reviewed configuration is explicitly enabled.
 - The installed systemd service now uses the configured binary, config, data, and output paths instead of fixed example paths.
 
