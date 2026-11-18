@@ -99,7 +99,9 @@ fn capped_key_connection(
         return Ok(key.to_owned());
     }
     let count_sql = format!("SELECT COUNT(*) FROM {table}");
-    let count = conn.query_row(&count_sql, [], |row| row.get::<_, i64>(0))? as usize;
+    let count = conn
+        .prepare_cached(&count_sql)?
+        .query_row([], |row| row.get::<_, i64>(0))? as usize;
     Ok(if count >= limit.max(1) {
         "other".to_owned()
     } else {
@@ -1776,6 +1778,120 @@ mod table_category_tests {
         assert!(
             columns.iter().any(|c| c == "prefix_sha256"),
             "prefix columns added"
+        );
+    }
+}
+
+#[cfg(test)]
+mod capped_call_site_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Splits the argument list that starts at `text[0] == '('`, honouring nested brackets and
+    /// string literals. Returns `None` if the call is not closed in `text`.
+    fn call_arguments(text: &str) -> Option<Vec<&str>> {
+        let mut args = Vec::new();
+        let mut depth = 0usize;
+        let mut start = 1usize;
+        let mut in_string = false;
+        for (index, character) in text.char_indices() {
+            if in_string {
+                if character == '"' {
+                    in_string = false;
+                }
+                continue;
+            }
+            match character {
+                '"' => in_string = true,
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        args.push(&text[start..index]);
+                        return Some(args);
+                    }
+                }
+                ',' if depth == 1 => {
+                    args.push(&text[start..index]);
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Returns the table literal of every `capped_key*` call in the production source. Calls that
+    /// pass the table through a variable (the wrapper) carry no literal and are skipped.
+    fn literal_capped_tables(production: &str) -> BTreeSet<String> {
+        let mut tables = BTreeSet::new();
+        let mut rest = production;
+        while let Some(position) = rest.find("capped_key") {
+            let before = rest[..position].trim_end();
+            let mut after = &rest[position + "capped_key".len()..];
+            if let Some(tail) = after.strip_prefix("_connection") {
+                after = tail;
+            } else if let Some(tail) = after.strip_prefix("_transaction") {
+                after = tail;
+            }
+            if after.starts_with('(') && !before.ends_with("fn") {
+                if let Some(args) = call_arguments(after) {
+                    let literal = args
+                        .iter()
+                        .map(|arg| arg.trim())
+                        .find(|arg| arg.len() >= 2 && arg.starts_with('"') && arg.ends_with('"'));
+                    if let Some(literal) = literal {
+                        tables.insert(literal[1..literal.len() - 1].to_owned());
+                    }
+                }
+            }
+            rest = &rest[position + "capped_key".len()..];
+        }
+        tables
+    }
+
+    /// Source-level guard: the capped existence and count queries must go through the statement
+    /// cache. A formatted SQL string passed to `query_row` is parsed again on every call, which
+    /// was the measured cost before the cache was introduced. This does not observe evictions,
+    /// which rusqlite does not expose; the capacity is checked against the table count instead.
+    #[test]
+    fn capped_queries_use_the_prepared_statement_cache() {
+        let source = include_str!("store.rs");
+        let production = &source[..source.find("\n#[cfg(test)]\nmod ").expect("test marker")];
+        for table in ["exists_sql", "count_sql"] {
+            assert!(
+                production.contains(&format!("prepare_cached(&{table})")),
+                "{table} must be prepared through the statement cache"
+            );
+            assert!(
+                !production.contains(&format!("query_row(&{table}")),
+                "{table} must not be run with an uncached query_row"
+            );
+        }
+        assert!(PREPARED_STATEMENT_CACHE_CAPACITY >= 2 * CARDINALITY_TABLES.len());
+    }
+
+    #[test]
+    fn every_capped_call_site_targets_a_listed_table_and_every_listed_table_has_a_call() {
+        let source = include_str!("store.rs");
+        let marker = "\n#[cfg(test)]\nmod ";
+        let production = &source[..source.find(marker).expect("first test module marker")];
+        let called = literal_capped_tables(production);
+        let listed: BTreeSet<String> = CARDINALITY_TABLES
+            .iter()
+            .map(|table| (*table).to_owned())
+            .collect();
+
+        assert!(!called.is_empty(), "no capped_key call sites were found");
+        let unlisted: Vec<_> = called.difference(&listed).collect();
+        assert!(
+            unlisted.is_empty(),
+            "capped_key targets missing from CARDINALITY_TABLES: {unlisted:?}"
+        );
+        let uncalled: Vec<_> = listed.difference(&called).collect();
+        assert!(
+            uncalled.is_empty(),
+            "CARDINALITY_TABLES entries with no capped_key call: {uncalled:?}"
         );
     }
 }
