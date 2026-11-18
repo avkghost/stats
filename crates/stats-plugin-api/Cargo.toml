@@ -1,6 +1,6 @@
 [package]
 name = "stats-plugin-api"
-version = "0.1.16"
+version = "0.1.17"
 description = "Versioned plugin API for the stats web log analyzer"
 edition.workspace = true
 license.workspace = true

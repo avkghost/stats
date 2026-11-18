@@ -1,6 +1,6 @@
 [package]
 name = "stats-core"
-version = "0.1.16"
+version = "0.1.17"
 description = "Core parsing, enrichment, aggregation, and reporting for an AWStats-style analyzer"
 edition.workspace = true
 license.workspace = true
