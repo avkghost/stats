@@ -355,14 +355,15 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_state() -> Arc<AppState> {
+        // Tests run in parallel inside one process. A timestamp alone can repeat, so each state
+        // gets a unique directory; otherwise one test's database changes another test's result.
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let data_dir = std::env::temp_dir().join(format!(
             "stats-http-routes-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
+        let _ = std::fs::remove_dir_all(&data_dir);
         std::fs::create_dir_all(&data_dir).unwrap();
         Arc::new(AppState {
             sandbox: stats_core::FileSandbox::for_data_dir(&data_dir).unwrap(),
@@ -410,6 +411,58 @@ mod tests {
         assert_eq!(
             response.status(),
             axum::http::StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+
+    async fn get(state: Arc<AppState>, uri: &str) -> axum::response::Response {
+        app(state)
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+    }
+
+    fn database_for(state: &AppState) {
+        stats_core::StatsStore::open(state.data_dir.join("stats.sqlite3")).unwrap();
+    }
+
+    #[tokio::test]
+    async fn report_without_a_database_is_a_server_error() {
+        let response = get(test_state(), "/report").await;
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[tokio::test]
+    async fn report_html_with_a_database_returns_html() {
+        let state = test_state();
+        database_for(&state);
+        let response = get(state, "/report").await;
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response.headers()[axum::http::header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
+        );
+    }
+
+    #[tokio::test]
+    async fn report_json_without_configuration_is_not_implemented() {
+        let state = test_state();
+        database_for(&state);
+        let response = get(state, "/report?output=json").await;
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_IMPLEMENTED);
+    }
+
+    #[tokio::test]
+    async fn section_overview_with_a_database_returns_an_html_section() {
+        let state = test_state();
+        database_for(&state);
+        let response = get(state, "/section/overview").await;
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response.headers()[axum::http::header::CONTENT_TYPE],
+            "text/html; charset=utf-8"
         );
     }
 
