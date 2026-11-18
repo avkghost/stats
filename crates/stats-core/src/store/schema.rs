@@ -47,6 +47,30 @@ pub(super) const AGGREGATE_SCHEMA: &[(&str, &str)] = &[
     ("not_found_referrers", "url TEXT NOT NULL, referrer TEXT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY(url, referrer)"),
 ];
 
+/// Tables whose untrusted dimension keys are bounded by `CardinalityLimit`.
+/// Keep this list synchronized with the calls to `capped_key`; it also sizes
+/// the prepared-statement cache for the two statements used per table.
+pub(super) const CARDINALITY_TABLES: &[&str] = &[
+    "not_found_urls",
+    "users",
+    "urls",
+    "url_bandwidth",
+    "user_agents",
+    "referers",
+    "referrer_domains",
+    "keyphrases",
+    "referer_spam",
+    "scanners",
+    "virtual_hosts",
+    "countries",
+    "regions",
+    "cities",
+    "asns",
+    "organizations",
+    "hostnames",
+    "diagnostics",
+];
+
 /// Tables that hold state other than aggregates.
 #[cfg(test)]
 pub(super) const SERVICE_TABLES: &[&str] = &["meta", "input_checkpoints", "input_prefix_snapshots"];

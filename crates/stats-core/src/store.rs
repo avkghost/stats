@@ -22,13 +22,17 @@ use classify::{
 };
 #[cfg(test)]
 use schema::SERVICE_TABLES;
-use schema::{AGGREGATE_SCHEMA, TOP_TABLES};
+use schema::{AGGREGATE_SCHEMA, CARDINALITY_TABLES, TOP_TABLES};
 
 const SCHEMA_VERSION: &str = "13";
 const ENTRY_EXIT_VERSION: &str = "1";
 pub const DEFAULT_CARDINALITY_LIMIT: usize = 10_000;
-pub const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 128;
-const _: () = assert!(PREPARED_STATEMENT_CACHE_CAPACITY >= 36);
+pub const PREPARED_STATEMENT_CACHE_CAPACITY: usize = if CARDINALITY_TABLES.len() * 2 > 128 {
+    CARDINALITY_TABLES.len() * 2
+} else {
+    128
+};
+const _: () = assert!(PREPARED_STATEMENT_CACHE_CAPACITY >= CARDINALITY_TABLES.len() * 2);
 
 fn aggregate_tables() -> impl Iterator<Item = &'static str> {
     AGGREGATE_SCHEMA.iter().map(|(name, _)| *name)
@@ -1254,6 +1258,18 @@ impl StatsStore {
 mod tests {
     use super::*;
     use crate::{AccessTimestamp, GeoInfo};
+
+    #[test]
+    fn cardinality_table_list_is_unique_and_schema_backed() {
+        let names = CARDINALITY_TABLES
+            .iter()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(names.len(), CARDINALITY_TABLES.len());
+        for name in CARDINALITY_TABLES {
+            assert!(AGGREGATE_SCHEMA.iter().any(|(table, _)| table == name));
+        }
+    }
 
     #[test]
     fn decodes_valid_utf8_query_keys_and_preserves_invalid_values() {
