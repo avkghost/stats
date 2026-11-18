@@ -38,7 +38,8 @@ cargo run -p stats-cli -- health --config examples/awstats.example.test.conf --d
 derived aggregates and replays the selected input. By default, `update` writes
 the generated static site to the `output/index.html` sibling of the configured
 data directory (for `DirData="stats"`, this is `output/index.html`).
-`report --output <path>` writes the report to the requested custom
+Set `DirOutput="path"` to choose the default site directory, or use
+`report --output <path>` for a one-off custom
 path, such as `target/stats-report/index.html`. `health` is read-only and does
 not create a missing database.
 

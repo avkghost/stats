@@ -101,6 +101,7 @@ pub struct Config {
     pub site_domain: String,
     pub host_aliases: Vec<String>,
     pub data_dir: PathBuf,
+    pub output_dir: PathBuf,
     pub database_period: DatabasePeriod,
     pub time_zone: Option<String>,
     pub dns_lookup: bool,
@@ -187,6 +188,7 @@ impl Config {
             "SiteDomain",
             "HostAliases",
             "DirData",
+            "DirOutput",
             "DatabasePeriod",
             "TimeZone",
             "DNSLookup",
@@ -227,17 +229,29 @@ impl Config {
         if !site_domain.is_empty() {
             allowed_virtual_hosts.push(site_domain.clone());
         }
+        let data_dir = PathBuf::from(
+            values
+                .get("DirData")
+                .cloned()
+                .unwrap_or_else(|| "./data".into()),
+        );
+        let output_dir = values
+            .get("DirOutput")
+            .cloned()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                data_dir
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join("output")
+            });
         Ok(Self {
             log_file: PathBuf::from(required("LogFile")?),
             log_format,
             site_domain,
             host_aliases,
-            data_dir: PathBuf::from(
-                values
-                    .get("DirData")
-                    .cloned()
-                    .unwrap_or_else(|| "./data".into()),
-            ),
+            data_dir,
+            output_dir,
             database_period: match values
                 .get("DatabasePeriod")
                 .map(|value| value.to_ascii_lowercase())
@@ -508,6 +522,16 @@ mod tests {
 
         assert_eq!(config.log_file, PathBuf::from("/var/log/access.log"));
         assert_eq!(config.data_dir, PathBuf::from("/var/lib/stats"));
+    }
+
+    #[test]
+    fn accepts_custom_output_directory() {
+        let config = Config::parse(
+            "LogFile=access.log\nLogFormat=\"%host %time1\"\nDirData=/var/lib/stats\nDirOutput=\" /var/www/stats \"\n",
+        )
+        .unwrap();
+
+        assert_eq!(config.output_dir, PathBuf::from("/var/www/stats"));
     }
 
     #[test]

@@ -143,6 +143,10 @@ or generated reports. `stats-report-worker` must remain beside every frontend
 that renders native reports. Run `bash deploy/verify-release-artifacts.sh
 <artifact-dir>` to verify checksums and required archive contents.
 
+Set `DirOutput` in the configuration to choose where the automatically
+regenerated HTML site is written. If it is omitted, the site is written to an
+`output` directory beside `DirData`.
+
 ## HTTP and CGI boundaries
 
 For CGI and HTTP deployments, the effective `DirData` directory is the only

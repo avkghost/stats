@@ -700,11 +700,7 @@ fn regenerate_default_report(
     report.apply_url_aliases(&config.url_aliases()?);
     report.apply_cluster_info(&config.cluster_info()?);
     report.apply_user_info(&config.user_info()?);
-    let output = config
-        .data_dir
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("output/index.html");
+    let output = config.output_dir.join("index.html");
     let periods = period_names(&config.data_dir)?;
     let external_html = config
         .plugins
