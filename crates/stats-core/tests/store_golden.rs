@@ -241,3 +241,104 @@ fn benchmark_cardinality_limit_wide_events() {
     let uncapped = run(usize::MAX);
     println!("wide cardinality benchmark: {EVENTS} unique events; capped={capped:?}, uncapped={uncapped:?}");
 }
+
+#[test]
+fn wide_fixture_projects_every_dimension_as_recorded() {
+    let path = database();
+    let store = StatsStore::open(&path).unwrap();
+    let mut events = Vec::new();
+    for index in 0..4 {
+        events.push(wide_event(index));
+    }
+    let mut second = event("/docs/start", 300);
+    second.status = 500;
+    second.method = Some("POST".into());
+    second.request = "POST /docs/start HTTP/1.1".into();
+    second.duration_seconds = Some(2.5);
+    events.push(second);
+    for item in &events {
+        store.record(item, true).unwrap();
+    }
+    let tables = [
+        "countries",
+        "regions",
+        "cities",
+        "asns",
+        "organizations",
+        "hostnames",
+        "referer_spam",
+        "scanners",
+        "statuses",
+        "status_classes",
+        "errors",
+        "methods",
+        "method_anomalies",
+        "urls",
+        "users",
+        "user_agents",
+        "referers",
+        "referrer_domains",
+        "search_engines",
+        "keyphrases",
+        "file_types",
+        "browsers",
+        "oses",
+        "robots",
+        "request_times",
+        "virtual_hosts",
+        "entry_pages",
+        "exit_pages",
+        "hours",
+        "dates",
+        "months",
+        "weekdays",
+    ];
+    let mut dump = String::new();
+    for table in tables {
+        dump.push_str(&format!("{table}: {:?}\n", store.top(table, 100).unwrap()));
+    }
+    dump.push_str(&format!(
+        "totals: {:?} pages: {:?} visits: {:?}\n",
+        store.totals().unwrap(),
+        store.metric("pages").unwrap(),
+        store.unique_visits().unwrap()
+    ));
+    let expected = r#"
+countries: [("C0", 1), ("C1", 1), ("C2", 1), ("C3", 1)]
+regions: [("R0", 1), ("R1", 1), ("R2", 1), ("R3", 1)]
+cities: [("City0", 1), ("City1", 1), ("City2", 1), ("City3", 1)]
+asns: [("0", 1), ("1", 1), ("2", 1), ("3", 1)]
+organizations: [("Org0", 1), ("Org1", 1), ("Org2", 1), ("Org3", 1)]
+hostnames: [("203.0.113.10", 1), ("203.0.113.10 (host-0.example.test)", 1), ("203.0.113.10 (host-1.example.test)", 1), ("203.0.113.10 (host-2.example.test)", 1), ("203.0.113.10 (host-3.example.test)", 1)]
+referer_spam: [("spam-0.example", 1), ("spam-1.example", 1), ("spam-2.example", 1), ("spam-3.example", 1)]
+scanners: [("scanner-0", 1), ("scanner-1", 1), ("scanner-2", 1), ("scanner-3", 1)]
+statuses: [("404", 4), ("500", 1)]
+status_classes: [("4xx", 4), ("5xx", 1)]
+errors: [("404", 4), ("500", 1)]
+methods: [("GET", 4), ("POST", 1)]
+method_anomalies: []
+urls: [("/docs/start", 1), ("/wide/0", 1), ("/wide/1", 1), ("/wide/2", 1), ("/wide/3", 1)]
+users: [("user-0", 1), ("user-1", 1), ("user-2", 1), ("user-3", 1)]
+user_agents: [("agent-0", 1), ("agent-1", 1), ("agent-2", 1), ("agent-3", 1), ("golden-agent", 1)]
+referers: [("https://example.test/", 1), ("https://ref-0.example/", 1), ("https://ref-1.example/", 1), ("https://ref-2.example/", 1), ("https://ref-3.example/", 1)]
+referrer_domains: [("example.test", 1), ("ref-0.example", 1), ("ref-1.example", 1), ("ref-2.example", 1), ("ref-3.example", 1)]
+search_engines: []
+keyphrases: []
+file_types: [("(none)", 5)]
+browsers: [("Other", 5)]
+oses: [("Other", 5)]
+robots: []
+request_times: [("100-500ms", 4), ("1-5s", 1)]
+virtual_hosts: [("vhost-0.example.test", 1), ("vhost-1.example.test", 1), ("vhost-2.example.test", 1), ("vhost-3.example.test", 1), ("www.example.test", 1)]
+entry_pages: [("/docs/start", 1), ("/wide/0", 1), ("/wide/1", 1), ("/wide/2", 1), ("/wide/3", 1)]
+exit_pages: [("/docs/start", 1), ("/wide/0", 1), ("/wide/1", 1), ("/wide/2", 1), ("/wide/3", 1)]
+hours: [("03", 5)]
+dates: [("2026-01-02", 5)]
+months: [("2026-01", 5)]
+weekdays: [("Friday", 5)]
+totals: (5, 304) pages: (5, 304) visits: 5
+"#;
+    assert_eq!(dump, expected.trim_start_matches('\n'));
+    drop(store);
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
