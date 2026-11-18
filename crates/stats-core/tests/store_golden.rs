@@ -130,6 +130,28 @@ fn cardinality_limit_buckets_new_untrusted_keys() {
 }
 
 #[test]
+fn clearing_aggregates_resets_cardinality_counts_in_the_same_batch() {
+    let path = database();
+    let store = StatsStore::open(&path).unwrap();
+    let first = event("/first", 1);
+    let mut second = event("/second", 1);
+    second.user_agent = Some("second-agent".into());
+    store
+        .with_batch(|batch| {
+            batch.record_with_cardinality_limit(&first, true, 1)?;
+            batch.clear_aggregates()?;
+            batch.record_with_cardinality_limit(&second, true, 1)
+        })
+        .unwrap();
+    assert_eq!(
+        store.top("user_agents", 10).unwrap(),
+        vec![("second-agent".into(), 1)]
+    );
+    drop(store);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+}
+
+#[test]
 #[ignore = "manual performance measurement; run with --ignored --nocapture"]
 fn benchmark_cardinality_limit() {
     use std::time::Instant;

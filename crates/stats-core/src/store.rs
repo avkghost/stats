@@ -990,7 +990,9 @@ impl Batch<'_, '_> {
     }
 
     pub fn clear_aggregates(&self) -> Result<(), StoreError> {
-        StatsStore::clear_aggregates_on(self.tx)
+        StatsStore::clear_aggregates_on(self.tx)?;
+        self.cardinality_counts.borrow_mut().clear();
+        Ok(())
     }
 
     pub fn reset_checkpoint(&self) -> Result<(), StoreError> {
