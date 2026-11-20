@@ -66,9 +66,13 @@ the end. Do not call `backfill` from a recurring rotation hook; use it for an
 explicit historical import after confirming the archive set is complete.
 
 `backfill` checks the whole set before it writes anything. It reads each file, works
-out which records each one shares with stored checkpoints, and aborts if any file is
-ambiguous, corrupt, or overlaps another file in the same run. An abort exits
-non-zero and changes nothing.
+out which records each one shares with stored checkpoints, and aborts if any file has
+an uncertain prefix match, is corrupt/unreadable, or overlaps another file in the
+same run. These rejections are safe: the command exits non-zero and changes neither
+the database nor its checkpoints. Repeating `backfill` with the same unchanged
+archive set is idempotent; already matched archives are skipped and are not counted
+again. This is not a universal exactly-once guarantee for arbitrary copies, partial
+files, or undetected overlap (see [Limitations](#limitations)).
 
 Historical files can also be supplied explicitly, oldest to newest:
 
@@ -82,7 +86,11 @@ cargo run -p stats-cli -- update --config logs/awstats.example.test.conf --log-f
 ```
 
 `.gz`, `.bz2`, and `.xz` files are decompressed for parsing. Repeated unchanged
-invocations are recognized by stored checkpoints and do not duplicate events.
+invocations are recognized by stored checkpoints and do not duplicate events. A
+rejected backfill only means that this run was not applied; it does not restore an
+unread tail or prove that the archive history is complete. After a rejection, check
+the archives and checkpoints, remove or repair the ambiguity/corruption, and repeat
+the procedure.
 
 ### Compressed rotations
 
@@ -110,8 +118,10 @@ backfill aborted: access.log.1.gz begins with all of access.log.2.gz for source 
 so the shared records would be counted twice; remove one of them; no changes were written
 ```
 
-Remove the duplicate and rerun. Overlap that spans files without starting at the
-same records is not detected; see [Limitations](#limitations).
+Remove the duplicate and rerun. A rejection here leaves the database unchanged; it
+does not recover any unread tail. Check the archive set and the relevant checkpoints,
+resolve the ambiguity, and repeat the procedure. Overlap that spans files without
+starting at the same records is not detected; see [Limitations](#limitations).
 
 ### Recommended rotation order
 
@@ -156,15 +166,19 @@ sequenceDiagram
 
 Databases written before checkpoint matching was added have rows without the
 stable prefix fields. Such a row cannot prove that a compressed archive does not
-overlap it. A `backfill` that meets such an archive therefore aborts with:
+overlap it, so the rejection means only that the archive cannot be classified safely
+against the legacy checkpoint; it does not mean the archive was restored or that its
+history is present in the totals. A `backfill` that meets such an archive therefore
+aborts with:
 
 ```text
 backfill aborted: compressed archive ... cannot be checked against legacy checkpoints for source ...
 ```
 
-Recover by rebuilding from the complete set, oldest archive first, then updating
-the rest in order. Every archive in the rotation must be included, because
-`rebuild` clears all aggregates before it counts its file:
+Recover by rebuilding from the complete archive history, oldest archive first, then
+updating the rest in order. Verify that every archive in the rotation is available
+and include every one: `rebuild` clears all aggregates before it counts its file, so
+an omitted archive is permanently absent from the recovered totals:
 
 ```text
 rebuild --config <config> --log-file <oldest archive>
@@ -174,9 +188,9 @@ update  --config <config>                      # the configured active log
 backfill --config <config> --log-dir <dir>     # now a no-op
 ```
 
-An archive that is left out of the sequence is absent from the totals. After
-recovery, `backfill` changes nothing, and new rows carry the stable fields, so this
-step is not needed again for that source.
+After recovery, `backfill` changes nothing, and new rows carry the stable fields, so
+this step is not needed again for that source. If the complete archive history cannot
+be verified, stop and resolve that uncertainty before treating recovery as complete.
 
 ## Checkpoint hashes
 
